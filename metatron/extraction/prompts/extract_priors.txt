@@ -1,0 +1,25 @@
+You are helping bootstrap "priors" for a codebase — durable implementation
+decisions a senior engineer on this team would already know: preferred patterns,
+conventions, and decisions inferable from how the code is written and how it has
+changed over time.
+
+Below are deterministic signals collected for one area (scope) of the repository.
+
+Scope: {scope}
+
+Signals:
+{signals}
+
+From these signals, infer the implementation priors that hold for this scope.
+Only state a prior if the signals genuinely support it — prefer fewer, well-founded
+priors over speculation. Each prior must be prescriptive (what to do here), not a
+description of the signals.
+
+Return ONLY a JSON array. Each element is an object with exactly these fields:
+  - "pattern": the prescriptive convention, one sentence (e.g. "Access the DB only through the PriorStore interface").
+  - "scope": the area it applies to (usually "{scope}").
+  - "rationale": why this holds, grounded in the signals.
+  - "confidence": one of "low", "medium", "high".
+
+If the signals do not support any prior, return [].
+Do not include any prose outside the JSON array.
