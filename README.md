@@ -12,31 +12,93 @@ on-prem deployment.
 
 ## Status
 
-**Milestone 1 — in progress.** A thin end-to-end vertical slice validating one
+**Milestone 1 complete** — a thin end-to-end vertical slice validating one
 question: *can we bootstrap useful priors from a real codebase + its git history
 and serve them to an agent over MCP?* See [PLAN.md](PLAN.md) for the design and
 [CLAUDE.md](CLAUDE.md) for working ground rules.
 
-Nothing below is implemented yet — it describes the loop the milestone is
-building toward. This section becomes a real walkthrough as the PRs land.
+Priors are stored as **structured records** (pattern, scope, rationale,
+confidence, source refs), and **nothing becomes canonical without human
+curation** — bootstrapped and agent-submitted priors both start as candidates.
 
-## The loop (target)
+## Setup
 
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+.
+
+```bash
+uv sync
 ```
-# 1. Ingest — bootstrap candidate priors from a local repo + its git history
-metatron ingest /path/to/your/repo
 
-# 2. Curate — humans promote candidates into the canonical set (nothing self-promotes)
-metatron candidates list
-metatron candidates approve <id>
-metatron candidates reject <id>
+Ingest uses the Anthropic API by default, so set a key:
 
-# 3. Serve — expose canonical priors to agents over MCP
-metatron serve
+```bash
+export ANTHROPIC_API_KEY=sk-...
+```
+
+Non-secret settings live in an optional `metatron.toml` (env vars override it):
+
+```toml
+[metatron]
+db_path = "metatron.db"
+model = "claude-opus-4-8"
+```
+
+## The loop: ingest → curate → serve
+
+### 1. Ingest — bootstrap candidate priors from a repo + its git history
+
+```bash
+uv run metatron ingest /path/to/your/repo
+# optional: --max-commits 1000 --since 2024-01-01
+```
+
+This parses git-tracked source files (tree-sitter) and reads commit history,
+aggregates per-area signals, asks the model to infer priors, and stores them as
+**candidates**.
+
+### 2. Curate — humans decide what becomes canonical
+
+```bash
+uv run metatron candidates list              # review candidates (optionally --scope app/storage)
+uv run metatron candidates approve <id>      # promote to the canonical set
+uv run metatron candidates reject <id>       # discard
+```
+
+### 3. Serve — expose canonical priors to agents over MCP
+
+```bash
+uv run metatron serve        # MCP server over stdio
+```
+
+Two tools are exposed:
+
+- `get_priors_for_context(file_path_or_area, task_description)` → the relevant
+  **canonical** priors as compact structured context.
+- `submit_candidate_learning(pattern, scope, rationale, confidence)` → records a
+  prior an agent learned in practice as a new **candidate** (never auto-promoted).
+
+Point an MCP-capable agent at the server. Example client config:
+
+```json
+{
+  "mcpServers": {
+    "metatron": {
+      "command": "uv",
+      "args": ["run", "metatron", "serve"],
+      "env": { "METATRON_DB": "/abs/path/to/metatron.db" }
+    }
+  }
+}
+```
+
+## Development
+
+```bash
+uv run pytest          # run the test suite
 ```
 
 ## Tech stack
 
 Python 3.12+, the official MCP Python SDK, tree-sitter for parsing, SQLite
-(behind a storage interface, portable to Postgres later), pytest, and uv for
-dependency management. These are decided — see [CLAUDE.md](CLAUDE.md).
+(behind a storage interface, portable to Postgres later), pytest, and uv. These
+are decided — see [CLAUDE.md](CLAUDE.md).

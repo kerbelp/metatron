@@ -12,6 +12,9 @@ dependencies = [
     "tree-sitter-python>=0.25.0",
 ]
 
+[project.scripts]
+metatron = "metatron.cli:main"
+
 [dependency-groups]
 dev = [
     "pytest>=8.0",
