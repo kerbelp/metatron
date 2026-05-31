@@ -7,6 +7,8 @@ from metatron.mcp_server.server import build_server
 from metatron.models import Origin, Prior, Status
 from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
 
+REPO = "github.com/acme/app"
+
 
 def _result(call):
     # FastMCP.call_tool returns (content_blocks, {"result": <return value>}).
@@ -14,7 +16,7 @@ def _result(call):
 
 
 def test_server_exposes_exactly_the_two_required_tools():
-    server = build_server(SQLitePriorStore(":memory:"))
+    server = build_server(SQLitePriorStore(":memory:"), REPO)
     names = {t.name for t in asyncio.run(server.list_tools())}
     assert names == {"get_priors_for_context", "submit_candidate_learning"}
 
@@ -23,6 +25,7 @@ def test_get_priors_tool_returns_formatted_canonical_priors():
     store = SQLitePriorStore(":memory:")
     store.add(
         Prior(
+            repo=REPO,
             pattern="serve only canonical priors",
             scope="app",
             rationale="curation gate",
@@ -30,7 +33,7 @@ def test_get_priors_tool_returns_formatted_canonical_priors():
             status=Status.CANONICAL,
         )
     )
-    server = build_server(store)
+    server = build_server(store, REPO)
     out = _result(
         asyncio.run(
             server.call_tool(
@@ -44,7 +47,7 @@ def test_get_priors_tool_returns_formatted_canonical_priors():
 
 def test_submit_tool_persists_a_candidate_and_returns_its_id():
     store = SQLitePriorStore(":memory:")
-    server = build_server(store)
+    server = build_server(store, REPO)
     new_id = _result(
         asyncio.run(
             server.call_tool(
@@ -66,12 +69,12 @@ def test_submit_tool_persists_a_candidate_and_returns_its_id():
 def test_query_records_a_usage_event():
     store = SQLitePriorStore(":memory:")
     prior = Prior(
-        pattern="p", scope="app", rationale="r",
+        repo=REPO, pattern="p", scope="app", rationale="r",
         origin=Origin.BOOTSTRAP, status=Status.CANONICAL,
     )
     store.add(prior)
     events = SQLiteEventStore(":memory:")
-    server = build_server(store, events)
+    server = build_server(store, REPO, events)
 
     asyncio.run(
         server.call_tool(
@@ -92,7 +95,7 @@ def test_query_records_a_usage_event():
 def test_submit_records_a_usage_event():
     store = SQLitePriorStore(":memory:")
     events = SQLiteEventStore(":memory:")
-    server = build_server(store, events)
+    server = build_server(store, REPO, events)
 
     asyncio.run(
         server.call_tool(
@@ -109,7 +112,7 @@ def test_submit_records_a_usage_event():
 def test_event_logging_is_optional():
     # No event store -> no crash, tools still work.
     store = SQLitePriorStore(":memory:")
-    server = build_server(store)
+    server = build_server(store, REPO)
     asyncio.run(
         server.call_tool(
             "get_priors_for_context",

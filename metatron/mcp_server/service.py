@@ -26,6 +26,7 @@ _STOPWORDS = {
 
 def get_priors_for_context(
     store: PriorStore,
+    repo: str,
     file_path_or_area: str,
     task_description: str,
     *,
@@ -34,7 +35,7 @@ def get_priors_for_context(
     task_tokens = _tokens(task_description)
     relevant = [
         p
-        for p in store.list(status=Status.CANONICAL)
+        for p in store.list(repo=repo, status=Status.CANONICAL)
         if _in_scope(p.scope, file_path_or_area)
     ]
     relevant.sort(
@@ -46,6 +47,7 @@ def get_priors_for_context(
 def submit_candidate_learning(
     store: PriorStore,
     *,
+    repo: str,
     pattern: str,
     scope: str,
     rationale: str,
@@ -53,6 +55,7 @@ def submit_candidate_learning(
     source_refs: list[SourceRef] | None = None,
 ) -> Prior:
     prior = Prior(
+        repo=repo,
         pattern=pattern,
         scope=scope,
         rationale=rationale,

@@ -8,9 +8,12 @@ from metatron.mcp_server.service import (
 from metatron.models import Confidence, Origin, Prior, Status
 from metatron.storage.sqlite import SQLitePriorStore
 
+REPO = "github.com/acme/app"
+
 
 def _canonical(**kw) -> Prior:
     kw.setdefault("origin", Origin.BOOTSTRAP)
+    kw.setdefault("repo", REPO)
     return Prior(status=Status.CANONICAL, **kw)
 
 
@@ -24,10 +27,19 @@ def _store(*priors) -> SQLitePriorStore:
 def test_only_canonical_priors_are_served():
     store = _store(
         _canonical(pattern="canon", scope="app", rationale="r"),
-        Prior(pattern="cand", scope="app", rationale="r", origin=Origin.BOOTSTRAP),
+        Prior(repo=REPO, pattern="cand", scope="app", rationale="r", origin=Origin.BOOTSTRAP),
     )
-    results = get_priors_for_context(store, "app", "anything")
+    results = get_priors_for_context(store, REPO, "app", "anything")
     assert [p.pattern for p in results] == ["canon"]
+
+
+def test_only_the_requested_repos_priors_are_served():
+    store = _store(
+        _canonical(pattern="mine", scope="app", rationale="r", repo=REPO),
+        _canonical(pattern="theirs", scope="app", rationale="r", repo="github.com/other/x"),
+    )
+    results = get_priors_for_context(store, REPO, "app", "anything")
+    assert [p.pattern for p in results] == ["mine"]
 
 
 def test_out_of_scope_priors_are_excluded():
@@ -35,13 +47,13 @@ def test_out_of_scope_priors_are_excluded():
         _canonical(pattern="storage rule", scope="app/storage", rationale="r"),
         _canonical(pattern="ui rule", scope="app/ui", rationale="r"),
     )
-    results = get_priors_for_context(store, "app/storage/db.py", "task")
+    results = get_priors_for_context(store, REPO, "app/storage/db.py", "task")
     assert [p.pattern for p in results] == ["storage rule"]
 
 
 def test_global_scope_priors_always_match():
     store = _store(_canonical(pattern="global rule", scope="", rationale="r"))
-    results = get_priors_for_context(store, "anywhere/at/all.py", "task")
+    results = get_priors_for_context(store, REPO, "anywhere/at/all.py", "task")
     assert [p.pattern for p in results] == ["global rule"]
 
 
@@ -50,7 +62,7 @@ def test_keyword_overlap_with_task_ranks_higher():
         _canonical(pattern="use retries for network calls", scope="app", rationale="flaky"),
         _canonical(pattern="prefer dataclasses for config", scope="app", rationale="clarity"),
     )
-    results = get_priors_for_context(store, "app", "add retries to the network client")
+    results = get_priors_for_context(store, REPO, "app", "add retries to the network client")
     assert results[0].pattern == "use retries for network calls"
 
 
@@ -58,6 +70,7 @@ def test_submit_candidate_learning_stores_uncurated_agent_prior():
     store = SQLitePriorStore(":memory:")
     prior = submit_candidate_learning(
         store,
+        repo=REPO,
         pattern="always log request ids",
         scope="app/api",
         rationale="traceability",
@@ -74,7 +87,7 @@ def test_submit_candidate_learning_stores_uncurated_agent_prior():
 def test_submit_defaults_bad_confidence_to_medium():
     store = SQLitePriorStore(":memory:")
     prior = submit_candidate_learning(
-        store, pattern="p", scope="s", rationale="r", confidence="bogus"
+        store, repo=REPO, pattern="p", scope="s", rationale="r", confidence="bogus"
     )
     assert prior.confidence is Confidence.MEDIUM
 

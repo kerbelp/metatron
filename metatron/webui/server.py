@@ -72,11 +72,14 @@ def _build_handler(
                 self._send_html(_INDEX_HTML)
             elif path == "/api/priors":
                 self._send_json(_list(store, parse_qs(parts.query)))
+            elif path == "/api/repos":
+                self._send_json(api.repos(store))
             elif path == "/api/stats":
-                self._send_json(api.stats(store))
+                self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":
+                repo = _first(parse_qs(parts.query), "repo")
                 if event_store is not None:
-                    self._send_json(api.usage(event_store))
+                    self._send_json(api.usage(event_store, repo=repo))
                 else:
                     self._send_json({**usage_summary([]), "recent": []})
             else:
@@ -109,14 +112,17 @@ def _build_handler(
     return Handler
 
 
-def _list(store: PriorStore, query: dict[str, list[str]]) -> dict:
-    def first(key: str, default: str | None = None) -> str | None:
-        return query.get(key, [default])[0]
+def _first(query: dict[str, list[str]], key: str, default: str | None = None) -> str | None:
+    value = query.get(key, [default])[0]
+    return value or None
 
+
+def _list(store: PriorStore, query: dict[str, list[str]]) -> dict:
     return api.list_priors(
         store,
-        status=first("status") or None,
-        scope=first("scope") or None,
-        page=int(first("page", "1")),
-        page_size=int(first("page_size", "20")),
+        repo=_first(query, "repo"),
+        status=_first(query, "status"),
+        scope=_first(query, "scope"),
+        page=int(_first(query, "page") or "1"),
+        page_size=int(_first(query, "page_size") or "20"),
     )

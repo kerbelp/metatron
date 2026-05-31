@@ -27,6 +27,7 @@ def store() -> SQLitePriorStore:
 
 def _prior(**overrides) -> Prior:
     fields = dict(
+        repo="github.com/acme/app",
         pattern="Use the repository pattern for DB access",
         scope="metatron/storage",
         rationale="Keeps SQL out of callers",

@@ -52,7 +52,9 @@ def main(
             )
         return _cmd_ingest(args, store, provider, out)
     if args.command == "serve":
-        return _cmd_serve(store, event_store or SQLiteEventStore(settings.db_path))
+        return _cmd_serve(
+            store, args.repo, event_store or SQLiteEventStore(settings.db_path)
+        )
     if args.command == "ui":
         return _cmd_ui(
             store, event_store or SQLiteEventStore(settings.db_path), args.port
@@ -69,24 +71,26 @@ def _cmd_ingest(args, store, provider, out) -> int:
         args.repo_path,
         store,
         provider,
+        repo=args.repo,
         max_commits=args.max_commits,
         since=args.since,
         path_prefix=args.path,
     )
     print(
-        f"Ingested {args.repo_path}: parsed {result.files_parsed} files, "
-        f"read {result.commits_read} commits across {result.scopes} scopes, "
-        f"created {result.priors_created} candidate priors.",
+        f"Ingested repo '{result.repo}' from {args.repo_path}: "
+        f"parsed {result.files_parsed} files, read {result.commits_read} commits "
+        f"across {result.scopes} scopes, created {result.priors_created} candidate priors.",
         file=out,
     )
-    print("Review them with: metatron candidates list", file=out)
+    print(f"Review them with: metatron candidates list --repo {result.repo}", file=out)
+    print(f"Serve them with:  metatron serve --repo {result.repo}", file=out)
     return 0
 
 
-def _cmd_serve(store, event_store) -> int:
+def _cmd_serve(store, repo, event_store) -> int:
     from metatron.mcp_server.server import build_server
 
-    build_server(store, event_store).run()
+    build_server(store, repo, event_store).run()
     return 0
 
 
@@ -99,7 +103,7 @@ def _cmd_ui(store, event_store, port) -> int:
 
 def _cmd_candidates(args, store, out) -> int:
     if args.candidates_command == "list":
-        return _candidates_list(store, args.scope, out)
+        return _candidates_list(store, args.repo, args.scope, out)
     if args.candidates_command == "approve":
         return _set_status(store, args.id, Status.CANONICAL, "approved", out)
     if args.candidates_command == "reject":
@@ -107,8 +111,8 @@ def _cmd_candidates(args, store, out) -> int:
     return 1
 
 
-def _candidates_list(store, scope, out) -> int:
-    candidates = store.list(status=Status.CANDIDATE, scope=scope)
+def _candidates_list(store, repo, scope, out) -> int:
+    candidates = store.list(repo=repo, status=Status.CANDIDATE, scope=scope)
     if not candidates:
         print("No candidate priors.", file=out)
         return 0
@@ -141,8 +145,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="limit ingest to a subtree, e.g. src/components",
     )
+    ingest_p.add_argument(
+        "--repo",
+        default=None,
+        help="override the repo id (defaults to the normalized origin remote)",
+    )
 
-    sub.add_parser("serve", help="serve priors to agents over MCP (stdio)")
+    serve_p = sub.add_parser("serve", help="serve one repo's priors to agents over MCP")
+    serve_p.add_argument(
+        "--repo", required=True, help="repo id to serve (the normalized origin remote)"
+    )
 
     ui_p = sub.add_parser("ui", help="launch the local curation web UI")
     ui_p.add_argument(
@@ -153,6 +165,7 @@ def _build_parser() -> argparse.ArgumentParser:
     cand_sub = cand.add_subparsers(dest="candidates_command")
     list_p = cand_sub.add_parser("list", help="list candidate priors")
     list_p.add_argument("--scope", default=None)
+    list_p.add_argument("--repo", default=None, help="filter to one repo")
     approve_p = cand_sub.add_parser("approve", help="promote a candidate to canonical")
     approve_p.add_argument("id")
     reject_p = cand_sub.add_parser("reject", help="reject a candidate")

@@ -18,6 +18,7 @@ from metatron.storage.base import EventStore, PriorStore
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS priors (
     id          TEXT PRIMARY KEY,
+    repo        TEXT NOT NULL DEFAULT '',
     pattern     TEXT NOT NULL,
     scope       TEXT NOT NULL,
     rationale   TEXT NOT NULL,
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS priors (
 
 _COLUMNS = (
     "id",
+    "repo",
     "pattern",
     "scope",
     "rationale",
@@ -44,6 +46,13 @@ _COLUMNS = (
 )
 
 
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    """Add ``column`` to ``table`` if an older database predates it."""
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
+
 class SQLitePriorStore(PriorStore):
     def __init__(self, path: str = "metatron.db") -> None:
         # check_same_thread=False lets the web server (which runs in its own
@@ -52,6 +61,7 @@ class SQLitePriorStore(PriorStore):
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_SCHEMA)
+        _ensure_column(self._conn, "priors", "repo", "repo TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def add(self, prior: Prior) -> Prior:
@@ -72,12 +82,13 @@ class SQLitePriorStore(PriorStore):
     def list(
         self,
         *,
+        repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
-        where, params = _filter(status, scope)
+        where, params = _filter(repo, status, scope)
         sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
@@ -88,12 +99,17 @@ class SQLitePriorStore(PriorStore):
     def count(
         self,
         *,
+        repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
     ) -> int:
-        where, params = _filter(status, scope)
+        where, params = _filter(repo, status, scope)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
         return cur.fetchone()[0]
+
+    def list_repos(self) -> list[str]:
+        cur = self._conn.execute("SELECT DISTINCT repo FROM priors ORDER BY repo")
+        return [row[0] for row in cur.fetchall()]
 
     def set_status(self, prior_id: str, status: Status) -> Prior:
         prior = self.get(prior_id)
@@ -116,6 +132,7 @@ _EVENTS_SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     id           TEXT PRIMARY KEY,
     timestamp    TEXT NOT NULL,
+    repo         TEXT NOT NULL DEFAULT '',
     kind         TEXT NOT NULL,
     area         TEXT NOT NULL,
     task         TEXT NOT NULL,
@@ -124,7 +141,9 @@ CREATE TABLE IF NOT EXISTS events (
 )
 """
 
-_EVENT_COLUMNS = ("id", "timestamp", "kind", "area", "task", "result_count", "prior_ids")
+_EVENT_COLUMNS = (
+    "id", "timestamp", "repo", "kind", "area", "task", "result_count", "prior_ids",
+)
 
 
 class SQLiteEventStore(EventStore):
@@ -132,6 +151,7 @@ class SQLiteEventStore(EventStore):
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_EVENTS_SCHEMA)
+        _ensure_column(self._conn, "events", "repo", "repo TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def record(self, event: Event) -> Event:
@@ -145,17 +165,28 @@ class SQLiteEventStore(EventStore):
         self._conn.commit()
         return event
 
-    def list_events(self, *, limit: int | None = None, offset: int = 0) -> list[Event]:
-        sql = "SELECT * FROM events ORDER BY timestamp DESC, id"
-        params: list = []
+    def list_events(
+        self,
+        *,
+        repo: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Event]:
+        where = " WHERE repo = ?" if repo is not None else ""
+        params: list = [repo] if repo is not None else []
+        sql = f"SELECT * FROM events{where} ORDER BY timestamp DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
-            params = [limit, offset]
+            params = [*params, limit, offset]
         cur = self._conn.execute(sql, params)
         return [_event_from_row(row) for row in cur.fetchall()]
 
-    def count_events(self) -> int:
-        return self._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+    def count_events(self, *, repo: str | None = None) -> int:
+        where = " WHERE repo = ?" if repo is not None else ""
+        params = [repo] if repo is not None else []
+        return self._conn.execute(
+            f"SELECT COUNT(*) FROM events{where}", params
+        ).fetchone()[0]
 
     def close(self) -> None:
         self._conn.close()
@@ -167,9 +198,14 @@ def _event_from_row(row: sqlite3.Row) -> Event:
     return Event.model_validate(data)
 
 
-def _filter(status: Status | None, scope: str | None) -> tuple[str, list]:
+def _filter(
+    repo: str | None, status: Status | None, scope: str | None
+) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
+    if repo is not None:
+        clauses.append("repo = ?")
+        params.append(repo)
     if status is not None:
         clauses.append("status = ?")
         params.append(status.value)

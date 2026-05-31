@@ -8,6 +8,7 @@ from metatron.webui.observability import usage_summary
 
 def _q(area, count):
     return Event(
+        repo="github.com/acme/app",
         kind=EventKind.QUERY,
         area=area,
         result_count=count,
@@ -49,7 +50,7 @@ def test_top_scopes_ranked_by_query_count():
 def test_submissions_counted_separately_from_queries():
     events = [
         _q("app", 1),
-        Event(kind=EventKind.SUBMIT, area="app", timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc)),
+        Event(repo="r", kind=EventKind.SUBMIT, area="app", timestamp=datetime(2024, 1, 1, tzinfo=timezone.utc)),
     ]
     s = usage_summary(events)
     assert s["total_queries"] == 1

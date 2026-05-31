@@ -16,8 +16,9 @@ def events() -> SQLiteEventStore:
     s.close()
 
 
-def _query(day: int, area="src/components/Home", count=2, ids=None) -> Event:
+def _query(day: int, area="src/components/Home", count=2, ids=None, repo="github.com/acme/app") -> Event:
     return Event(
+        repo=repo,
         kind=EventKind.QUERY,
         area=area,
         task="add a section",

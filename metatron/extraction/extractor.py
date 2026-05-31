@@ -21,8 +21,11 @@ class ExtractionError(Exception):
 
 
 class PriorExtractor:
-    def __init__(self, provider: LLMProvider, template: str | None = None) -> None:
+    def __init__(
+        self, provider: LLMProvider, repo: str, template: str | None = None
+    ) -> None:
         self._provider = provider
+        self._repo = repo
         self._template = template if template is not None else load_prompt(
             "extract_priors"
         )
@@ -40,6 +43,7 @@ class PriorExtractor:
         if "pattern" not in item:
             raise ExtractionError(f"prior missing 'pattern': {item!r}")
         return Prior(
+            repo=self._repo,
             pattern=item["pattern"],
             scope=item.get("scope") or signals.scope,
             rationale=item.get("rationale", ""),

@@ -20,6 +20,7 @@ def _add(store, n, **kw) -> list[Prior]:
     for i in range(n):
         kw.setdefault("origin", Origin.BOOTSTRAP)
         p = Prior(
+            repo=kw.pop("repo", "github.com/acme/app"),
             pattern=f"p{i}",
             scope=kw.pop("scope", "app"),
             rationale="r",
@@ -93,8 +94,8 @@ def test_usage_returns_summary_and_recent_events():
     import json
 
     events = SQLiteEventStore(":memory:")
-    events.record(Event(kind=EventKind.QUERY, area="app", result_count=2))
-    events.record(Event(kind=EventKind.QUERY, area="lib", result_count=0))
+    events.record(Event(repo="r", kind=EventKind.QUERY, area="app", result_count=2))
+    events.record(Event(repo="r", kind=EventKind.QUERY, area="lib", result_count=0))
 
     result = usage(events)
 

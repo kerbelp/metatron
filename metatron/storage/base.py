@@ -26,6 +26,7 @@ class PriorStore(ABC):
     def list(
         self,
         *,
+        repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
         limit: int | None = None,
@@ -33,17 +34,23 @@ class PriorStore(ABC):
     ) -> list[Prior]:
         """Return priors newest-first, optionally filtered and paginated.
 
-        Filters by exact ``status`` and ``scope``; ``limit``/``offset`` paginate.
+        Filters by exact ``repo``, ``status`` and ``scope``; ``limit``/``offset``
+        paginate.
         """
 
     @abstractmethod
     def count(
         self,
         *,
+        repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
     ) -> int:
-        """Count priors matching the (optional) ``status`` and ``scope`` filters."""
+        """Count priors matching the (optional) ``repo``/``status``/``scope`` filters."""
+
+    @abstractmethod
+    def list_repos(self) -> list[str]:
+        """Return the distinct repo identities present in the store."""
 
     @abstractmethod
     def set_status(self, prior_id: str, status: Status) -> Prior:
@@ -61,9 +68,15 @@ class EventStore(ABC):
         """Persist a usage event and return it."""
 
     @abstractmethod
-    def list_events(self, *, limit: int | None = None, offset: int = 0) -> list[Event]:
-        """Return events newest-first, optionally paginated."""
+    def list_events(
+        self,
+        *,
+        repo: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Event]:
+        """Return events newest-first, optionally filtered by repo and paginated."""
 
     @abstractmethod
-    def count_events(self) -> int:
-        """Total number of recorded events."""
+    def count_events(self, *, repo: str | None = None) -> int:
+        """Total number of recorded events (optionally for one repo)."""

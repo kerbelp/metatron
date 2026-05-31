@@ -38,10 +38,10 @@ def test_find_free_port_bumps_when_start_is_taken():
 @pytest.fixture
 def served():
     store = SQLitePriorStore(":memory:")
-    prior = Prior(pattern="serve me", scope="app", rationale="r", origin=Origin.BOOTSTRAP)
+    prior = Prior(repo="github.com/acme/app", pattern="serve me", scope="app", rationale="r", origin=Origin.BOOTSTRAP)
     store.add(prior)
     events = SQLiteEventStore(":memory:")
-    events.record(Event(kind=EventKind.QUERY, area="app", result_count=1))
+    events.record(Event(repo="github.com/acme/app", kind=EventKind.QUERY, area="app", result_count=1))
     port = find_free_port(start=8800, host="127.0.0.1")
     httpd = make_server(store, "127.0.0.1", port, events)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)

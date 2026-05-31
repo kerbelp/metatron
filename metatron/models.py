@@ -53,6 +53,7 @@ class Prior(BaseModel):
     """A single structured prior."""
 
     id: str = Field(default_factory=lambda: str(uuid4()))
+    repo: str  # stable repo identity (normalized git remote) — see repo_identity
     pattern: str
     scope: str
     rationale: str

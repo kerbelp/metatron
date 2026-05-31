@@ -26,6 +26,7 @@ def _now() -> datetime:
 class Event(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     timestamp: datetime = Field(default_factory=_now)
+    repo: str  # stable repo identity the event pertains to
     kind: EventKind
     area: str = ""              # the file_path_or_area queried/submitted against
     task: str = ""              # the task_description, for queries

@@ -67,7 +67,7 @@ def test_render_substitutes_placeholders():
 # --- extraction ---------------------------------------------------------
 
 def test_extract_parses_priors_from_provider_json():
-    priors = PriorExtractor(FakeProvider(_ONE_PRIOR)).extract(_SIGNALS)
+    priors = PriorExtractor(FakeProvider(_ONE_PRIOR), "github.com/acme/app").extract(_SIGNALS)
 
     assert len(priors) == 1
     p = priors[0]
@@ -76,9 +76,10 @@ def test_extract_parses_priors_from_provider_json():
 
 
 def test_extracted_priors_are_uncurated_bootstrap_with_provenance():
-    p = PriorExtractor(FakeProvider(_ONE_PRIOR)).extract(_SIGNALS)[0]
+    p = PriorExtractor(FakeProvider(_ONE_PRIOR), "github.com/acme/app").extract(_SIGNALS)[0]
     assert p.status is Status.CANDIDATE
     assert p.origin is Origin.BOOTSTRAP
+    assert p.repo == "github.com/acme/app"
     assert any(
         ref.kind is SourceRefKind.FILE and ref.ref == "metatron/storage"
         for ref in p.source_refs
@@ -87,27 +88,27 @@ def test_extracted_priors_are_uncurated_bootstrap_with_provenance():
 
 def test_extract_includes_scope_and_signals_in_the_prompt():
     provider = FakeProvider(_ONE_PRIOR)
-    PriorExtractor(provider).extract(_SIGNALS)
+    PriorExtractor(provider, "github.com/acme/app").extract(_SIGNALS)
     assert "metatron/storage" in provider.last_prompt
     assert "sqlite3" in provider.last_prompt
 
 
 def test_extract_handles_json_wrapped_in_markdown_fences():
     fenced = "```json\n" + _ONE_PRIOR.strip() + "\n```"
-    priors = PriorExtractor(FakeProvider(fenced)).extract(_SIGNALS)
+    priors = PriorExtractor(FakeProvider(fenced), "github.com/acme/app").extract(_SIGNALS)
     assert len(priors) == 1
 
 
 def test_extract_defaults_unknown_confidence_to_medium():
     response = '[{"pattern": "p", "rationale": "r", "confidence": "wat"}]'
-    p = PriorExtractor(FakeProvider(response)).extract(_SIGNALS)[0]
+    p = PriorExtractor(FakeProvider(response), "github.com/acme/app").extract(_SIGNALS)[0]
     assert p.confidence is Confidence.MEDIUM
 
 
 def test_extract_returns_empty_list_for_empty_array():
-    assert PriorExtractor(FakeProvider("[]")).extract(_SIGNALS) == []
+    assert PriorExtractor(FakeProvider("[]"), "github.com/acme/app").extract(_SIGNALS) == []
 
 
 def test_extract_raises_on_malformed_json():
     with pytest.raises(ExtractionError):
-        PriorExtractor(FakeProvider("not json at all")).extract(_SIGNALS)
+        PriorExtractor(FakeProvider("not json at all"), "github.com/acme/app").extract(_SIGNALS)

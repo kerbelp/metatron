@@ -24,10 +24,12 @@ from metatron.extraction.signals import collect_signals
 from metatron.gitlog.reader import GitLogReader
 from metatron.parsing.base import ParsedFile
 from metatron.parsing.registry import get_parser_for_path
+from metatron.repo_identity import repo_id
 from metatron.storage.base import PriorStore
 
 
 class IngestResult(BaseModel):
+    repo: str
     files_parsed: int
     commits_read: int
     scopes: int
@@ -39,11 +41,13 @@ def ingest(
     store: PriorStore,
     provider: LLMProvider,
     *,
+    repo: str | None = None,
     max_commits: int = 500,
     since: str | None = None,
     path_prefix: str | None = None,
 ) -> IngestResult:
     repo_path = Path(repo_path)
+    repo = repo_id(repo_path, override=repo)
 
     parsed_files = _parse_tracked_files(repo_path, path_prefix)
     paths = [path_prefix] if path_prefix else None
@@ -52,7 +56,7 @@ def ingest(
     )
     signals = collect_signals(parsed_files, commits)
 
-    extractor = PriorExtractor(provider)
+    extractor = PriorExtractor(provider, repo)
     priors_created = 0
     for scope_signals in signals.scopes:
         for prior in extractor.extract(scope_signals):
@@ -60,6 +64,7 @@ def ingest(
             priors_created += 1
 
     return IngestResult(
+        repo=repo,
         files_parsed=len(parsed_files),
         commits_read=len(commits),
         scopes=len(signals.scopes),

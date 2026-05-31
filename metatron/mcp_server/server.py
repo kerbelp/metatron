@@ -14,7 +14,10 @@ from metatron.mcp_server import service
 from metatron.storage.base import EventStore, PriorStore
 
 
-def build_server(store: PriorStore, event_store: EventStore | None = None) -> FastMCP:
+def build_server(
+    store: PriorStore, repo: str, event_store: EventStore | None = None
+) -> FastMCP:
+    """Build an MCP server bound to a single ``repo`` (agents see only its priors)."""
     server = FastMCP("metatron")
 
     def _record(event: Event) -> None:
@@ -30,10 +33,11 @@ def build_server(store: PriorStore, event_store: EventStore | None = None) -> Fa
             task_description: what the agent is about to do there.
         """
         priors = service.get_priors_for_context(
-            store, file_path_or_area, task_description
+            store, repo, file_path_or_area, task_description
         )
         _record(
             Event(
+                repo=repo,
                 kind=EventKind.QUERY,
                 area=file_path_or_area,
                 task=task_description,
@@ -57,12 +61,13 @@ def build_server(store: PriorStore, event_store: EventStore | None = None) -> Fa
         """
         prior = service.submit_candidate_learning(
             store,
+            repo=repo,
             pattern=pattern,
             scope=scope,
             rationale=rationale,
             confidence=confidence,
         )
-        _record(Event(kind=EventKind.SUBMIT, area=scope, prior_ids=[prior.id]))
+        _record(Event(repo=repo, kind=EventKind.SUBMIT, area=scope, prior_ids=[prior.id]))
         return prior.id
 
     return server

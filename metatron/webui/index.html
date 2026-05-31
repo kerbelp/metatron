@@ -21,6 +21,7 @@
       display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     }
     header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
+    .repo-select { margin-left: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; font-size: 13px; }
     .nav { display: flex; gap: 4px; margin-left: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
     .nav button { padding: 6px 16px; border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 13px; border: none; background: none; }
     .nav button.active { background: var(--surface-2); color: var(--text); }
@@ -81,6 +82,7 @@
 <body>
   <header>
     <h1>Metatron</h1>
+    <select id="repo" class="repo-select" title="Repository"></select>
     <div class="nav" id="nav">
       <button class="active" data-view="priors">Priors</button>
       <button data-view="obs">Observability</button>
@@ -117,18 +119,34 @@
   </main>
 
   <script>
-    const state = { status: "candidate", scope: "", page: 1, pageSize: 20, pages: 1 };
+    const state = { repo: "", status: "candidate", scope: "", page: 1, pageSize: 20, pages: 1 };
+
+    function withRepo(params = {}) {
+      const q = new URLSearchParams(params);
+      if (state.repo) q.set("repo", state.repo);
+      return q;
+    }
+
+    // ---- repo selector ----
+    async function loadRepos() {
+      const { repos } = await (await fetch("/api/repos")).json();
+      const sel = document.getElementById("repo");
+      const opts = ['<option value="">All repos</option>']
+        .concat(repos.filter(r => r).map(r => `<option value="${esc(r)}">${esc(r)}</option>`));
+      sel.innerHTML = opts.join("");
+      sel.value = state.repo;
+    }
 
     // ---- Priors view ----
     async function loadStats() {
-      const s = await (await fetch("/api/stats")).json();
+      const s = await (await fetch("/api/stats?" + withRepo())).json();
       document.getElementById("stats").innerHTML = [
         ["Candidates", s.candidate], ["Canonical", s.canonical],
         ["Rejected", s.rejected], ["Total", s.total],
       ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
     }
     async function loadPriors() {
-      const q = new URLSearchParams({ page: state.page, page_size: state.pageSize });
+      const q = withRepo({ page: state.page, page_size: state.pageSize });
       if (state.status) q.set("status", state.status);
       if (state.scope) q.set("scope", state.scope);
       const data = await (await fetch("/api/priors?" + q)).json();
@@ -168,7 +186,7 @@
 
     // ---- Observability view ----
     async function loadUsage() {
-      const u = await (await fetch("/api/usage")).json();
+      const u = await (await fetch("/api/usage?" + withRepo())).json();
       document.getElementById("usage-stats").innerHTML = [
         ["Queries", u.total_queries], ["Coverage", Math.round(u.coverage_rate * 100) + "%"],
         ["Avg priors / query", u.avg_results], ["Submissions", u.total_submissions],
@@ -215,8 +233,13 @@
       clearTimeout(scopeTimer);
       scopeTimer = setTimeout(() => { state.scope = e.target.value.trim(); state.page = 1; loadPriors(); }, 250);
     });
+    document.getElementById("repo").addEventListener("change", e => {
+      state.repo = e.target.value; state.page = 1;
+      const onObs = !document.getElementById("view-obs").hidden;
+      if (onObs) loadUsage(); else refreshPriors();
+    });
 
-    refreshPriors();
+    (async () => { await loadRepos(); await refreshPriors(); })();
   </script>
 </body>
 </html>

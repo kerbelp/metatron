@@ -18,6 +18,7 @@ def store() -> SQLitePriorStore:
 def _prior_at(day: int, **kw) -> Prior:
     kw.setdefault("origin", Origin.BOOTSTRAP)
     kw.setdefault("scope", "app")
+    kw.setdefault("repo", "github.com/acme/app")
     return Prior(
         pattern="p",
         rationale="r",

@@ -21,7 +21,13 @@ def _run(argv, store):
 
 
 def _candidate(pattern, scope="app") -> Prior:
-    return Prior(pattern=pattern, scope=scope, rationale="r", origin=Origin.BOOTSTRAP)
+    return Prior(
+        repo="github.com/acme/app",
+        pattern=pattern,
+        scope=scope,
+        rationale="r",
+        origin=Origin.BOOTSTRAP,
+    )
 
 
 def test_candidates_list_shows_candidates_only():

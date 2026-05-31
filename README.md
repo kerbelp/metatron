@@ -55,12 +55,17 @@ model = "claude-opus-4-8"
 
 ```bash
 uv run metatron ingest /path/to/your/repo
-# optional: --max-commits 1000 --since 2024-01-01
+# optional: --max-commits 1000 --since 2024-01-01 --path src/ --repo <id>
 ```
 
 This parses git-tracked source files (tree-sitter) and reads commit history,
 aggregates per-area signals, asks the model to infer priors, and stores them as
 **candidates**.
+
+Priors and usage are keyed by a **repo identity** derived from the repo's
+`origin` remote (constant across developers; a local checkout path isn't), with a
+`--repo` override and a directory-name fallback when there's no remote. One DB
+holds many repos; each is isolated on retrieval.
 
 ### 2. Curate — humans decide what becomes canonical
 
@@ -88,8 +93,12 @@ no token accounting or helpfulness judgments are recorded.)
 ### 3. Serve — expose canonical priors to agents over MCP
 
 ```bash
-uv run metatron serve        # MCP server over stdio
+uv run metatron serve --repo <id>    # MCP server over stdio, for one repo
 ```
+
+One served instance serves one repo (`--repo`, the id printed by `ingest`), so an
+agent only ever sees that repo's priors. The web UI, by contrast, spans all repos
+in the DB with a repo selector.
 
 Two tools are exposed:
 
