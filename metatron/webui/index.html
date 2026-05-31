@@ -67,6 +67,7 @@
     .pager button:disabled { opacity: .4; cursor: default; }
     .empty { text-align: center; color: var(--muted); padding: 48px; }
     .id { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; margin-left: auto; }
+    .times { color: var(--muted); font-size: 12px; margin-top: 8px; }
     .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 26px 0 10px; }
     .bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
     .bar > span { display: block; height: 100%; background: var(--green); }
@@ -178,6 +179,10 @@
           </div>
           <div class="pattern">${esc(p.pattern)}</div>
           <div class="rationale">${esc(p.rationale)}</div>
+          <div class="times">introduced ${fmtTime(p.created_at)}${
+            p.status !== "candidate"
+              ? ` · ${p.status === "canonical" ? "accepted" : "rejected"} ${fmtTime(p.updated_at)}`
+              : ""}</div>
           <div class="actions">
             ${p.status !== "canonical" ? `<button class="act approve" onclick="act('${p.id}','approve')">Approve</button>` : ""}
             ${p.status !== "rejected" ? `<button class="act reject" onclick="act('${p.id}','reject')">Reject</button>` : ""}
