@@ -22,10 +22,15 @@ class ExtractionError(Exception):
 
 class PriorExtractor:
     def __init__(
-        self, provider: LLMProvider, repo: str, template: str | None = None
+        self,
+        provider: LLMProvider,
+        repo: str,
+        model: str = "",
+        template: str | None = None,
     ) -> None:
         self._provider = provider
         self._repo = repo
+        self._model = model
         self._template = template if template is not None else load_prompt(
             "extract_priors"
         )
@@ -48,6 +53,7 @@ class PriorExtractor:
             scope=item.get("scope") or signals.scope,
             rationale=item.get("rationale", ""),
             confidence=_parse_confidence(item.get("confidence")),
+            model=self._model,
             origin=Origin.BOOTSTRAP,
             source_refs=[
                 SourceRef(

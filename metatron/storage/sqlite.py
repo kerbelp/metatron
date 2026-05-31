@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS priors (
     rationale   TEXT NOT NULL,
     origin      TEXT NOT NULL,
     confidence  TEXT NOT NULL,
+    model       TEXT NOT NULL DEFAULT '',
     source_refs TEXT NOT NULL,
     status      TEXT NOT NULL,
     created_at  TEXT NOT NULL,
@@ -39,6 +40,7 @@ _COLUMNS = (
     "rationale",
     "origin",
     "confidence",
+    "model",
     "source_refs",
     "status",
     "created_at",
@@ -62,6 +64,7 @@ class SQLitePriorStore(PriorStore):
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_SCHEMA)
         _ensure_column(self._conn, "priors", "repo", "repo TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "priors", "model", "model TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def add(self, prior: Prior) -> Prior:
@@ -85,10 +88,11 @@ class SQLitePriorStore(PriorStore):
         repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
+        model: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
-        where, params = _filter(repo, status, scope)
+        where, params = _filter(repo, status, scope, model)
         sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
@@ -102,8 +106,9 @@ class SQLitePriorStore(PriorStore):
         repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
+        model: str | None = None,
     ) -> int:
-        where, params = _filter(repo, status, scope)
+        where, params = _filter(repo, status, scope, model)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
         return cur.fetchone()[0]
 
@@ -199,7 +204,10 @@ def _event_from_row(row: sqlite3.Row) -> Event:
 
 
 def _filter(
-    repo: str | None, status: Status | None, scope: str | None
+    repo: str | None,
+    status: Status | None,
+    scope: str | None,
+    model: str | None = None,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
@@ -212,6 +220,9 @@ def _filter(
     if scope is not None:
         clauses.append("scope = ?")
         params.append(scope)
+    if model is not None:
+        clauses.append("model = ?")
+        params.append(model)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return where, params
 

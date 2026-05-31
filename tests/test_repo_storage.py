@@ -43,6 +43,15 @@ def test_list_repos_returns_distinct_repos(store):
     assert store.list_repos() == ["github.com/me/a", "github.com/them/b"]
 
 
+def test_list_and_count_filter_by_model(store):
+    opus = Prior(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="opus")
+    sonnet = Prior(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="sonnet")
+    store.add(opus)
+    store.add(sonnet)
+    assert [p.id for p in store.list(model="opus")] == [opus.id]
+    assert store.count(model="sonnet") == 1
+
+
 def test_opening_a_pre_repo_database_migrates_and_reads(tmp_path):
     # Simulate a database written before the repo column existed.
     db = str(tmp_path / "legacy.db")

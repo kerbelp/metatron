@@ -59,6 +59,7 @@ class Prior(BaseModel):
     rationale: str
     origin: Origin
     confidence: Confidence = Confidence.MEDIUM
+    model: str = ""  # the model that extracted it ("" for agent-submitted priors)
     source_refs: list[SourceRef] = Field(default_factory=list)
     status: Status = Status.CANDIDATE
     created_at: datetime = Field(default_factory=_now)

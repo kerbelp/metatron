@@ -86,6 +86,13 @@ def test_extracted_priors_are_uncurated_bootstrap_with_provenance():
     )
 
 
+def test_extracted_priors_record_the_model():
+    p = PriorExtractor(
+        FakeProvider(_ONE_PRIOR), "github.com/acme/app", model="claude-sonnet-4-6"
+    ).extract(_SIGNALS)[0]
+    assert p.model == "claude-sonnet-4-6"
+
+
 def test_extract_includes_scope_and_signals_in_the_prompt():
     provider = FakeProvider(_ONE_PRIOR)
     PriorExtractor(provider, "github.com/acme/app").extract(_SIGNALS)

@@ -29,13 +29,14 @@ class PriorStore(ABC):
         repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
+        model: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
         """Return priors newest-first, optionally filtered and paginated.
 
-        Filters by exact ``repo``, ``status`` and ``scope``; ``limit``/``offset``
-        paginate.
+        Filters by exact ``repo``, ``status``, ``scope`` and ``model``;
+        ``limit``/``offset`` paginate.
         """
 
     @abstractmethod
@@ -45,8 +46,9 @@ class PriorStore(ABC):
         repo: str | None = None,
         status: Status | None = None,
         scope: str | None = None,
+        model: str | None = None,
     ) -> int:
-        """Count priors matching the (optional) ``repo``/``status``/``scope`` filters."""
+        """Count priors matching the (optional) ``repo``/``status``/``scope``/``model`` filters."""
 
     @abstractmethod
     def list_repos(self) -> list[str]:

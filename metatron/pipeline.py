@@ -30,6 +30,7 @@ from metatron.storage.base import PriorStore
 
 class IngestResult(BaseModel):
     repo: str
+    model: str
     files_parsed: int
     commits_read: int
     scopes: int
@@ -56,7 +57,8 @@ def ingest(
     )
     signals = collect_signals(parsed_files, commits)
 
-    extractor = PriorExtractor(provider, repo)
+    model = getattr(provider, "model", "")
+    extractor = PriorExtractor(provider, repo, model)
     priors_created = 0
     for scope_signals in signals.scopes:
         for prior in extractor.extract(scope_signals):
@@ -65,6 +67,7 @@ def ingest(
 
     return IngestResult(
         repo=repo,
+        model=model,
         files_parsed=len(parsed_files),
         commits_read=len(commits),
         scopes=len(signals.scopes),
