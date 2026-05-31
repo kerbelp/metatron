@@ -100,6 +100,21 @@ One served instance serves one repo (`--repo`, the id printed by `ingest`), so a
 agent only ever sees that repo's priors. The web UI, by contrast, spans all repos
 in the DB with a repo selector.
 
+### Onboarding a repo's agent
+
+So a coding agent reliably *consults* the priors (rather than rediscovering
+conventions), run the onboarding script from inside the target repo:
+
+```bash
+bash /path/to/metatron/metatron_setup.sh        # or pass the repo dir as an arg
+```
+
+It is **additive and idempotent** — it appends a "query Metatron first" block to
+`CLAUDE.md` (between markers, never deleting your content) and merges a
+`UserPromptSubmit` hook into `.claude/settings.json` (preserving existing config)
+that re-injects the directive every turn. You still wire the `metatron` MCP server
+in `.mcp.json` and reconnect the agent.
+
 Two tools are exposed:
 
 - `get_priors_for_context(file_path_or_area, task_description)` → the relevant
