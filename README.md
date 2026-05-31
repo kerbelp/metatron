@@ -109,11 +109,13 @@ conventions), run the onboarding script from inside the target repo:
 bash /path/to/metatron/metatron_setup.sh        # or pass the repo dir as an arg
 ```
 
-It is **additive and idempotent** — it appends a "query Metatron first" block to
-`CLAUDE.md` (between markers, never deleting your content) and merges a
+It is **additive and idempotent** — it (1) appends a "query Metatron first" block
+to `CLAUDE.md` (between markers, never deleting your content), (2) merges a
 `UserPromptSubmit` hook into `.claude/settings.json` (preserving existing config)
-that re-injects the directive every turn. You still wire the `metatron` MCP server
-in `.mcp.json` and reconnect the agent.
+that re-injects the directive every turn, and (3) adds the `metatron` MCP server
+to `.mcp.json` (created if absent; existing servers preserved; left alone if a
+`metatron` server is already defined). The repo id is derived from the repo's
+`origin` remote (override with `METATRON_REPO`). Then just reconnect the agent.
 
 Two tools are exposed:
 

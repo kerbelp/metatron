@@ -1,6 +1,7 @@
 """Tests for metatron_setup.sh — additive, idempotent onboarding of a target repo."""
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,14 +10,23 @@ import pytest
 SCRIPT = Path(__file__).parent.parent / "metatron_setup.sh"
 
 
-def run_setup(target: Path):
+def run_setup(target: Path, env: dict | None = None):
+    # Set a deterministic repo id so tests don't depend on git remotes / uv.
+    full_env = {**os.environ, "METATRON_REPO": "github.com/test/repo"}
+    if env:
+        full_env.update(env)
     result = subprocess.run(
         ["bash", str(SCRIPT), str(target)],
         capture_output=True,
         text=True,
+        env=full_env,
     )
     assert result.returncode == 0, result.stderr
     return result
+
+
+def _mcp(target: Path) -> dict:
+    return json.loads((target / ".mcp.json").read_text())
 
 
 def _settings(target: Path) -> dict:
@@ -80,6 +90,33 @@ def test_running_twice_is_idempotent(tmp_path):
 
     cmds = _userprompt_hook_commands(_settings(tmp_path))
     assert sum("metatron_reminder" in c for c in cmds) == 1
+
+
+def test_creates_mcp_json_with_metatron_server(tmp_path):
+    run_setup(tmp_path)
+    server = _mcp(tmp_path)["mcpServers"]["metatron"]
+    assert server["command"] == "uv"
+    assert "serve" in server["args"]
+    assert "github.com/test/repo" in server["args"]
+    assert "METATRON_DB" in server["env"]
+
+
+def test_preserves_existing_mcp_servers(tmp_path):
+    (tmp_path / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"other": {"command": "x"}}})
+    )
+    run_setup(tmp_path)
+    servers = _mcp(tmp_path)["mcpServers"]
+    assert servers["other"]["command"] == "x"  # preserved
+    assert "metatron" in servers  # added
+
+
+def test_does_not_overwrite_existing_metatron_server(tmp_path):
+    (tmp_path / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"metatron": {"command": "SENTINEL"}}})
+    )
+    run_setup(tmp_path)
+    assert _mcp(tmp_path)["mcpServers"]["metatron"]["command"] == "SENTINEL"
 
 
 def test_preserves_an_existing_userprompt_hook(tmp_path):

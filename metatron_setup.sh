@@ -15,6 +15,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 TARGET="${1:-.}"
 if [[ ! -d "$TARGET" ]]; then
   echo "error: target directory '$TARGET' does not exist" >&2
@@ -96,7 +98,43 @@ else:
     print(f"  added UserPromptSubmit hook to {path}")
 PYEOF
 
+# --- 4. MCP server config (.mcp.json, additive) ----------------------------
+MCP_FILE="$TARGET/.mcp.json"
+METATRON_HOME="${METATRON_HOME:-$SCRIPT_DIR}"
+DB_PATH="${METATRON_DB:-$METATRON_HOME/metatron.db}"
+REPO_ID="${METATRON_REPO:-}"
+if [[ -z "$REPO_ID" ]]; then
+  # Use Metatron's own logic so the id matches what ingest/serve compute.
+  REPO_ID="$(uv run --project "$SCRIPT_DIR" python -c \
+    'import sys; from metatron.repo_identity import repo_id; print(repo_id(sys.argv[1]))' \
+    "$TARGET" 2>/dev/null || true)"
+fi
+if [[ -z "$REPO_ID" ]]; then
+  echo "  warning: could not derive repo id; skipping .mcp.json" >&2
+  echo "           (set METATRON_REPO=<id> or add an origin remote, then re-run)" >&2
+else
+  SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"uv","args":["run","--project",sys.argv[1],"metatron","serve","--repo",sys.argv[2]],"env":{"METATRON_DB":sys.argv[3]}}))' \
+    "$METATRON_HOME" "$REPO_ID" "$DB_PATH")"
+  python3 - "$MCP_FILE" "$SERVER_JSON" <<'PYEOF'
+import json, os, sys
+
+path, server_json = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    text = open(path).read().strip()
+    data = json.loads(text) if text else {}
+servers = data.setdefault("mcpServers", {})
+if "metatron" in servers:
+    print("  .mcp.json already has the metatron server — left as is")
+else:
+    servers["metatron"] = json.loads(server_json)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    print(f"  added metatron server to {path}")
+PYEOF
+fi
+
 echo
-echo "Done. Next steps:"
-echo "  - Ensure .mcp.json points the 'metatron' server at this repo (metatron serve --repo <id>)."
+echo "Done. Next step:"
 echo "  - Restart / reconnect Claude Code so it loads the hook and MCP server."
