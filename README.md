@@ -29,11 +29,17 @@ Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+.
 uv sync
 ```
 
-Ingest uses the Anthropic API by default, so set a key:
+Ingest uses the Anthropic API by default, so provide a key. The CLI auto-loads a
+`.env` file from the working directory (it never overrides an already-exported
+variable, and `.env` is gitignored):
 
 ```bash
-export ANTHROPIC_API_KEY=sk-...
+# .env in the repo root
+ANTHROPIC_API_KEY=sk-...
 ```
+
+or export it directly with `export ANTHROPIC_API_KEY=sk-...`. Only `ingest`
+needs the key — `serve` and `candidates` are fully local.
 
 Non-secret settings live in an optional `metatron.toml` (env vars override it):
 

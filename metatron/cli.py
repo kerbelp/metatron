@@ -12,6 +12,8 @@ import argparse
 import sys
 from typing import TextIO
 
+from dotenv import find_dotenv, load_dotenv
+
 from metatron.config import load_settings
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.models import Status
@@ -28,6 +30,14 @@ def main(
     out: TextIO | None = None,
 ) -> int:
     out = out if out is not None else sys.stdout
+
+    # Load a .env from the working directory (does not override exported vars),
+    # so ANTHROPIC_API_KEY and other settings can live there. Only ingest needs
+    # the key, but loading early keeps every command's environment consistent.
+    dotenv_path = find_dotenv(usecwd=True)
+    if dotenv_path:
+        load_dotenv(dotenv_path)
+
     args = _build_parser().parse_args(argv)
 
     settings = load_settings()

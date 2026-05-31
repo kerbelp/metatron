@@ -406,6 +406,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "tree-sitter" },
     { name = "tree-sitter-python" },
 ]
@@ -420,6 +421,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.105.2" },
     { name = "mcp", specifier = ">=1.27.2" },
     { name = "pydantic", specifier = ">=2.6" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "tree-sitter", specifier = ">=0.25.2" },
     { name = "tree-sitter-python", specifier = ">=0.25.0" },
 ]

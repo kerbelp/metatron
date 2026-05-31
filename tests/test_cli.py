@@ -1,6 +1,7 @@
 """Tests for the curation CLI dispatch (store/provider injected, no processes)."""
 
 import io
+import os
 
 from metatron.cli import main
 from metatron.extraction.provider import LLMProvider
@@ -76,6 +77,27 @@ def test_approve_unknown_id_errors_without_raising():
 
     assert code != 0
     assert "nope" in output or "not found" in output.lower()
+
+
+def test_cli_auto_loads_env_file_from_working_dir(tmp_path, monkeypatch):
+    # Key sits in a .env in the working dir, not exported. The CLI should load it.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=from-dotenv\n")
+
+    main(["candidates", "list"], store=SQLitePriorStore(":memory:"), out=io.StringIO())
+
+    assert os.environ["ANTHROPIC_API_KEY"] == "from-dotenv"
+
+
+def test_cli_does_not_override_already_exported_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "from-shell")
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=from-dotenv\n")
+
+    main(["candidates", "list"], store=SQLitePriorStore(":memory:"), out=io.StringIO())
+
+    assert os.environ["ANTHROPIC_API_KEY"] == "from-shell"
 
 
 def test_ingest_stores_candidates_and_reports_summary(git_repo):

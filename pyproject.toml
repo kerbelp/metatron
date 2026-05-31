@@ -8,6 +8,7 @@ dependencies = [
     "anthropic>=0.105.2",
     "mcp>=1.27.2",
     "pydantic>=2.6",
+    "python-dotenv>=1.2.2",
     "tree-sitter>=0.25.2",
     "tree-sitter-python>=0.25.0",
 ]
