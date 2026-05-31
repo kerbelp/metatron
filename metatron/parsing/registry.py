@@ -10,11 +10,21 @@ from __future__ import annotations
 import os
 
 from metatron.parsing.base import LanguageParser
+from metatron.parsing.jsts_parser import (
+    JavaScriptParser,
+    TsxParser,
+    TypeScriptParser,
+)
 from metatron.parsing.python_parser import PythonParser
 
 # Extension -> parser factory. Add new languages here.
 _PARSERS_BY_EXTENSION: dict[str, type[LanguageParser]] = {
     ".py": PythonParser,
+    ".ts": TypeScriptParser,
+    ".mts": TypeScriptParser,
+    ".tsx": TsxParser,
+    ".js": JavaScriptParser,
+    ".mjs": JavaScriptParser,
 }
 
 
