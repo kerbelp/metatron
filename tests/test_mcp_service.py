@@ -42,6 +42,45 @@ def test_only_the_requested_repos_priors_are_served():
     assert [p.pattern for p in results] == ["mine"]
 
 
+def test_keyword_relevant_prior_surfaces_across_directories():
+    # The agent enters from the route file, but the relevant prior lives under
+    # the components dir. Keyword overlap ("section") should still surface it.
+    store = _store(
+        _canonical(
+            pattern="build each home section as a zone component",
+            scope="src/components/Home/zones",
+            rationale="self-contained sections",
+        ),
+        _canonical(
+            pattern="use the email queue for outbound mail",
+            scope="src/server/email",
+            rationale="reliability",
+        ),
+    )
+    results = get_priors_for_context(
+        store,
+        REPO,
+        "src/routes/index.tsx homepage",
+        "add a testimonials section to the homepage",
+    )
+    assert [p.pattern for p in results] == ["build each home section as a zone component"]
+
+
+def test_unrelated_query_returns_nothing():
+    # No scope relationship and no keyword overlap -> excluded (relevance floor).
+    store = _store(
+        _canonical(
+            pattern="use the email queue for outbound mail",
+            scope="src/server/email",
+            rationale="reliability",
+        ),
+    )
+    results = get_priors_for_context(
+        store, REPO, "src/routes/index.tsx", "fix a typo in the footer"
+    )
+    assert results == []
+
+
 def test_out_of_scope_priors_are_excluded():
     store = _store(
         _canonical(pattern="storage rule", scope="app/storage", rationale="r"),

@@ -32,16 +32,18 @@ def get_priors_for_context(
     *,
     limit: int = 20,
 ) -> list[Prior]:
-    task_tokens = _tokens(task_description)
-    relevant = [
-        p
-        for p in store.list(repo=repo, status=Status.CANONICAL)
-        if _in_scope(p.scope, file_path_or_area)
-    ]
-    relevant.sort(
-        key=lambda p: _score(p, file_path_or_area, task_tokens), reverse=True
-    )
-    return relevant[:limit]
+    # Scope is a ranking signal, not a hard gate: a prior is relevant if it
+    # overlaps the area's path OR shares keywords with the task/area. This lets
+    # textually-relevant priors surface even when the agent enters from a
+    # different directory (e.g. a route file) than where the prior lives.
+    query_tokens = _tokens(task_description) | _tokens(file_path_or_area)
+    scored: list[tuple[Prior, int]] = []
+    for prior in store.list(repo=repo, status=Status.CANONICAL):
+        score = _relevance(prior, file_path_or_area, query_tokens)
+        if score > 0:
+            scored.append((prior, score))
+    scored.sort(key=lambda ps: ps[1], reverse=True)
+    return [prior for prior, _ in scored[:limit]]
 
 
 def submit_candidate_learning(
@@ -96,19 +98,30 @@ def _tokens(text: str) -> set[str]:
     }
 
 
-def _in_scope(prior_scope: str, area: str) -> bool:
-    if prior_scope == "":  # global prior
-        return True
+def _relevance(prior: Prior, area: str, query_tokens: set[str]) -> int:
+    """Relevance score; 0 means "no signal" (filtered out).
+
+    Scope relationship dominates, then keyword overlap, then confidence — so
+    exact-path priors rank first, but a strong keyword match in another directory
+    still beats nothing.
+    """
+    scope = _scope_score(prior.scope, area)
+    keywords = len(_tokens(f"{prior.pattern} {prior.rationale}") & query_tokens)
+    if scope == 0 and keywords == 0:
+        return 0
+    return scope * 100 + keywords * 10 + _CONFIDENCE_WEIGHT[prior.confidence]
+
+
+def _scope_score(prior_scope: str, area: str) -> int:
+    """How strongly a prior's scope relates to the queried area (0 = unrelated)."""
+    if prior_scope == "":  # global prior — applies everywhere, weakly
+        return 1
     scope = prior_scope.strip("/")
     target = area.strip("/")
-    return (
-        target == scope
-        or target.startswith(scope + "/")
-        or scope.startswith(target + "/")
-    )
-
-
-def _score(prior: Prior, area: str, task_tokens: set[str]) -> int:
-    overlap = len(_tokens(f"{prior.pattern} {prior.rationale}") & task_tokens)
-    exact = 2 if prior.scope.strip("/") == area.strip("/") else 0
-    return overlap * 10 + _CONFIDENCE_WEIGHT[prior.confidence] + exact
+    if target == scope:
+        return 4
+    if target.startswith(scope + "/"):  # the area sits inside the prior's scope
+        return 3
+    if scope.startswith(target + "/"):  # the prior's scope sits inside the area
+        return 2
+    return 0
