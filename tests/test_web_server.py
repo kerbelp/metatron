@@ -7,8 +7,9 @@ import urllib.request
 
 import pytest
 
+from metatron.events import Event, EventKind
 from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
 from metatron.webui.server import find_free_port, make_server
 
 
@@ -39,8 +40,10 @@ def served():
     store = SQLitePriorStore(":memory:")
     prior = Prior(pattern="serve me", scope="app", rationale="r", origin=Origin.BOOTSTRAP)
     store.add(prior)
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(kind=EventKind.QUERY, area="app", result_count=1))
     port = find_free_port(start=8800, host="127.0.0.1")
-    httpd = make_server(store, "127.0.0.1", port)
+    httpd = make_server(store, "127.0.0.1", port, events)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
@@ -78,6 +81,15 @@ def test_post_approve_promotes_prior(served):
     _, body = _post(base + f"/api/priors/{prior.id}/approve")
     assert json.loads(body)["ok"] is True
     assert store.get(prior.id).status is Status.CANONICAL
+
+
+def test_api_usage_returns_summary(served):
+    _, _, base = served
+    _, body = _get(base + "/api/usage")
+    data = json.loads(body)
+    assert data["total_queries"] == 1
+    assert data["coverage_rate"] == 1.0
+    assert len(data["recent"]) == 1
 
 
 def test_unknown_path_is_404(served):

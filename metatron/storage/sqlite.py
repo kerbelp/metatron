@@ -11,8 +11,9 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
+from metatron.events import Event
 from metatron.models import Prior, Status
-from metatron.storage.base import PriorStore
+from metatron.storage.base import EventStore, PriorStore
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS priors (
@@ -109,6 +110,61 @@ class SQLitePriorStore(PriorStore):
 
     def close(self) -> None:
         self._conn.close()
+
+
+_EVENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS events (
+    id           TEXT PRIMARY KEY,
+    timestamp    TEXT NOT NULL,
+    kind         TEXT NOT NULL,
+    area         TEXT NOT NULL,
+    task         TEXT NOT NULL,
+    result_count INTEGER NOT NULL,
+    prior_ids    TEXT NOT NULL
+)
+"""
+
+_EVENT_COLUMNS = ("id", "timestamp", "kind", "area", "task", "result_count", "prior_ids")
+
+
+class SQLiteEventStore(EventStore):
+    def __init__(self, path: str = "metatron.db") -> None:
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute(_EVENTS_SCHEMA)
+        self._conn.commit()
+
+    def record(self, event: Event) -> Event:
+        data = event.model_dump(mode="json")
+        data["prior_ids"] = json.dumps(data["prior_ids"])
+        placeholders = ", ".join("?" for _ in _EVENT_COLUMNS)
+        self._conn.execute(
+            f"INSERT INTO events ({', '.join(_EVENT_COLUMNS)}) VALUES ({placeholders})",
+            [data[col] for col in _EVENT_COLUMNS],
+        )
+        self._conn.commit()
+        return event
+
+    def list_events(self, *, limit: int | None = None, offset: int = 0) -> list[Event]:
+        sql = "SELECT * FROM events ORDER BY timestamp DESC, id"
+        params: list = []
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params = [limit, offset]
+        cur = self._conn.execute(sql, params)
+        return [_event_from_row(row) for row in cur.fetchall()]
+
+    def count_events(self) -> int:
+        return self._conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def _event_from_row(row: sqlite3.Row) -> Event:
+    data = dict(row)
+    data["prior_ids"] = json.loads(data["prior_ids"])
+    return Event.model_validate(data)
 
 
 def _filter(status: Status | None, scope: str | None) -> tuple[str, list]:

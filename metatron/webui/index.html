@@ -17,11 +17,13 @@
       font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
     header {
-      padding: 24px 32px; border-bottom: 1px solid var(--border);
-      display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+      padding: 20px 32px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     }
     header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
-    header .tag { color: var(--muted); font-size: 13px; }
+    .nav { display: flex; gap: 4px; margin-left: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
+    .nav button { padding: 6px 16px; border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 13px; border: none; background: none; }
+    .nav button.active { background: var(--surface-2); color: var(--text); }
     main { max-width: 980px; margin: 0 auto; padding: 24px 32px 64px; }
     .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
     .stat {
@@ -64,31 +66,60 @@
     .pager button:disabled { opacity: .4; cursor: default; }
     .empty { text-align: center; color: var(--muted); padding: 48px; }
     .id { color: var(--muted); font-size: 11px; font-family: ui-monospace, monospace; margin-left: auto; }
+    .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 26px 0 10px; }
+    .bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+    .bar > span { display: block; height: 100%; background: var(--green); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .miss { color: var(--red); } .hit { color: var(--green); }
+    .row-scope { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); }
+    .row-scope .c { color: var(--muted); font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
   <header>
     <h1>Metatron</h1>
-    <span class="tag">Priors curation — approve what becomes canonical</span>
+    <div class="nav" id="nav">
+      <button class="active" data-view="priors">Priors</button>
+      <button data-view="obs">Observability</button>
+    </div>
   </header>
   <main>
-    <div class="stats" id="stats"></div>
-    <div class="controls">
-      <div class="tabs" id="tabs">
-        <button class="tab active" data-status="candidate">Candidates</button>
-        <button class="tab" data-status="canonical">Canonical</button>
-        <button class="tab" data-status="rejected">Rejected</button>
-        <button class="tab" data-status="">All</button>
+    <section id="view-priors">
+      <div class="stats" id="stats"></div>
+      <div class="controls">
+        <div class="tabs" id="tabs">
+          <button class="tab active" data-status="candidate">Candidates</button>
+          <button class="tab" data-status="canonical">Canonical</button>
+          <button class="tab" data-status="rejected">Rejected</button>
+          <button class="tab" data-status="">All</button>
+        </div>
+        <input type="text" id="scope" placeholder="Filter by scope (e.g. src/components/Home)" />
       </div>
-      <input type="text" id="scope" placeholder="Filter by scope (e.g. src/components/Home)" />
-    </div>
-    <div id="list"></div>
-    <div class="pager" id="pager"></div>
+      <div id="list"></div>
+      <div class="pager" id="pager"></div>
+    </section>
+
+    <section id="view-obs" hidden>
+      <div class="stats" id="usage-stats"></div>
+      <div class="card">
+        <div>Coverage — queries that returned at least one canonical prior</div>
+        <div class="bar"><span id="cov-bar"></span></div>
+        <div style="margin-top:8px;color:var(--muted);font-size:13px" id="cov-detail"></div>
+      </div>
+      <div class="section-title">Most-queried scopes</div>
+      <div id="top-scopes"></div>
+      <div class="section-title">Recent queries</div>
+      <div id="recent"></div>
+    </section>
   </main>
 
   <script>
     const state = { status: "candidate", scope: "", page: 1, pageSize: 20, pages: 1 };
 
+    // ---- Priors view ----
     async function loadStats() {
       const s = await (await fetch("/api/stats")).json();
       document.getElementById("stats").innerHTML = [
@@ -96,18 +127,15 @@
         ["Rejected", s.rejected], ["Total", s.total],
       ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
     }
-
     async function loadPriors() {
       const q = new URLSearchParams({ page: state.page, page_size: state.pageSize });
       if (state.status) q.set("status", state.status);
       if (state.scope) q.set("scope", state.scope);
       const data = await (await fetch("/api/priors?" + q)).json();
       state.pages = data.pages || 1;
-      render(data);
-      renderPager(data);
+      renderPriors(data); renderPager(data);
     }
-
-    function render(data) {
+    function renderPriors(data) {
       const list = document.getElementById("list");
       if (!data.items.length) { list.innerHTML = `<div class="empty">No priors here.</div>`; return; }
       list.innerHTML = data.items.map(p => `
@@ -126,7 +154,6 @@
           </div>
         </div>`).join("");
     }
-
     function renderPager(data) {
       const pager = document.getElementById("pager");
       if (state.pages <= 1) { pager.innerHTML = ""; return; }
@@ -135,15 +162,48 @@
         <span>Page ${state.page} of ${state.pages} · ${data.total} total</span>
         <button ${state.page >= state.pages ? "disabled" : ""} onclick="go(1)">Next</button>`;
     }
-
-    async function act(id, action) {
-      await fetch(`/api/priors/${id}/${action}`, { method: "POST" });
-      await refresh();
-    }
+    async function act(id, action) { await fetch(`/api/priors/${id}/${action}`, { method: "POST" }); await refreshPriors(); }
     function go(delta) { state.page = Math.max(1, state.page + delta); loadPriors(); }
-    async function refresh() { await loadStats(); await loadPriors(); }
-    function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+    async function refreshPriors() { await loadStats(); await loadPriors(); }
 
+    // ---- Observability view ----
+    async function loadUsage() {
+      const u = await (await fetch("/api/usage")).json();
+      document.getElementById("usage-stats").innerHTML = [
+        ["Queries", u.total_queries], ["Coverage", Math.round(u.coverage_rate * 100) + "%"],
+        ["Avg priors / query", u.avg_results], ["Submissions", u.total_submissions],
+      ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+      document.getElementById("cov-bar").style.width = Math.round(u.coverage_rate * 100) + "%";
+      document.getElementById("cov-detail").textContent =
+        `${u.hits} hit / ${u.misses} miss out of ${u.total_queries} queries`;
+
+      document.getElementById("top-scopes").innerHTML = u.top_scopes.length
+        ? u.top_scopes.map(s => `<div class="row-scope"><span class="scope">${esc(s.scope)}</span><span class="c">${s.count}</span></div>`).join("")
+        : `<div class="empty">No queries yet. Point an agent at \`metatron serve\`.</div>`;
+
+      document.getElementById("recent").innerHTML = u.recent.length ? `
+        <table><thead><tr><th>When</th><th>Area</th><th>Task</th><th class="num">Returned</th></tr></thead>
+        <tbody>${u.recent.map(e => `
+          <tr><td>${fmtTime(e.timestamp)}</td><td class="scope">${esc(e.area || "—")}</td>
+          <td>${esc(e.task || "")}</td>
+          <td class="num ${e.result_count > 0 ? "hit" : "miss"}">${e.result_count}</td></tr>`).join("")}
+        </tbody></table>` : `<div class="empty">No events recorded yet.</div>`;
+    }
+
+    // ---- shared ----
+    function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
+    function fmtTime(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
+
+    document.getElementById("nav").addEventListener("click", e => {
+      if (!e.target.dataset.view) return;
+      document.querySelectorAll("#nav button").forEach(b => b.classList.remove("active"));
+      e.target.classList.add("active");
+      const obs = e.target.dataset.view === "obs";
+      document.getElementById("view-obs").hidden = !obs;
+      document.getElementById("view-priors").hidden = obs;
+      if (obs) loadUsage(); else refreshPriors();
+    });
     document.getElementById("tabs").addEventListener("click", e => {
       if (!e.target.dataset.hasOwnProperty("status")) return;
       document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
@@ -156,7 +216,7 @@
       scopeTimer = setTimeout(() => { state.scope = e.target.value.trim(); state.page = 1; loadPriors(); }, 250);
     });
 
-    refresh();
+    refreshPriors();
   </script>
 </body>
 </html>

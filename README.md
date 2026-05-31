@@ -79,6 +79,12 @@ uv run metatron ui            # then open the printed http://127.0.0.1:<port>
 uv run metatron ui --port 9000
 ```
 
+The UI also has an **Observability** tab showing usage: how often agents query,
+coverage (the share of queries that returned a canonical prior), most-queried
+scopes, and recent queries. `metatron serve` records these usage events to the
+same DB — so run `serve` for your agent and watch the tab populate. (Usage only;
+no token accounting or helpfulness judgments are recorded.)
+
 ### 3. Serve — expose canonical priors to agents over MCP
 
 ```bash

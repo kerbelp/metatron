@@ -9,12 +9,17 @@ from __future__ import annotations
 
 from mcp.server.fastmcp import FastMCP
 
+from metatron.events import Event, EventKind
 from metatron.mcp_server import service
-from metatron.storage.base import PriorStore
+from metatron.storage.base import EventStore, PriorStore
 
 
-def build_server(store: PriorStore) -> FastMCP:
+def build_server(store: PriorStore, event_store: EventStore | None = None) -> FastMCP:
     server = FastMCP("metatron")
+
+    def _record(event: Event) -> None:
+        if event_store is not None:
+            event_store.record(event)
 
     @server.tool()
     def get_priors_for_context(file_path_or_area: str, task_description: str) -> str:
@@ -26,6 +31,15 @@ def build_server(store: PriorStore) -> FastMCP:
         """
         priors = service.get_priors_for_context(
             store, file_path_or_area, task_description
+        )
+        _record(
+            Event(
+                kind=EventKind.QUERY,
+                area=file_path_or_area,
+                task=task_description,
+                result_count=len(priors),
+                prior_ids=[p.id for p in priors],
+            )
         )
         return service.format_priors(priors)
 
@@ -48,6 +62,7 @@ def build_server(store: PriorStore) -> FastMCP:
             rationale=rationale,
             confidence=confidence,
         )
+        _record(Event(kind=EventKind.SUBMIT, area=scope, prior_ids=[prior.id]))
         return prior.id
 
     return server

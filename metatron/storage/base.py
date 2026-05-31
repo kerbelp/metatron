@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from metatron.events import Event
 from metatron.models import Prior, Status
 
 
@@ -50,3 +51,19 @@ class PriorStore(ABC):
 
         Raises ``KeyError`` if no prior has this id.
         """
+
+
+class EventStore(ABC):
+    """Stores usage events. Separate from priors so reporting stays decoupled."""
+
+    @abstractmethod
+    def record(self, event: Event) -> Event:
+        """Persist a usage event and return it."""
+
+    @abstractmethod
+    def list_events(self, *, limit: int | None = None, offset: int = 0) -> list[Event]:
+        """Return events newest-first, optionally paginated."""
+
+    @abstractmethod
+    def count_events(self) -> int:
+        """Total number of recorded events."""

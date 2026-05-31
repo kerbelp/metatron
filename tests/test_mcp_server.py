@@ -2,9 +2,10 @@
 
 import asyncio
 
+from metatron.events import EventKind
 from metatron.mcp_server.server import build_server
 from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
 
 
 def _result(call):
@@ -60,3 +61,58 @@ def test_submit_tool_persists_a_candidate_and_returns_its_id():
     assert stored is not None
     assert stored.status is Status.CANDIDATE
     assert stored.origin is Origin.AGENT_SUBMITTED
+
+
+def test_query_records_a_usage_event():
+    store = SQLitePriorStore(":memory:")
+    prior = Prior(
+        pattern="p", scope="app", rationale="r",
+        origin=Origin.BOOTSTRAP, status=Status.CANONICAL,
+    )
+    store.add(prior)
+    events = SQLiteEventStore(":memory:")
+    server = build_server(store, events)
+
+    asyncio.run(
+        server.call_tool(
+            "get_priors_for_context",
+            {"file_path_or_area": "app", "task_description": "do a thing"},
+        )
+    )
+
+    recorded = events.list_events()
+    assert len(recorded) == 1
+    e = recorded[0]
+    assert e.kind is EventKind.QUERY
+    assert e.area == "app"
+    assert e.result_count == 1
+    assert prior.id in e.prior_ids
+
+
+def test_submit_records_a_usage_event():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    server = build_server(store, events)
+
+    asyncio.run(
+        server.call_tool(
+            "submit_candidate_learning",
+            {"pattern": "p", "scope": "app/api", "rationale": "r"},
+        )
+    )
+
+    recorded = events.list_events()
+    assert [e.kind for e in recorded] == [EventKind.SUBMIT]
+    assert recorded[0].area == "app/api"
+
+
+def test_event_logging_is_optional():
+    # No event store -> no crash, tools still work.
+    store = SQLitePriorStore(":memory:")
+    server = build_server(store)
+    asyncio.run(
+        server.call_tool(
+            "get_priors_for_context",
+            {"file_path_or_area": "app", "task_description": "x"},
+        )
+    )

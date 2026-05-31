@@ -13,8 +13,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from metatron.storage.base import PriorStore
+from metatron.storage.base import EventStore, PriorStore
 from metatron.webui import api
+from metatron.webui.observability import usage_summary
 
 _INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
 
@@ -31,13 +32,23 @@ def find_free_port(start: int = 1337, host: str = "127.0.0.1", attempts: int = 2
     raise RuntimeError(f"no free port found in {start}..{start + attempts}")
 
 
-def make_server(store: PriorStore, host: str, port: int) -> HTTPServer:
-    return HTTPServer((host, port), _build_handler(store))
+def make_server(
+    store: PriorStore,
+    host: str,
+    port: int,
+    event_store: EventStore | None = None,
+) -> HTTPServer:
+    return HTTPServer((host, port), _build_handler(store, event_store))
 
 
-def serve(store: PriorStore, host: str = "127.0.0.1", start_port: int = 1337) -> None:
+def serve(
+    store: PriorStore,
+    event_store: EventStore | None = None,
+    host: str = "127.0.0.1",
+    start_port: int = 1337,
+) -> None:
     port = find_free_port(start=start_port, host=host)
-    httpd = make_server(store, host, port)
+    httpd = make_server(store, host, port, event_store)
     print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
     try:
         httpd.serve_forever()
@@ -47,7 +58,9 @@ def serve(store: PriorStore, host: str = "127.0.0.1", start_port: int = 1337) ->
         httpd.server_close()
 
 
-def _build_handler(store: PriorStore) -> type[BaseHTTPRequestHandler]:
+def _build_handler(
+    store: PriorStore, event_store: EventStore | None = None
+) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
             pass
@@ -61,6 +74,11 @@ def _build_handler(store: PriorStore) -> type[BaseHTTPRequestHandler]:
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/stats":
                 self._send_json(api.stats(store))
+            elif path == "/api/usage":
+                if event_store is not None:
+                    self._send_json(api.usage(event_store))
+                else:
+                    self._send_json({**usage_summary([]), "recent": []})
             else:
                 self._send_json({"error": "not found"}, status=404)
 

@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 
 import pytest
 
+from metatron.events import Event, EventKind
 from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
-from metatron.webui.api import approve, list_priors, reject, stats
+from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
+from metatron.webui.api import approve, list_priors, reject, stats, usage
 
 
 @pytest.fixture
@@ -86,6 +87,21 @@ def test_approve_missing_id_returns_error_not_raise(store):
     result = approve(store, "nope")
     assert result["ok"] is False
     assert "nope" in result["error"] or "not found" in result["error"].lower()
+
+
+def test_usage_returns_summary_and_recent_events():
+    import json
+
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(kind=EventKind.QUERY, area="app", result_count=2))
+    events.record(Event(kind=EventKind.QUERY, area="lib", result_count=0))
+
+    result = usage(events)
+
+    assert result["total_queries"] == 2
+    assert result["hits"] == 1
+    assert len(result["recent"]) == 2
+    json.dumps(result)  # must be serializable
 
 
 def test_stats_counts_by_status(store):

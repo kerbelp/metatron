@@ -19,7 +19,7 @@ from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.models import Status
 from metatron.pipeline import ingest
 from metatron.storage.base import PriorStore
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
 
 
 def main(
@@ -27,6 +27,7 @@ def main(
     *,
     store: PriorStore | None = None,
     provider: LLMProvider | None = None,
+    event_store: SQLiteEventStore | None = None,
     out: TextIO | None = None,
 ) -> int:
     out = out if out is not None else sys.stdout
@@ -51,9 +52,11 @@ def main(
             )
         return _cmd_ingest(args, store, provider, out)
     if args.command == "serve":
-        return _cmd_serve(store)
+        return _cmd_serve(store, event_store or SQLiteEventStore(settings.db_path))
     if args.command == "ui":
-        return _cmd_ui(store, args.port)
+        return _cmd_ui(
+            store, event_store or SQLiteEventStore(settings.db_path), args.port
+        )
     if args.command == "candidates":
         return _cmd_candidates(args, store, out)
 
@@ -80,17 +83,17 @@ def _cmd_ingest(args, store, provider, out) -> int:
     return 0
 
 
-def _cmd_serve(store) -> int:
+def _cmd_serve(store, event_store) -> int:
     from metatron.mcp_server.server import build_server
 
-    build_server(store).run()
+    build_server(store, event_store).run()
     return 0
 
 
-def _cmd_ui(store, port) -> int:
+def _cmd_ui(store, event_store, port) -> int:
     from metatron.webui.server import serve
 
-    serve(store, start_port=port)
+    serve(store, event_store, start_port=port)
     return 0
 
 

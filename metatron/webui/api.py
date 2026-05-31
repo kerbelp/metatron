@@ -7,7 +7,8 @@ in :mod:`metatron.webui.server` is a thin adapter over these.
 from __future__ import annotations
 
 from metatron.models import Status
-from metatron.storage.base import PriorStore
+from metatron.storage.base import EventStore, PriorStore
+from metatron.webui.observability import usage_summary
 
 
 def list_priors(
@@ -53,6 +54,15 @@ def stats(store: PriorStore) -> dict:
     counts = {s.value: store.count(status=s) for s in Status}
     counts["total"] = store.count()
     return counts
+
+
+def usage(event_store: EventStore, *, recent: int = 25) -> dict:
+    all_events = event_store.list_events()
+    summary = usage_summary(all_events)
+    summary["recent"] = [
+        e.model_dump(mode="json") for e in event_store.list_events(limit=recent)
+    ]
+    return summary
 
 
 def _set_status(store: PriorStore, prior_id: str, status: Status) -> dict:
