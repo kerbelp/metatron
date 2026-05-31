@@ -79,9 +79,11 @@ def _build_handler(
             elif path == "/api/usage":
                 repo = _first(parse_qs(parts.query), "repo")
                 if event_store is not None:
-                    self._send_json(api.usage(event_store, repo=repo))
+                    self._send_json(api.usage(event_store, store, repo=repo))
                 else:
-                    self._send_json({**usage_summary([]), "recent": []})
+                    self._send_json(
+                        {**usage_summary([]), "recent_queries": [], "recent_submissions": []}
+                    )
             else:
                 self._send_json({"error": "not found"}, status=404)
 

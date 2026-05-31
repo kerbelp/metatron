@@ -90,18 +90,30 @@ def test_approve_missing_id_returns_error_not_raise(store):
     assert "nope" in result["error"] or "not found" in result["error"].lower()
 
 
-def test_usage_returns_summary_and_recent_events():
+def test_usage_splits_kinds_and_resolves_returned_priors():
     import json
 
+    store = SQLitePriorStore(":memory:")
+    prior = Prior(
+        repo="r", pattern="use zones", scope="app", rationale="x",
+        origin=Origin.BOOTSTRAP, status=Status.CANONICAL,
+    )
+    store.add(prior)
     events = SQLiteEventStore(":memory:")
-    events.record(Event(repo="r", kind=EventKind.QUERY, area="app", result_count=2))
+    events.record(Event(repo="r", kind=EventKind.QUERY, area="app", task="add section", result_count=1, prior_ids=[prior.id]))
     events.record(Event(repo="r", kind=EventKind.QUERY, area="lib", result_count=0))
+    events.record(Event(repo="r", kind=EventKind.SUBMIT, area="app/api", prior_ids=[prior.id]))
 
-    result = usage(events)
+    result = usage(events, store)
 
     assert result["total_queries"] == 2
-    assert result["hits"] == 1
-    assert len(result["recent"]) == 2
+    assert result["total_submissions"] == 1
+    assert len(result["recent_queries"]) == 2
+    assert len(result["recent_submissions"]) == 1
+    # the query that returned a prior has it resolved (pattern, scope) for the detail view
+    q = next(e for e in result["recent_queries"] if e["result_count"] == 1)
+    assert q["priors"][0]["pattern"] == "use zones"
+    assert q["priors"][0]["scope"] == "app"
     json.dumps(result)  # must be serializable
 
 

@@ -77,6 +77,16 @@
     .miss { color: var(--red); } .hit { color: var(--green); }
     .row-scope { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); }
     .row-scope .c { color: var(--muted); font-variant-numeric: tabular-nums; }
+    tr.erow { cursor: pointer; }
+    tr.erow:hover { background: var(--surface-2); }
+    tr.erow td:first-child::before { content: "▸ "; color: var(--muted); }
+    tr.erow.open td:first-child::before { content: "▾ "; }
+    tr.detail > td { background: var(--surface-2); }
+    .detail-prior { padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .detail-prior:last-child { border-bottom: none; }
+    .detail-prior .pat { margin: 3px 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .kv { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
   </style>
 </head>
 <body>
@@ -114,7 +124,9 @@
       <div class="section-title">Most-queried scopes</div>
       <div id="top-scopes"></div>
       <div class="section-title">Recent queries</div>
-      <div id="recent"></div>
+      <div id="recent-queries"></div>
+      <div class="section-title">Recent submissions</div>
+      <div id="recent-submissions"></div>
     </section>
   </main>
 
@@ -200,13 +212,56 @@
         ? u.top_scopes.map(s => `<div class="row-scope"><span class="scope">${esc(s.scope)}</span><span class="c">${s.count}</span></div>`).join("")
         : `<div class="empty">No queries yet. Point an agent at \`metatron serve\`.</div>`;
 
-      document.getElementById("recent").innerHTML = u.recent.length ? `
-        <table><thead><tr><th>When</th><th>Area</th><th>Task</th><th class="num">Returned</th></tr></thead>
-        <tbody>${u.recent.map(e => `
-          <tr><td>${fmtTime(e.timestamp)}</td><td class="scope">${esc(e.area || "—")}</td>
-          <td>${esc(e.task || "")}</td>
-          <td class="num ${e.result_count > 0 ? "hit" : "miss"}">${e.result_count}</td></tr>`).join("")}
-        </tbody></table>` : `<div class="empty">No events recorded yet.</div>`;
+      renderEvents("recent-queries", u.recent_queries || [], "query", "q");
+      renderEvents("recent-submissions", u.recent_submissions || [], "submit", "s");
+    }
+
+    function renderEvents(containerId, events, kind, prefix) {
+      const el = document.getElementById(containerId);
+      if (!events.length) { el.innerHTML = `<div class="empty">None yet.</div>`; return; }
+      const head = kind === "query"
+        ? `<tr><th>When</th><th>Area</th><th>Task</th><th class="num">Returned</th></tr>`
+        : `<tr><th>When</th><th>Scope</th><th>Submitted pattern</th></tr>`;
+      const cols = kind === "query" ? 4 : 3;
+      const rows = events.map((e, i) => {
+        const id = prefix + i;
+        const when = fmtTime(e.timestamp);
+        let summary;
+        if (kind === "query") {
+          const rc = `<span class="${e.result_count > 0 ? "hit" : "miss"}">${e.result_count}</span>`;
+          summary = `<td>${when}</td><td class="scope">${esc(e.area || "—")}</td><td>${esc(e.task || "")}</td><td class="num">${rc}</td>`;
+        } else {
+          const pat = e.priors[0] ? esc(e.priors[0].pattern) : "(prior removed)";
+          summary = `<td>${when}</td><td class="scope">${esc(e.area || "—")}</td><td>${pat}</td>`;
+        }
+        return `<tr class="erow" onclick="toggleDetail('${id}', this)">${summary}</tr>
+          <tr class="detail" id="${id}" hidden><td colspan="${cols}">${detailBlock(e, kind)}</td></tr>`;
+      }).join("");
+      el.innerHTML = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+    }
+
+    function detailBlock(e, kind) {
+      const meta = kind === "query"
+        ? `<div class="kv">area: <span class="scope">${esc(e.area)}</span></div>
+           <div class="kv">task: ${esc(e.task || "—")}</div>`
+        : `<div class="kv">submitted to scope: <span class="scope">${esc(e.area)}</span></div>`;
+      const priors = (e.priors && e.priors.length)
+        ? e.priors.map(p => `
+            <div class="detail-prior">
+              <span class="badge ${p.confidence}">${p.confidence}</span>
+              <span class="scope">${esc(p.scope || "(global)")}</span>
+              <div class="pat">${esc(p.pattern)}</div>
+              <div class="muted">${esc(p.rationale || "")}</div>
+            </div>`).join("")
+        : `<div class="muted">${kind === "query" ? "No priors returned (miss)." : "No prior found."}</div>`;
+      return meta + `<div class="kv" style="margin-top:8px">returned:</div>` + priors;
+    }
+
+    function toggleDetail(id, row) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.hidden = !el.hidden;
+      row.classList.toggle("open", !el.hidden);
     }
 
     // ---- shared ----

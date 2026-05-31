@@ -6,6 +6,7 @@ in :mod:`metatron.webui.server` is a thin adapter over these.
 
 from __future__ import annotations
 
+from metatron.events import EventKind
 from metatron.models import Status
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui.observability import usage_summary
@@ -65,13 +66,41 @@ def stats(store: PriorStore, *, repo: str | None = None) -> dict:
     return counts
 
 
-def usage(event_store: EventStore, *, repo: str | None = None, recent: int = 25) -> dict:
+def usage(
+    event_store: EventStore,
+    store: PriorStore,
+    *,
+    repo: str | None = None,
+    recent: int = 25,
+) -> dict:
     repo_filter = repo or None
-    summary = usage_summary(event_store.list_events(repo=repo_filter))
-    summary["recent"] = [
-        e.model_dump(mode="json")
-        for e in event_store.list_events(repo=repo_filter, limit=recent)
-    ]
+    events = event_store.list_events(repo=repo_filter)  # newest-first
+    summary = usage_summary(events)
+
+    def enrich(event) -> dict:
+        data = event.model_dump(mode="json")
+        priors = []
+        for prior_id in event.prior_ids:
+            prior = store.get(prior_id)
+            if prior is not None:
+                priors.append(
+                    {
+                        "id": prior.id,
+                        "pattern": prior.pattern,
+                        "scope": prior.scope,
+                        "confidence": prior.confidence.value,
+                        "rationale": prior.rationale,
+                    }
+                )
+        data["priors"] = priors
+        return data
+
+    summary["recent_queries"] = [
+        enrich(e) for e in events if e.kind is EventKind.QUERY
+    ][:recent]
+    summary["recent_submissions"] = [
+        enrich(e) for e in events if e.kind is EventKind.SUBMIT
+    ][:recent]
     return summary
 
 

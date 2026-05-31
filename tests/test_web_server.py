@@ -89,7 +89,7 @@ def test_api_usage_returns_summary(served):
     data = json.loads(body)
     assert data["total_queries"] == 1
     assert data["coverage_rate"] == 1.0
-    assert len(data["recent"]) == 1
+    assert len(data["recent_queries"]) == 1
 
 
 def test_unknown_path_is_404(served):
