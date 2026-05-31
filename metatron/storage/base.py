@@ -27,8 +27,22 @@ class PriorStore(ABC):
         *,
         status: Status | None = None,
         scope: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Prior]:
-        """Return priors, optionally filtered by exact ``status`` and ``scope``."""
+        """Return priors newest-first, optionally filtered and paginated.
+
+        Filters by exact ``status`` and ``scope``; ``limit``/``offset`` paginate.
+        """
+
+    @abstractmethod
+    def count(
+        self,
+        *,
+        status: Status | None = None,
+        scope: str | None = None,
+    ) -> int:
+        """Count priors matching the (optional) ``status`` and ``scope`` filters."""
 
     @abstractmethod
     def set_status(self, prior_id: str, status: Status) -> Prior:

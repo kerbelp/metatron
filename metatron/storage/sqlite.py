@@ -45,7 +45,10 @@ _COLUMNS = (
 
 class SQLitePriorStore(PriorStore):
     def __init__(self, path: str = "metatron.db") -> None:
-        self._conn = sqlite3.connect(path)
+        # check_same_thread=False lets the web server (which runs in its own
+        # thread) share a store created elsewhere; the UI server is
+        # single-threaded, so access stays serialized.
+        self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_SCHEMA)
         self._conn.commit()
@@ -70,18 +73,26 @@ class SQLitePriorStore(PriorStore):
         *,
         status: Status | None = None,
         scope: str | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Prior]:
-        clauses: list[str] = []
-        params: list[str] = []
-        if status is not None:
-            clauses.append("status = ?")
-            params.append(status.value)
-        if scope is not None:
-            clauses.append("scope = ?")
-            params.append(scope)
-        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-        cur = self._conn.execute(f"SELECT * FROM priors{where}", params)
+        where, params = _filter(status, scope)
+        sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params = [*params, limit, offset]
+        cur = self._conn.execute(sql, params)
         return [_from_row(row) for row in cur.fetchall()]
+
+    def count(
+        self,
+        *,
+        status: Status | None = None,
+        scope: str | None = None,
+    ) -> int:
+        where, params = _filter(status, scope)
+        cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
+        return cur.fetchone()[0]
 
     def set_status(self, prior_id: str, status: Status) -> Prior:
         prior = self.get(prior_id)
@@ -98,6 +109,19 @@ class SQLitePriorStore(PriorStore):
 
     def close(self) -> None:
         self._conn.close()
+
+
+def _filter(status: Status | None, scope: str | None) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(status.value)
+    if scope is not None:
+        clauses.append("scope = ?")
+        params.append(scope)
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    return where, params
 
 
 def _to_row(prior: Prior) -> dict:

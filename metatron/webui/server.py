@@ -1,0 +1,104 @@
+"""A small stdlib HTTP server for the curation UI.
+
+No web framework — `http.server` serves one HTML page plus JSON endpoints backed
+by the same `PriorStore` the CLI uses. The request handler is a thin adapter over
+the pure functions in :mod:`metatron.webui.api`.
+"""
+
+from __future__ import annotations
+
+import json
+import socket
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
+from metatron.storage.base import PriorStore
+from metatron.webui import api
+
+_INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
+
+
+def find_free_port(start: int = 1337, host: str = "127.0.0.1", attempts: int = 200) -> int:
+    """Return the first bindable port at or after ``start``."""
+    for port in range(start, start + attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind((host, port))
+                return port
+            except OSError:
+                continue
+    raise RuntimeError(f"no free port found in {start}..{start + attempts}")
+
+
+def make_server(store: PriorStore, host: str, port: int) -> HTTPServer:
+    return HTTPServer((host, port), _build_handler(store))
+
+
+def serve(store: PriorStore, host: str = "127.0.0.1", start_port: int = 1337) -> None:
+    port = find_free_port(start=start_port, host=host)
+    httpd = make_server(store, host, port)
+    print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        httpd.server_close()
+
+
+def _build_handler(store: PriorStore) -> type[BaseHTTPRequestHandler]:
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args) -> None:  # keep output quiet
+            pass
+
+        def do_GET(self) -> None:
+            parts = urlsplit(self.path)
+            path = parts.path
+            if path in ("/", "/index.html"):
+                self._send_html(_INDEX_HTML)
+            elif path == "/api/priors":
+                self._send_json(_list(store, parse_qs(parts.query)))
+            elif path == "/api/stats":
+                self._send_json(api.stats(store))
+            else:
+                self._send_json({"error": "not found"}, status=404)
+
+        def do_POST(self) -> None:
+            segments = urlsplit(self.path).path.strip("/").split("/")
+            # /api/priors/<id>/<action>
+            if len(segments) == 4 and segments[:2] == ["api", "priors"]:
+                prior_id, action = segments[2], segments[3]
+                if action == "approve":
+                    return self._send_json(api.approve(store, prior_id))
+                if action == "reject":
+                    return self._send_json(api.reject(store, prior_id))
+            self._send_json({"error": "not found"}, status=404)
+
+        def _send_json(self, payload: dict, status: int = 200) -> None:
+            self._respond(status, "application/json", json.dumps(payload).encode())
+
+        def _send_html(self, html: str) -> None:
+            self._respond(200, "text/html; charset=utf-8", html.encode())
+
+        def _respond(self, status: int, content_type: str, body: bytes) -> None:
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return Handler
+
+
+def _list(store: PriorStore, query: dict[str, list[str]]) -> dict:
+    def first(key: str, default: str | None = None) -> str | None:
+        return query.get(key, [default])[0]
+
+    return api.list_priors(
+        store,
+        status=first("status") or None,
+        scope=first("scope") or None,
+        page=int(first("page", "1")),
+        page_size=int(first("page_size", "20")),
+    )

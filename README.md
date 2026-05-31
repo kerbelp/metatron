@@ -70,6 +70,15 @@ uv run metatron candidates approve <id>      # promote to the canonical set
 uv run metatron candidates reject <id>       # discard
 ```
 
+Or use the local web UI (browse paginated, filter by status/scope, approve/reject
+with a click). It binds to `localhost:1337`, bumping to the next free port if
+taken, and reads/writes the same store as the CLI:
+
+```bash
+uv run metatron ui            # then open the printed http://127.0.0.1:<port>
+uv run metatron ui --port 9000
+```
+
 ### 3. Serve — expose canonical priors to agents over MCP
 
 ```bash

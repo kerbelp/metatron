@@ -52,6 +52,8 @@ def main(
         return _cmd_ingest(args, store, provider, out)
     if args.command == "serve":
         return _cmd_serve(store)
+    if args.command == "ui":
+        return _cmd_ui(store, args.port)
     if args.command == "candidates":
         return _cmd_candidates(args, store, out)
 
@@ -82,6 +84,13 @@ def _cmd_serve(store) -> int:
     from metatron.mcp_server.server import build_server
 
     build_server(store).run()
+    return 0
+
+
+def _cmd_ui(store, port) -> int:
+    from metatron.webui.server import serve
+
+    serve(store, start_port=port)
     return 0
 
 
@@ -131,6 +140,11 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sub.add_parser("serve", help="serve priors to agents over MCP (stdio)")
+
+    ui_p = sub.add_parser("ui", help="launch the local curation web UI")
+    ui_p.add_argument(
+        "--port", type=int, default=1337, help="starting port (bumps if taken)"
+    )
 
     cand = sub.add_parser("candidates", help="review and curate candidate priors")
     cand_sub = cand.add_subparsers(dest="candidates_command")

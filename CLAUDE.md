@@ -44,8 +44,11 @@ Architectural doors stay open for these, but **build none of them yet**:
 
 - Self-improving / automatic-feedback loop
 - Telemetry ingestion
-- Web UI
-- Auth, multi-tenant, RBAC
+- Auth, multi-tenant, RBAC, and any hosted/multi-user web app
 - Jira / ticket / postmortem ingestion (a later source)
 - Postgres (use SQLite now, behind the storage interface)
 - Deployment infra and packaging for distribution
+
+A **local, single-user curation web UI** (`metatron ui`, bound to localhost) is
+in scope — it's a thin local view over the same `PriorStore` the CLI uses. The
+out-of-scope item is a hosted/multi-user web app with auth, not this.
