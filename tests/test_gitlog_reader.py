@@ -44,3 +44,15 @@ def test_max_commits_limits_results(git_repo):
 
 def test_empty_repo_returns_no_commits(git_repo):
     assert GitLogReader(git_repo.path).commits() == []
+
+
+def test_paths_filter_limits_commits_and_files(git_repo):
+    git_repo.commit("touch app", {"app/a.py": "1\n"})
+    git_repo.commit("touch lib", {"lib/b.py": "2\n"})
+    git_repo.commit("touch both", {"app/c.py": "3\n", "lib/d.py": "4\n"})
+
+    commits = GitLogReader(git_repo.path).commits(paths=["app"])
+
+    # Only commits that touched app/, and only the app/ files are listed.
+    assert [c.subject for c in commits] == ["touch both", "touch app"]
+    assert all(f.startswith("app/") for c in commits for f in c.files)

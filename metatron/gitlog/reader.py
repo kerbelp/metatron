@@ -38,10 +38,13 @@ class GitLogReader:
         *,
         max_commits: int = 500,
         since: str | None = None,
+        paths: list[str] | None = None,
     ) -> list[Commit]:
         """Return commits newest-first, capped at ``max_commits``.
 
         ``since`` is passed through to ``git log --since`` (e.g. ``"2024-01-01"``).
+        ``paths`` restricts to commits touching those pathspecs, and limits each
+        commit's listed files to the matching paths.
         """
         args = [
             "git",
@@ -54,6 +57,8 @@ class GitLogReader:
         ]
         if since is not None:
             args.append(f"--since={since}")
+        if paths:
+            args.extend(["--", *paths])
 
         result = subprocess.run(args, capture_output=True, text=True)
         if result.returncode != 0:

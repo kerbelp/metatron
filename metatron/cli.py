@@ -66,6 +66,7 @@ def _cmd_ingest(args, store, provider, out) -> int:
         provider,
         max_commits=args.max_commits,
         since=args.since,
+        path_prefix=args.path,
     )
     print(
         f"Ingested {args.repo_path}: parsed {result.files_parsed} files, "
@@ -123,6 +124,11 @@ def _build_parser() -> argparse.ArgumentParser:
     ingest_p.add_argument("repo_path", help="path to a local git repo")
     ingest_p.add_argument("--max-commits", type=int, default=500)
     ingest_p.add_argument("--since", default=None, help="e.g. 2024-01-01")
+    ingest_p.add_argument(
+        "--path",
+        default=None,
+        help="limit ingest to a subtree, e.g. src/components",
+    )
 
     sub.add_parser("serve", help="serve priors to agents over MCP (stdio)")
 

@@ -41,11 +41,15 @@ def ingest(
     *,
     max_commits: int = 500,
     since: str | None = None,
+    path_prefix: str | None = None,
 ) -> IngestResult:
     repo_path = Path(repo_path)
 
-    parsed_files = _parse_tracked_files(repo_path)
-    commits = GitLogReader(repo_path).commits(max_commits=max_commits, since=since)
+    parsed_files = _parse_tracked_files(repo_path, path_prefix)
+    paths = [path_prefix] if path_prefix else None
+    commits = GitLogReader(repo_path).commits(
+        max_commits=max_commits, since=since, paths=paths
+    )
     signals = collect_signals(parsed_files, commits)
 
     extractor = PriorExtractor(provider)
@@ -63,9 +67,11 @@ def ingest(
     )
 
 
-def _parse_tracked_files(repo_path: Path) -> list[ParsedFile]:
+def _parse_tracked_files(
+    repo_path: Path, path_prefix: str | None = None
+) -> list[ParsedFile]:
     parsed: list[ParsedFile] = []
-    for rel in _tracked_files(repo_path):
+    for rel in _tracked_files(repo_path, path_prefix):
         parser = get_parser_for_path(rel)
         if parser is None:
             continue
@@ -77,11 +83,9 @@ def _parse_tracked_files(repo_path: Path) -> list[ParsedFile]:
     return parsed
 
 
-def _tracked_files(repo_path: Path) -> list[str]:
-    result = subprocess.run(
-        ["git", "-C", str(repo_path), "ls-files"],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+def _tracked_files(repo_path: Path, path_prefix: str | None = None) -> list[str]:
+    args = ["git", "-C", str(repo_path), "ls-files"]
+    if path_prefix:
+        args.extend(["--", path_prefix])
+    result = subprocess.run(args, capture_output=True, text=True, check=True)
     return [line for line in result.stdout.splitlines() if line]

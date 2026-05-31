@@ -100,6 +100,24 @@ def test_cli_does_not_override_already_exported_env(tmp_path, monkeypatch):
     assert os.environ["ANTHROPIC_API_KEY"] == "from-shell"
 
 
+def test_ingest_path_option_scopes_to_subtree(git_repo):
+    git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
+    store = SQLitePriorStore(":memory:")
+
+    code = main(
+        ["ingest", str(git_repo.path), "--path", "app"],
+        store=store,
+        provider=FakeProvider(),
+        out=io.StringIO(),
+    )
+
+    assert code == 0
+    assert store.list()
+    assert all(
+        ref.ref.startswith("app") for p in store.list() for ref in p.source_refs
+    )
+
+
 def test_ingest_stores_candidates_and_reports_summary(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n"})
     store = SQLitePriorStore(":memory:")
