@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from metatron.events import EventKind
 from metatron.models import Status
+from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui.observability import usage_summary
 
@@ -49,6 +50,17 @@ def list_priors(
 
 def repos(store: PriorStore) -> dict:
     return {"repos": store.list_repos()}
+
+
+def ingest_cost(run_store, *, repo: str | None = None) -> dict:
+    runs = []
+    for run in run_store.list_for_repo(repo):
+        data = run.model_dump(mode="json")
+        data["estimated_cost"] = estimate_cost(
+            run.model, run.input_tokens, run.output_tokens
+        )
+        runs.append(data)
+    return {"runs": runs}
 
 
 def approve(store: PriorStore, prior_id: str) -> dict:

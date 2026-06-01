@@ -117,6 +117,8 @@
 
     <section id="view-obs" hidden>
       <div class="stats" id="usage-stats"></div>
+      <div class="section-title">Onboarding ingest cost (one-time)</div>
+      <div id="ingest-cost"></div>
       <div class="card">
         <div>Coverage — queries that returned at least one canonical prior</div>
         <div class="bar"><span id="cov-bar"></span></div>
@@ -219,6 +221,24 @@
 
       renderEvents("recent-queries", u.recent_queries || [], "query", "q");
       renderEvents("recent-submissions", u.recent_submissions || [], "submit", "s");
+      loadIngestCost();
+    }
+
+    async function loadIngestCost() {
+      const { runs } = await (await fetch("/api/ingest-cost?" + withRepo())).json();
+      const el = document.getElementById("ingest-cost");
+      if (!runs.length) { el.innerHTML = `<div class="empty">No ingest recorded yet.</div>`; return; }
+      el.innerHTML = `<table><thead><tr><th>When</th><th>Model</th><th class="num">Scopes</th>
+        <th class="num">Priors</th><th class="num">Tokens (in/out)</th><th class="num">Est. cost</th></tr></thead>
+        <tbody>${runs.map(r => `<tr>
+          <td>${fmtTime(r.timestamp)}</td>
+          <td class="scope">${esc(r.model || "—")}</td>
+          <td class="num">${r.scopes}</td>
+          <td class="num">${r.priors_created}</td>
+          <td class="num">${r.input_tokens.toLocaleString()} / ${r.output_tokens.toLocaleString()}</td>
+          <td class="num">${r.estimated_cost == null ? "—" : "$" + r.estimated_cost.toFixed(2)}</td>
+        </tr>`).join("")}</tbody></table>
+        <div class="muted" style="margin-top:6px">Cost is estimated (tokens × approximate published rates); tokens are measured.</div>`;
     }
 
     function renderEvents(containerId, events, kind, prefix) {

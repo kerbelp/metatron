@@ -37,8 +37,9 @@ def make_server(
     host: str,
     port: int,
     event_store: EventStore | None = None,
+    run_store=None,
 ) -> HTTPServer:
-    return HTTPServer((host, port), _build_handler(store, event_store))
+    return HTTPServer((host, port), _build_handler(store, event_store, run_store))
 
 
 def serve(
@@ -46,9 +47,10 @@ def serve(
     event_store: EventStore | None = None,
     host: str = "127.0.0.1",
     start_port: int = 1337,
+    run_store=None,
 ) -> None:
     port = find_free_port(start=start_port, host=host)
-    httpd = make_server(store, host, port, event_store)
+    httpd = make_server(store, host, port, event_store, run_store)
     print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
     try:
         httpd.serve_forever()
@@ -59,7 +61,7 @@ def serve(
 
 
 def _build_handler(
-    store: PriorStore, event_store: EventStore | None = None
+    store: PriorStore, event_store: EventStore | None = None, run_store=None
 ) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
@@ -74,6 +76,12 @@ def _build_handler(
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/repos":
                 self._send_json(api.repos(store))
+            elif path == "/api/ingest-cost":
+                repo = _first(parse_qs(parts.query), "repo")
+                if run_store is not None:
+                    self._send_json(api.ingest_cost(run_store, repo=repo))
+                else:
+                    self._send_json({"runs": []})
             elif path == "/api/stats":
                 self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":

@@ -14,6 +14,10 @@ DEFAULT_MODEL = "claude-opus-4-8"
 
 
 class LLMProvider(ABC):
+    # Cumulative token usage across calls (providers that know it update these).
+    input_tokens: int = 0
+    output_tokens: int = 0
+
     @abstractmethod
     def complete(self, prompt: str) -> str:
         """Send ``prompt`` to the model and return its text response."""
@@ -28,6 +32,8 @@ class AnthropicProvider(LLMProvider):
     ) -> None:
         self.model = model
         self.max_tokens = max_tokens
+        self.input_tokens = 0
+        self.output_tokens = 0
         self._api_key = api_key
         self._client = None  # created lazily so construction needs no key/network
 
@@ -37,6 +43,8 @@ class AnthropicProvider(LLMProvider):
             max_tokens=self.max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
+        self.input_tokens += message.usage.input_tokens
+        self.output_tokens += message.usage.output_tokens
         return "".join(
             block.text for block in message.content if block.type == "text"
         )

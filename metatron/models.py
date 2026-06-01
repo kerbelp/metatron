@@ -49,6 +49,21 @@ class SourceRef(BaseModel):
     detail: str = ""
 
 
+class IngestRun(BaseModel):
+    """Telemetry for one ingest run — powers the one-time cost view."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    repo: str
+    model: str
+    timestamp: datetime = Field(default_factory=_now)
+    files_parsed: int = 0
+    commits_read: int = 0
+    scopes: int = 0
+    priors_created: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class Prior(BaseModel):
     """A single structured prior."""
 

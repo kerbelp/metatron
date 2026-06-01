@@ -7,7 +7,7 @@ import pytest
 from metatron.events import Event, EventKind
 from metatron.models import Origin, Prior, Status
 from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
-from metatron.webui.api import approve, list_priors, reject, stats, usage
+from metatron.webui.api import approve, ingest_cost, list_priors, reject, stats, usage
 
 
 @pytest.fixture
@@ -115,6 +115,25 @@ def test_usage_splits_kinds_and_resolves_returned_priors():
     assert q["priors"][0]["pattern"] == "use zones"
     assert q["priors"][0]["scope"] == "app"
     json.dumps(result)  # must be serializable
+
+
+def test_ingest_cost_returns_runs_with_estimated_dollars():
+    from metatron.models import IngestRun
+    from metatron.storage.sqlite import SQLiteIngestRunStore
+
+    runs = SQLiteIngestRunStore(":memory:")
+    runs.record(
+        IngestRun(
+            repo="r", model="claude-sonnet-4-6",
+            input_tokens=1_000_000, output_tokens=1_000_000,
+            scopes=5, priors_created=20,
+        )
+    )
+    result = ingest_cost(runs, repo="r")
+    assert len(result["runs"]) == 1
+    run = result["runs"][0]
+    assert run["model"] == "claude-sonnet-4-6"
+    assert run["estimated_cost"] == 18.0  # 1M*$3 + 1M*$15
 
 
 def test_stats_counts_by_status(store):

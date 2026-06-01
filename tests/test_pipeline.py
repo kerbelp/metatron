@@ -11,12 +11,18 @@ _RESPONSE = (
 
 
 class FakeProvider(LLMProvider):
+    model = "fake-model"
+
     def __init__(self, response: str) -> None:
         self.response = response
         self.calls = 0
+        self.input_tokens = 0
+        self.output_tokens = 0
 
     def complete(self, prompt: str) -> str:
         self.calls += 1
+        self.input_tokens += 100
+        self.output_tokens += 40
         return self.response
 
 
@@ -83,6 +89,25 @@ def test_ingest_path_prefix_scopes_parsing_and_history(git_repo):
     # Only the app/ file is parsed; lib/ is outside the scope.
     assert result.files_parsed == 1
     assert all(ref.ref.startswith("app") for p in store.list() for ref in p.source_refs)
+
+
+def test_ingest_records_a_run_with_token_usage(git_repo):
+    from metatron.storage.sqlite import SQLiteIngestRunStore
+
+    git_repo.commit("init", {"app/a.py": "import os\n"})
+    store = SQLitePriorStore(":memory:")
+    runs = SQLiteIngestRunStore(":memory:")
+    provider = FakeProvider(_RESPONSE)
+
+    result = ingest(git_repo.path, store, provider, run_store=runs)
+
+    recorded = runs.list_for_repo(result.repo)
+    assert len(recorded) == 1
+    run = recorded[0]
+    assert run.model == "fake-model"
+    assert run.input_tokens == provider.input_tokens > 0
+    assert run.output_tokens == provider.output_tokens > 0
+    assert run.priors_created == result.priors_created
 
 
 def test_ingest_calls_provider_once_per_scope(git_repo):

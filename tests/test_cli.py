@@ -6,7 +6,7 @@ import os
 from metatron.cli import main
 from metatron.extraction.provider import LLMProvider
 from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.sqlite import SQLiteIngestRunStore, SQLitePriorStore
 
 
 class FakeProvider(LLMProvider):
@@ -114,6 +114,7 @@ def test_ingest_path_option_scopes_to_subtree(git_repo):
         ["ingest", str(git_repo.path), "--path", "app"],
         store=store,
         provider=FakeProvider(),
+        run_store=SQLiteIngestRunStore(":memory:"),
         out=io.StringIO(),
     )
 
@@ -133,6 +134,7 @@ def test_ingest_stores_candidates_and_reports_summary(git_repo):
         ["ingest", str(git_repo.path)],
         store=store,
         provider=FakeProvider(),
+        run_store=SQLiteIngestRunStore(":memory:"),
         out=out,
     )
 

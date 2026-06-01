@@ -22,6 +22,7 @@ from metatron.extraction.extractor import PriorExtractor
 from metatron.extraction.provider import LLMProvider
 from metatron.extraction.signals import collect_signals
 from metatron.gitlog.reader import GitLogReader
+from metatron.models import IngestRun
 from metatron.parsing.base import ParsedFile
 from metatron.parsing.registry import get_parser_for_path
 from metatron.repo_identity import repo_id
@@ -46,6 +47,7 @@ def ingest(
     max_commits: int = 500,
     since: str | None = None,
     path_prefix: str | None = None,
+    run_store=None,
 ) -> IngestResult:
     repo_path = Path(repo_path)
     repo = repo_id(repo_path, override=repo)
@@ -65,7 +67,7 @@ def ingest(
             store.add(prior)
             priors_created += 1
 
-    return IngestResult(
+    result = IngestResult(
         repo=repo,
         model=model,
         files_parsed=len(parsed_files),
@@ -73,6 +75,20 @@ def ingest(
         scopes=len(signals.scopes),
         priors_created=priors_created,
     )
+    if run_store is not None:
+        run_store.record(
+            IngestRun(
+                repo=repo,
+                model=model,
+                files_parsed=result.files_parsed,
+                commits_read=result.commits_read,
+                scopes=result.scopes,
+                priors_created=result.priors_created,
+                input_tokens=getattr(provider, "input_tokens", 0),
+                output_tokens=getattr(provider, "output_tokens", 0),
+            )
+        )
+    return result
 
 
 def _parse_tracked_files(

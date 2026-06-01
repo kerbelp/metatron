@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from metatron.events import Event
-from metatron.models import Prior, Status
+from metatron.models import IngestRun, Prior, Status
 from metatron.storage.base import EventStore, PriorStore
 
 _SCHEMA = """
@@ -201,6 +201,56 @@ def _event_from_row(row: sqlite3.Row) -> Event:
     data = dict(row)
     data["prior_ids"] = json.loads(data["prior_ids"])
     return Event.model_validate(data)
+
+
+_RUNS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS ingest_runs (
+    id             TEXT PRIMARY KEY,
+    repo           TEXT NOT NULL,
+    model          TEXT NOT NULL,
+    timestamp      TEXT NOT NULL,
+    files_parsed   INTEGER NOT NULL,
+    commits_read   INTEGER NOT NULL,
+    scopes         INTEGER NOT NULL,
+    priors_created INTEGER NOT NULL,
+    input_tokens   INTEGER NOT NULL,
+    output_tokens  INTEGER NOT NULL
+)
+"""
+
+_RUN_COLUMNS = (
+    "id", "repo", "model", "timestamp", "files_parsed", "commits_read",
+    "scopes", "priors_created", "input_tokens", "output_tokens",
+)
+
+
+class SQLiteIngestRunStore:
+    def __init__(self, path: str = "metatron.db") -> None:
+        self._conn = sqlite3.connect(path, check_same_thread=False)
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute(_RUNS_SCHEMA)
+        self._conn.commit()
+
+    def record(self, run: IngestRun) -> IngestRun:
+        data = run.model_dump(mode="json")
+        placeholders = ", ".join("?" for _ in _RUN_COLUMNS)
+        self._conn.execute(
+            f"INSERT INTO ingest_runs ({', '.join(_RUN_COLUMNS)}) VALUES ({placeholders})",
+            [data[col] for col in _RUN_COLUMNS],
+        )
+        self._conn.commit()
+        return run
+
+    def list_for_repo(self, repo: str | None) -> list[IngestRun]:
+        where = " WHERE repo = ?" if repo is not None else ""
+        params = [repo] if repo is not None else []
+        cur = self._conn.execute(
+            f"SELECT * FROM ingest_runs{where} ORDER BY timestamp DESC, id", params
+        )
+        return [IngestRun.model_validate(dict(row)) for row in cur.fetchall()]
+
+    def close(self) -> None:
+        self._conn.close()
 
 
 def _filter(
