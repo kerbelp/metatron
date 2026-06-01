@@ -14,6 +14,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from metatron.version import current_version
+
 
 class Confidence(str, enum.Enum):
     LOW = "low"
@@ -30,6 +32,7 @@ class Status(str, enum.Enum):
 class Origin(str, enum.Enum):
     BOOTSTRAP = "bootstrap"
     AGENT_SUBMITTED = "agent_submitted"
+    AGENT_FEEDBACK = "agent_feedback"  # born from a "what was missing" feedback report
 
 
 class SourceRefKind(str, enum.Enum):
@@ -84,6 +87,7 @@ class Prior(BaseModel):
     origin: Origin
     confidence: Confidence = Confidence.MEDIUM
     model: str = ""  # the model that extracted it ("" for agent-submitted priors)
+    created_version: str = Field(default_factory=current_version)  # build that created it
     source_refs: list[SourceRef] = Field(default_factory=list)
     status: Status = Status.CANDIDATE
     triage: TriageVerdict = TriageVerdict.NONE  # advisory judge recommendation

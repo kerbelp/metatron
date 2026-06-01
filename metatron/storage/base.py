@@ -76,6 +76,10 @@ class EventStore(ABC):
         """Persist a usage event and return it."""
 
     @abstractmethod
+    def get(self, event_id: str) -> Event | None:
+        """Return one event by id (used to resolve feedback indices), or None."""
+
+    @abstractmethod
     def list_events(
         self,
         *,

@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS priors (
     origin      TEXT NOT NULL,
     confidence  TEXT NOT NULL,
     model       TEXT NOT NULL DEFAULT '',
+    created_version TEXT NOT NULL DEFAULT '',
     source_refs TEXT NOT NULL,
     status      TEXT NOT NULL,
     triage        TEXT NOT NULL DEFAULT 'none',
@@ -43,6 +44,7 @@ _COLUMNS = (
     "origin",
     "confidence",
     "model",
+    "created_version",
     "source_refs",
     "status",
     "triage",
@@ -69,6 +71,7 @@ class SQLitePriorStore(PriorStore):
         self._conn.execute(_SCHEMA)
         _ensure_column(self._conn, "priors", "repo", "repo TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "priors", "model", "model TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "priors", "created_version", "created_version TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "priors", "triage", "triage TEXT NOT NULL DEFAULT 'none'")
         _ensure_column(self._conn, "priors", "triage_reason", "triage_reason TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
@@ -162,13 +165,22 @@ CREATE TABLE IF NOT EXISTS events (
     area         TEXT NOT NULL,
     task         TEXT NOT NULL,
     result_count INTEGER NOT NULL,
-    prior_ids    TEXT NOT NULL
+    prior_ids    TEXT NOT NULL,
+    version            TEXT NOT NULL DEFAULT '',
+    query_ref          TEXT NOT NULL DEFAULT '',
+    helpful_prior_ids   TEXT NOT NULL DEFAULT '[]',
+    unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]',
+    missing            TEXT NOT NULL DEFAULT ''
 )
 """
 
 _EVENT_COLUMNS = (
     "id", "timestamp", "repo", "kind", "area", "task", "result_count", "prior_ids",
+    "version", "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "missing",
 )
+
+# Event columns persisted as JSON-encoded lists.
+_EVENT_JSON_COLUMNS = ("prior_ids", "helpful_prior_ids", "unhelpful_prior_ids")
 
 
 class SQLiteEventStore(EventStore):
@@ -177,11 +189,17 @@ class SQLiteEventStore(EventStore):
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_EVENTS_SCHEMA)
         _ensure_column(self._conn, "events", "repo", "repo TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "version", "version TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "query_ref", "query_ref TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "helpful_prior_ids", "helpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(self._conn, "events", "unhelpful_prior_ids", "unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(self._conn, "events", "missing", "missing TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def record(self, event: Event) -> Event:
         data = event.model_dump(mode="json")
-        data["prior_ids"] = json.dumps(data["prior_ids"])
+        for col in _EVENT_JSON_COLUMNS:
+            data[col] = json.dumps(data[col])
         placeholders = ", ".join("?" for _ in _EVENT_COLUMNS)
         self._conn.execute(
             f"INSERT INTO events ({', '.join(_EVENT_COLUMNS)}) VALUES ({placeholders})",
@@ -189,6 +207,11 @@ class SQLiteEventStore(EventStore):
         )
         self._conn.commit()
         return event
+
+    def get(self, event_id: str) -> Event | None:
+        cur = self._conn.execute("SELECT * FROM events WHERE id = ?", (event_id,))
+        row = cur.fetchone()
+        return _event_from_row(row) if row is not None else None
 
     def list_events(
         self,
@@ -219,7 +242,9 @@ class SQLiteEventStore(EventStore):
 
 def _event_from_row(row: sqlite3.Row) -> Event:
     data = dict(row)
-    data["prior_ids"] = json.loads(data["prior_ids"])
+    for col in _EVENT_JSON_COLUMNS:
+        if col in data and isinstance(data[col], str):
+            data[col] = json.loads(data[col])
     return Event.model_validate(data)
 
 

@@ -13,10 +13,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from metatron.version import current_version
+
 
 class EventKind(str, enum.Enum):
-    QUERY = "query"    # get_priors_for_context was called
-    SUBMIT = "submit"  # submit_candidate_learning was called
+    QUERY = "query"        # get_priors_for_context was called
+    SUBMIT = "submit"      # submit_candidate_learning was called
+    FEEDBACK = "feedback"  # submit_feedback was called (ratings + what-was-missing)
 
 
 def _now() -> datetime:
@@ -32,3 +35,9 @@ class Event(BaseModel):
     task: str = ""              # the task_description, for queries
     result_count: int = 0       # priors returned (queries) — 0 means a "miss"
     prior_ids: list[str] = Field(default_factory=list)
+    version: str = Field(default_factory=current_version)  # build that produced the event
+    # Feedback events only:
+    query_ref: str = ""                  # the QUERY event this feedback responds to
+    helpful_prior_ids: list[str] = Field(default_factory=list)
+    unhelpful_prior_ids: list[str] = Field(default_factory=list)
+    missing: str = ""                    # "what was missing" — also seeds a candidate
