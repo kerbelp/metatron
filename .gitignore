@@ -224,3 +224,6 @@ __marimo__/
 *.db
 *.sqlite
 *.sqlite3
+
+# Local curation artifacts (e.g. bulk-approve reversal lists) — operational, not source
+bulk_approve_*.json
