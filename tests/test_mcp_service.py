@@ -182,6 +182,26 @@ def test_response_is_capped_to_a_focused_set():
     assert len(results) <= 8
 
 
+def test_closer_ancestor_scope_outranks_farther_ancestor():
+    # Regression for a real db.ts query: the on-point prior lives in src/db (a
+    # close ancestor of src/db/db.ts) but has ~no task keywords, while a generic
+    # src-scoped prior matched a coincidental keyword ("app"). The closer ancestor
+    # must win — both being "ancestors" should not flatten to the same weight.
+    store = SQLitePriorStore(":memory:")
+    far = _canonical(pattern="serve the app via an express node server", scope="src", rationale="infra")
+    near = _canonical(
+        pattern="wrap db ops with transient retry for turso resets",
+        scope="src/db",
+        rationale="reliability",
+    )
+    store.add(far)  # added first: a flat-weight tie would leave this on top
+    store.add(near)
+    results = get_priors_for_context(
+        store, REPO, "src/db/db.ts", "add app credit ledger methods, atomic consume"
+    )
+    assert results[0].pattern.startswith("wrap db ops")
+
+
 def test_submit_candidate_learning_stores_uncurated_agent_prior():
     store = SQLitePriorStore(":memory:")
     prior = submit_candidate_learning(

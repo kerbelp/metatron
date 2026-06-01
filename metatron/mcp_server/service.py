@@ -185,6 +185,10 @@ def _pair_scope(prior_scope: str, area: str) -> float:
         return 3.0 + shared
     if shared == len(target):  # prior sits inside the queried area — specific
         return 2.0 + shared
-    if shared == len(scope):  # prior is a broad ancestor of the area — weak
-        return 1.0
+    if shared == len(scope):  # prior is an ancestor of the area
+        # Weight by how *close* the ancestor is: a prior scoped src/db is a far
+        # better match for src/db/db.ts than one scoped src. Flattening every
+        # ancestor to the same weight let generic top-level priors crowd out the
+        # prior whose scope is the file's own directory.
+        return float(shared)
     return 0.0  # siblings: share a parent dir but diverge — not relevant
