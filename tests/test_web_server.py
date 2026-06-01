@@ -89,6 +89,20 @@ def test_footer_markup_present_in_html(served):
     assert b'id="version"' in body
 
 
+def test_api_origins_returns_breakdown(served):
+    _, _, base = served
+    _, body = _get(base + "/api/origins")
+    data = json.loads(body)
+    assert "origins" in data and isinstance(data["origins"], list)
+
+
+def test_api_feedback_returns_tallies(served):
+    _, _, base = served
+    _, body = _get(base + "/api/feedback")
+    data = json.loads(body)
+    assert "priors" in data and "by_origin" in data
+
+
 def test_post_approve_promotes_prior(served):
     store, prior, base = served
     _, body = _post(base + f"/api/priors/{prior.id}/approve")

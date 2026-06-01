@@ -99,10 +99,11 @@ class SQLitePriorStore(PriorStore):
         scope: str | None = None,
         model: str | None = None,
         triage: "TriageVerdict | None" = None,
+        origin: "Origin | None" = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
-        where, params = _filter(repo, status, scope, model, triage)
+        where, params = _filter(repo, status, scope, model, triage, origin)
         sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
@@ -118,8 +119,9 @@ class SQLitePriorStore(PriorStore):
         scope: str | None = None,
         model: str | None = None,
         triage: "TriageVerdict | None" = None,
+        origin: "Origin | None" = None,
     ) -> int:
-        where, params = _filter(repo, status, scope, model, triage)
+        where, params = _filter(repo, status, scope, model, triage, origin)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
         return cur.fetchone()[0]
 
@@ -304,6 +306,7 @@ def _filter(
     scope: str | None,
     model: str | None = None,
     triage=None,
+    origin=None,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
@@ -322,6 +325,9 @@ def _filter(
     if triage is not None:
         clauses.append("triage = ?")
         params.append(triage.value)
+    if origin is not None:
+        clauses.append("origin = ?")
+        params.append(origin.value)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return where, params
 

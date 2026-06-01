@@ -6,8 +6,10 @@ in :mod:`metatron.webui.server` is a thin adapter over these.
 
 from __future__ import annotations
 
+from collections import Counter
+
 from metatron.events import EventKind
-from metatron.models import Status, TriageVerdict
+from metatron.models import Origin, Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, PriorStore
 from metatron.version import version_string
@@ -125,6 +127,82 @@ def usage(
         enrich(e) for e in events if e.kind is EventKind.SUBMIT
     ][:recent]
     return summary
+
+
+def origin_breakdown(store: PriorStore, *, repo: str | None = None) -> dict:
+    """Curation outcome per prior origin (ingest vs feedback vs agent-submitted).
+
+    ``accept_rate`` = canonical / (canonical + rejected) — the share of *decided*
+    priors that were accepted — or None when nothing from that origin is curated
+    yet. This is the "are feedback-born priors better than ingest-born?" view.
+    """
+    repo_filter = repo or None
+    origins = []
+    for o in Origin:
+        canonical = store.count(repo=repo_filter, status=Status.CANONICAL, origin=o)
+        rejected = store.count(repo=repo_filter, status=Status.REJECTED, origin=o)
+        candidate = store.count(repo=repo_filter, status=Status.CANDIDATE, origin=o)
+        total = candidate + canonical + rejected
+        if total == 0:
+            continue
+        decided = canonical + rejected
+        origins.append({
+            "origin": o.value,
+            "candidate": candidate,
+            "canonical": canonical,
+            "rejected": rejected,
+            "total": total,
+            "accept_rate": round(canonical / decided, 3) if decided else None,
+        })
+    return {"origins": origins}
+
+
+def feedback_analytics(
+    event_store: EventStore, store: PriorStore, *, repo: str | None = None
+) -> dict:
+    """Advisory helpful/noise tallies from feedback events.
+
+    Per-prior counts (noisiest first, to guide review) and a per-origin rollup with
+    a helpful-rate. Read-only: this never changes a prior's status or confidence.
+    """
+    repo_filter = repo or None
+    feedback = [
+        e for e in event_store.list_events(repo=repo_filter)
+        if e.kind is EventKind.FEEDBACK
+    ]
+    helpful: Counter = Counter()
+    noise: Counter = Counter()
+    for e in feedback:
+        helpful.update(e.helpful_prior_ids)
+        noise.update(e.unhelpful_prior_ids)
+
+    priors, by_origin = [], {}
+    for pid in set(helpful) | set(noise):
+        prior = store.get(pid)
+        origin = prior.origin.value if prior is not None else "unknown"
+        h, n = helpful[pid], noise[pid]
+        priors.append({
+            "id": pid,
+            "pattern": prior.pattern if prior is not None else "(deleted)",
+            "origin": origin,
+            "helpful": h,
+            "noise": n,
+        })
+        agg = by_origin.setdefault(origin, [0, 0])
+        agg[0] += h
+        agg[1] += n
+
+    priors.sort(key=lambda p: (p["helpful"] - p["noise"], p["id"]))  # noisiest first
+    by_origin_out = [
+        {
+            "origin": origin,
+            "helpful": h,
+            "noise": n,
+            "helpful_rate": round(h / (h + n), 3) if (h + n) else None,
+        }
+        for origin, (h, n) in by_origin.items()
+    ]
+    return {"priors": priors, "by_origin": by_origin_out}
 
 
 def _set_status(store: PriorStore, prior_id: str, status: Status) -> dict:

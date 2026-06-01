@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from metatron.events import Event
-from metatron.models import Prior, Status, TriageVerdict
+from metatron.models import Origin, Prior, Status, TriageVerdict
 
 
 class PriorStore(ABC):
@@ -31,13 +31,14 @@ class PriorStore(ABC):
         scope: str | None = None,
         model: str | None = None,
         triage: TriageVerdict | None = None,
+        origin: Origin | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
         """Return priors newest-first, optionally filtered and paginated.
 
-        Filters by exact ``repo``, ``status``, ``scope``, ``model`` and
-        ``triage``; ``limit``/``offset`` paginate.
+        Filters by exact ``repo``, ``status``, ``scope``, ``model``, ``triage`` and
+        ``origin``; ``limit``/``offset`` paginate.
         """
 
     @abstractmethod
@@ -49,6 +50,7 @@ class PriorStore(ABC):
         scope: str | None = None,
         model: str | None = None,
         triage: TriageVerdict | None = None,
+        origin: Origin | None = None,
     ) -> int:
         """Count priors matching the (optional) filters."""
 
