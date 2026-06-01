@@ -12,6 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from metatron.events import Event, EventKind
 from metatron.mcp_server import service
 from metatron.storage.base import EventStore, PriorStore
+from metatron.version import current_version
 
 
 def build_server(
@@ -35,17 +36,64 @@ def build_server(
         priors = service.get_priors_for_context(
             store, repo, file_path_or_area, task_description
         )
-        _record(
-            Event(
-                repo=repo,
-                kind=EventKind.QUERY,
-                area=file_path_or_area,
-                task=task_description,
-                result_count=len(priors),
-                prior_ids=[p.id for p in priors],
-            )
+        # Record the query first so its id can be surfaced as the feedback token;
+        # the token is only meaningful (resolvable) when events are persisted.
+        event = Event(
+            repo=repo,
+            kind=EventKind.QUERY,
+            area=file_path_or_area,
+            task=task_description,
+            result_count=len(priors),
+            prior_ids=[p.id for p in priors],
         )
-        return service.format_priors(priors)
+        _record(event)
+        return service.format_priors(
+            priors,
+            query_id=event.id if event_store is not None else None,
+            version=current_version(),
+        )
+
+    @server.tool()
+    def submit_feedback(
+        query_id: str = "",
+        helpful: list[int] | None = None,
+        unhelpful: list[int] | None = None,
+        what_was_missing: str = "",
+        missing_scope: str = "",
+    ) -> str:
+        """Report how helpful the served priors were, and what was missing.
+
+        Call this after a task where you used Metatron's priors. Reference the
+        `query_id` from the get_priors_for_context output; mark which priors helped
+        or were noise by their [index]; and — most valuable — state any convention
+        Metatron should have known but didn't, in `what_was_missing`.
+
+        A gap report becomes a CANDIDATE prior for human curation; nothing you send
+        here is auto-applied to the canonical set.
+
+        Args:
+            query_id: the token from the priors output you are responding to.
+            helpful: 1-based indices of served priors that helped.
+            unhelpful: 1-based indices that were noise.
+            what_was_missing: a convention Metatron should have had.
+            missing_scope: optional scope (path) for that convention.
+        """
+        if event_store is None:
+            return "Feedback unavailable: this server has no event store."
+        _event, candidate = service.submit_feedback(
+            store,
+            event_store,
+            repo=repo,
+            query_id=query_id,
+            helpful=helpful or [],
+            unhelpful=unhelpful or [],
+            what_was_missing=what_was_missing,
+            missing_scope=missing_scope,
+        )
+        msg = f"Thanks — feedback recorded (rev {current_version()})."
+        if candidate is not None:
+            msg += f" Logged a candidate prior for curation: {candidate.id}."
+        return msg
 
     @server.tool()
     def submit_candidate_learning(

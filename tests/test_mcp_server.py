@@ -15,10 +15,41 @@ def _result(call):
     return call[1]["result"]
 
 
-def test_server_exposes_exactly_the_two_required_tools():
+def test_server_exposes_the_expected_tools():
     server = build_server(SQLitePriorStore(":memory:"), REPO)
     names = {t.name for t in asyncio.run(server.list_tools())}
-    assert names == {"get_priors_for_context", "submit_candidate_learning"}
+    assert names == {
+        "get_priors_for_context",
+        "submit_candidate_learning",
+        "submit_feedback",
+    }
+
+
+def test_get_priors_output_carries_query_token_and_revision():
+    store = SQLitePriorStore(":memory:")
+    store.add(Prior(repo=REPO, pattern="a canonical rule", scope="app",
+                    rationale="r", origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
+    server = build_server(store, REPO, SQLiteEventStore(":memory:"))
+    out = _result(asyncio.run(server.call_tool(
+        "get_priors_for_context",
+        {"file_path_or_area": "app", "task_description": "anything"},
+    )))
+    assert "metatron:query" in out and "rev " in out
+
+
+def test_submit_feedback_tool_records_gap_as_candidate():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    server = build_server(store, REPO, events)
+    asyncio.run(server.call_tool("submit_feedback", {
+        "what_was_missing": "credit path must mirror the order_created webhook",
+        "missing_scope": "src/routes/api/order_created",
+    }))
+    candidates = store.list(repo=REPO)
+    assert len(candidates) == 1
+    assert candidates[0].origin is Origin.AGENT_FEEDBACK
+    assert candidates[0].status is Status.CANDIDATE
+    assert any(e.kind is EventKind.FEEDBACK for e in events.list_events())
 
 
 def test_get_priors_tool_returns_formatted_canonical_priors():
