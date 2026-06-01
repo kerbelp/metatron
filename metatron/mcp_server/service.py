@@ -15,6 +15,7 @@ from __future__ import annotations
 import math
 import re
 
+from metatron.events import Event, EventKind
 from metatron.models import Confidence, Origin, Prior, SourceRef, Status
 from metatron.storage.base import PriorStore
 
@@ -86,19 +87,105 @@ def submit_candidate_learning(
     return store.add(prior)
 
 
-def format_priors(priors: list[Prior]) -> str:
-    """Render priors as compact structured context for an agent."""
+def format_priors(
+    priors: list[Prior],
+    *,
+    query_id: str | None = None,
+    version: str | None = None,
+) -> str:
+    """Render priors as compact structured context for an agent.
+
+    When ``query_id``/``version`` are given, the output carries a header naming the
+    query token (to reference in ``submit_feedback``) and the serving build, and the
+    priors are numbered ``[1]``.. so feedback can rate them by index — never by the
+    UUIDs that models mangle.
+    """
     if not priors:
-        return "No matching priors."
-    blocks = []
-    for p in priors:
-        block = (
-            f"- [{p.confidence.value}] {p.pattern}\n"
-            f"  scope: {p.scope or '(global)'}\n"
-            f"  why: {p.rationale}"
+        body = "No matching priors."
+    else:
+        blocks = []
+        for i, p in enumerate(priors, start=1):
+            blocks.append(
+                f"[{i}] [{p.confidence.value}] {p.pattern}\n"
+                f"  scope: {p.scope or '(global)'}\n"
+                f"  why: {p.rationale}"
+            )
+        body = "\n".join(blocks)
+
+    if query_id is None and version is None:
+        return body
+    header = "metatron:query " + (query_id or "?")
+    if version:
+        header += f" · rev {version}"
+    header += " (reference the query id in submit_feedback)"
+    return f"{header}\n{body}"
+
+
+def submit_feedback(
+    store: PriorStore,
+    event_store,
+    *,
+    repo: str,
+    query_id: str = "",
+    helpful: list[int] | tuple[int, ...] = (),
+    unhelpful: list[int] | tuple[int, ...] = (),
+    what_was_missing: str = "",
+    missing_scope: str = "",
+) -> tuple[Event, Prior | None]:
+    """Record agent feedback on a served query and route any gap into the queue.
+
+    Ratings are given as 1-based indices into the priors the named query served;
+    they are mapped to real prior ids locally (bogus indices ignored), so the agent
+    never echoes a UUID. ``what_was_missing`` becomes a **candidate** prior
+    (``agent_feedback`` origin) for human curation — it never enters the canonical
+    set, and ratings never mutate any prior. Returns the recorded FEEDBACK event and
+    the created candidate (or None).
+    """
+    served = _served_prior_ids(event_store, query_id)
+    helpful_ids = _resolve_indices(helpful, served)
+    unhelpful_ids = _resolve_indices(unhelpful, served)
+
+    candidate: Prior | None = None
+    if what_was_missing.strip():
+        candidate = store.add(
+            Prior(
+                repo=repo,
+                pattern=what_was_missing.strip(),
+                scope=missing_scope,
+                rationale="Reported as missing via agent feedback.",
+                confidence=Confidence.HIGH,  # flags it for prompt curation; still a candidate
+                origin=Origin.AGENT_FEEDBACK,
+            )
         )
-        blocks.append(block)
-    return "\n".join(blocks)
+
+    event = event_store.record(
+        Event(
+            repo=repo,
+            kind=EventKind.FEEDBACK,
+            query_ref=query_id,
+            helpful_prior_ids=helpful_ids,
+            unhelpful_prior_ids=unhelpful_ids,
+            missing=what_was_missing.strip(),
+            prior_ids=[candidate.id] if candidate else [],
+        )
+    )
+    return event, candidate
+
+
+def _served_prior_ids(event_store, query_id: str) -> list[str]:
+    if not query_id:
+        return []
+    event = event_store.get(query_id)
+    return list(event.prior_ids) if event is not None else []
+
+
+def _resolve_indices(indices, served: list[str]) -> list[str]:
+    """Map 1-based indices to served prior ids; out-of-range indices are ignored."""
+    out = []
+    for i in indices:
+        if isinstance(i, int) and 1 <= i <= len(served):
+            out.append(served[i - 1])
+    return out
 
 
 def _coerce_confidence(value: str | Confidence) -> Confidence:
