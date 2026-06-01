@@ -46,7 +46,7 @@ Non-secret settings live in an optional `metatron.toml` (env vars override it):
 ```toml
 [metatron]
 db_path = "metatron.db"
-model = "claude-opus-4-8"
+model = "claude-sonnet-4-6"   # default; Opus is ~5x costlier for comparable extraction
 ```
 
 ## The loop: ingest → curate → serve

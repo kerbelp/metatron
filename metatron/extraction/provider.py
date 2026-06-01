@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-DEFAULT_MODEL = "claude-opus-4-8"
+# Sonnet is the default for extraction: ~5x cheaper than Opus with comparable
+# quality on this structured-summarization task (see docs/future-features.md and
+# the Opus/Sonnet comparison). Override via METATRON_MODEL / metatron.toml.
+DEFAULT_MODEL = "claude-sonnet-4-6"
 
 
 class LLMProvider(ABC):
