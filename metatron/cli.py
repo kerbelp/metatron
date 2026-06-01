@@ -16,6 +16,10 @@ from dotenv import find_dotenv, load_dotenv
 
 from metatron.config import load_settings
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
+
+# Feedback refinement defaults to Opus (overridable with --model); the global
+# default model (Sonnet) is tuned for bulk extraction, not this higher-stakes step.
+REFINE_MODEL = "claude-opus-4-8"
 from metatron.models import Status
 from metatron.pipeline import ingest
 from metatron.storage.base import PriorStore
@@ -76,6 +80,15 @@ def main(
                 model=settings.model, api_key=settings.anthropic_api_key
             )
         return _cmd_triage(args, store, provider, out)
+    if args.command == "refine-feedback":
+        if provider is None:
+            # Reshaping feedback is higher-stakes than extraction — default to Opus.
+            provider = AnthropicProvider(
+                model=args.model or REFINE_MODEL, api_key=settings.anthropic_api_key
+            )
+        return _cmd_refine_feedback(
+            args, store, event_store or SQLiteEventStore(settings.db_path), provider, out
+        )
     if args.command == "candidates":
         return _cmd_candidates(args, store, out)
 
@@ -160,6 +173,34 @@ def _cmd_triage(args, store, provider, out) -> int:
     return 0
 
 
+def _cmd_refine_feedback(args, store, event_store, provider, out) -> int:
+    from metatron.extraction.feedback_refiner import FeedbackRefiner
+    from metatron.pipeline import refine_feedback
+    from metatron.pricing import estimate_cost
+
+    refiner = FeedbackRefiner(provider, model=getattr(provider, "model", ""))
+    result = refine_feedback(
+        store, event_store, refiner, repo=args.repo, limit=args.limit
+    )
+    if result.events_processed == 0:
+        print("No unhandled feedback to refine.", file=out)
+        return 0
+    print(
+        f"Refined {result.events_processed} feedback report(s) into "
+        f"{result.priors_created} candidate prior(s) for curation.",
+        file=out,
+    )
+    cost = estimate_cost(
+        getattr(provider, "model", ""),
+        getattr(provider, "input_tokens", 0),
+        getattr(provider, "output_tokens", 0),
+    )
+    if cost is not None:
+        print(f"  refiner cost: ~${cost:.2f}", file=out)
+    print("Review them in the UI Candidates tab (origin: feedback).", file=out)
+    return 0
+
+
 def _cmd_candidates(args, store, out) -> int:
     if args.candidates_command == "list":
         return _candidates_list(store, args.repo, args.scope, out)
@@ -225,6 +266,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     triage_p.add_argument("--repo", default=None, help="limit to one repo")
     triage_p.add_argument("--limit", type=int, default=None, help="max candidates to judge")
+
+    refine_p = sub.add_parser(
+        "refine-feedback",
+        help="reshape captured agent feedback into structured candidate priors (Opus)",
+    )
+    refine_p.add_argument("--repo", default=None, help="limit to one repo")
+    refine_p.add_argument("--limit", type=int, default=None, help="max feedback reports to refine")
+    refine_p.add_argument(
+        "--model", default=None, help=f"override the refiner model (default {REFINE_MODEL})"
+    )
 
     cand = sub.add_parser("candidates", help="review and curate candidate priors")
     cand_sub = cand.add_subparsers(dest="candidates_command")

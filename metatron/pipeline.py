@@ -38,6 +38,38 @@ class IngestResult(BaseModel):
     priors_created: int
 
 
+class RefineResult(BaseModel):
+    events_processed: int
+    priors_created: int
+
+
+def refine_feedback(store, event_store, refiner, *, repo=None, limit=None) -> RefineResult:
+    """Reshape unhandled feedback gaps into structured candidate priors.
+
+    For each unhandled FEEDBACK event, the ``refiner`` (anything with a
+    ``refine(gap, scope_hint, task)`` method) produces structured priors; they are
+    stamped with the event's repo and stored as candidates, and the event is marked
+    handled (recording the produced candidate ids) so re-runs are idempotent.
+    Ratings-only feedback (no gap text) is marked handled without producing priors.
+    Human curation still gates everything — nothing here becomes canonical.
+    """
+    events = event_store.unhandled_feedback(repo=repo)
+    if limit is not None:
+        events = events[:limit]
+
+    priors_created = 0
+    for event in events:
+        produced: list[str] = []
+        if event.missing.strip():
+            for prior in refiner.refine(event.missing, event.area, event.task):
+                stored = store.add(prior.model_copy(update={"repo": event.repo}))
+                produced.append(stored.id)
+                priors_created += 1
+        event_store.mark_handled(event.id, produced)
+
+    return RefineResult(events_processed=len(events), priors_created=priors_created)
+
+
 def ingest(
     repo_path: str | Path,
     store: PriorStore,

@@ -1,0 +1,21 @@
+You are a senior engineer turning a piece of feedback — a convention a coding agent
+found MISSING from this codebase's priors — into clean, structured priors for human
+curation.
+
+The feedback (free text):
+{gap}
+
+Scope hint (where it likely applies): {scope}
+Task the agent was doing: {task}
+
+Produce a JSON array. Split DISTINCT conventions into SEPARATE objects — one gap often
+bundles several (e.g. a publish sequence, a rollback-on-failure rule, and a uniqueness
+guard are three priors, not one). Each object has EXACTLY:
+  "pattern": one crisp, prescriptive sentence — the rule to follow. Specific to this
+             codebase; NOT prose, NOT a restatement of a framework/language default.
+  "scope": the path/area it applies to (use the scope hint if unsure).
+  "rationale": one sentence on why it holds / what breaks without it.
+  "confidence": "high" | "medium" | "low".
+
+Keep each pattern self-contained and actionable. Do not invent conventions the
+feedback does not support. Return ONLY the JSON array, with no prose outside it.

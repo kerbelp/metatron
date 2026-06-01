@@ -137,6 +137,42 @@ def test_triage_sets_advisory_verdicts_on_candidates():
     assert store.get(a.id).status is Status.CANDIDATE
 
 
+class RefinerProvider(LLMProvider):
+    model = "claude-opus-4-8"
+
+    def complete(self, prompt: str) -> str:
+        import json
+        return json.dumps([
+            {"pattern": "Mirror the order_created webhook publish chain",
+             "scope": "src/api", "rationale": "consistency", "confidence": "high"},
+        ])
+
+
+def test_refine_feedback_creates_structured_candidates_and_marks_handled():
+    from metatron.events import Event, EventKind
+    from metatron.storage.sqlite import SQLiteEventStore
+
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
+                        missing="the credit path must mirror order_created", area="src/api"))
+
+    code = main(
+        ["refine-feedback", "--repo", "github.com/acme/app"],
+        store=store,
+        provider=RefinerProvider(),
+        event_store=events,
+        out=io.StringIO(),
+    )
+
+    assert code == 0
+    cands = store.list(repo="github.com/acme/app")
+    assert len(cands) == 1
+    assert cands[0].origin is Origin.AGENT_FEEDBACK
+    assert cands[0].status is Status.CANDIDATE
+    assert events.unhandled_feedback(repo="github.com/acme/app") == []  # marked handled
+
+
 def test_ingest_path_option_scopes_to_subtree(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
     store = SQLitePriorStore(":memory:")
