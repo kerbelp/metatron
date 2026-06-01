@@ -80,7 +80,7 @@ def build_server(
         """
         if event_store is None:
             return "Feedback unavailable: this server has no event store."
-        _event, candidate = service.submit_feedback(
+        service.submit_feedback(
             store,
             event_store,
             repo=repo,
@@ -91,8 +91,8 @@ def build_server(
             missing_scope=missing_scope,
         )
         msg = f"Thanks — feedback recorded (rev {current_version()})."
-        if candidate is not None:
-            msg += f" Logged a candidate prior for curation: {candidate.id}."
+        if what_was_missing.strip():
+            msg += " The gap will be refined into structured priors for curation."
         return msg
 
     @server.tool()

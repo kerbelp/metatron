@@ -82,6 +82,14 @@ class EventStore(ABC):
         """Return one event by id (used to resolve feedback indices), or None."""
 
     @abstractmethod
+    def unhandled_feedback(self, *, repo: str | None = None) -> list[Event]:
+        """Feedback events not yet refined into priors (oldest-first)."""
+
+    @abstractmethod
+    def mark_handled(self, event_id: str, produced_ids: list[str]) -> None:
+        """Mark a feedback event refined, recording the candidate ids it produced."""
+
+    @abstractmethod
     def list_events(
         self,
         *,

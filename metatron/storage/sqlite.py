@@ -172,13 +172,15 @@ CREATE TABLE IF NOT EXISTS events (
     query_ref          TEXT NOT NULL DEFAULT '',
     helpful_prior_ids   TEXT NOT NULL DEFAULT '[]',
     unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]',
-    missing            TEXT NOT NULL DEFAULT ''
+    missing            TEXT NOT NULL DEFAULT '',
+    handled            INTEGER NOT NULL DEFAULT 0
 )
 """
 
 _EVENT_COLUMNS = (
     "id", "timestamp", "repo", "kind", "area", "task", "result_count", "prior_ids",
     "version", "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "missing",
+    "handled",
 )
 
 # Event columns persisted as JSON-encoded lists.
@@ -196,6 +198,7 @@ class SQLiteEventStore(EventStore):
         _ensure_column(self._conn, "events", "helpful_prior_ids", "helpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(self._conn, "events", "unhelpful_prior_ids", "unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(self._conn, "events", "missing", "missing TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "handled", "handled INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()
 
     def record(self, event: Event) -> Event:
@@ -214,6 +217,24 @@ class SQLiteEventStore(EventStore):
         cur = self._conn.execute("SELECT * FROM events WHERE id = ?", (event_id,))
         row = cur.fetchone()
         return _event_from_row(row) if row is not None else None
+
+    def unhandled_feedback(self, *, repo: str | None = None) -> list[Event]:
+        where = "kind = 'feedback' AND handled = 0"
+        params: list = []
+        if repo is not None:
+            where += " AND repo = ?"
+            params.append(repo)
+        cur = self._conn.execute(
+            f"SELECT * FROM events WHERE {where} ORDER BY timestamp", params
+        )
+        return [_event_from_row(row) for row in cur.fetchall()]
+
+    def mark_handled(self, event_id: str, produced_ids: list[str]) -> None:
+        self._conn.execute(
+            "UPDATE events SET handled = 1, prior_ids = ? WHERE id = ?",
+            (json.dumps(produced_ids), event_id),
+        )
+        self._conn.commit()
 
     def list_events(
         self,

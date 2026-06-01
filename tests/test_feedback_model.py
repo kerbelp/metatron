@@ -72,3 +72,21 @@ def test_event_store_get_returns_event_by_id_for_index_resolution():
     assert fetched is not None
     assert fetched.prior_ids == ["p1", "p2", "p3"]
     assert store.get("no-such-id") is None
+
+
+def test_unhandled_feedback_excludes_handled_and_non_feedback():
+    store = SQLiteEventStore(":memory:")
+    fb = Event(repo="r", kind=EventKind.FEEDBACK, missing="gap a")
+    other = Event(repo="r", kind=EventKind.FEEDBACK, missing="gap b")
+    store.record(Event(repo="r", kind=EventKind.QUERY))  # not feedback
+    store.record(fb)
+    store.record(other)
+
+    assert {e.id for e in store.unhandled_feedback()} == {fb.id, other.id}
+
+    store.mark_handled(fb.id, produced_ids=["cand1", "cand2"])
+    remaining = store.unhandled_feedback()
+    assert [e.id for e in remaining] == [other.id]
+    # provenance: the handled event records what it produced
+    assert store.get(fb.id).handled is True
+    assert store.get(fb.id).prior_ids == ["cand1", "cand2"]

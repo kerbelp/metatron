@@ -37,7 +37,7 @@ def test_get_priors_output_carries_query_token_and_revision():
     assert "metatron:query" in out and "rev " in out
 
 
-def test_submit_feedback_tool_records_gap_as_candidate():
+def test_submit_feedback_tool_captures_gap_without_creating_candidate():
     store = SQLitePriorStore(":memory:")
     events = SQLiteEventStore(":memory:")
     server = build_server(store, REPO, events)
@@ -45,11 +45,11 @@ def test_submit_feedback_tool_records_gap_as_candidate():
         "what_was_missing": "credit path must mirror the order_created webhook",
         "missing_scope": "src/routes/api/order_created",
     }))
-    candidates = store.list(repo=REPO)
-    assert len(candidates) == 1
-    assert candidates[0].origin is Origin.AGENT_FEEDBACK
-    assert candidates[0].status is Status.CANDIDATE
-    assert any(e.kind is EventKind.FEEDBACK for e in events.list_events())
+    # Capture only: no candidate yet (the refiner creates structured ones later).
+    assert store.list(repo=REPO) == []
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK]
+    assert len(fb) == 1 and fb[0].handled is False
+    assert "order_created" in fb[0].missing
 
 
 def test_get_priors_tool_returns_formatted_canonical_priors():

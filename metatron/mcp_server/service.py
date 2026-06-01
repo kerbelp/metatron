@@ -131,45 +131,28 @@ def submit_feedback(
     unhelpful: list[int] | tuple[int, ...] = (),
     what_was_missing: str = "",
     missing_scope: str = "",
-) -> tuple[Event, Prior | None]:
-    """Record agent feedback on a served query and route any gap into the queue.
+) -> Event:
+    """Capture agent feedback on a served query. Capture only — no candidate here.
 
     Ratings are given as 1-based indices into the priors the named query served;
     they are mapped to real prior ids locally (bogus indices ignored), so the agent
-    never echoes a UUID. ``what_was_missing`` becomes a **candidate** prior
-    (``agent_feedback`` origin) for human curation — it never enters the canonical
-    set, and ratings never mutate any prior. Returns the recorded FEEDBACK event and
-    the created candidate (or None).
+    never echoes a UUID. ``what_was_missing`` is recorded as the gap text (with the
+    scope hint in ``area``) for the human-gated Opus refiner to later reshape into
+    *structured* candidate priors — nothing enters the queue here, and ratings never
+    mutate any prior. Returns the recorded FEEDBACK event.
     """
     served = _served_prior_ids(event_store, query_id)
-    helpful_ids = _resolve_indices(helpful, served)
-    unhelpful_ids = _resolve_indices(unhelpful, served)
-
-    candidate: Prior | None = None
-    if what_was_missing.strip():
-        candidate = store.add(
-            Prior(
-                repo=repo,
-                pattern=what_was_missing.strip(),
-                scope=missing_scope,
-                rationale="Reported as missing via agent feedback.",
-                confidence=Confidence.HIGH,  # flags it for prompt curation; still a candidate
-                origin=Origin.AGENT_FEEDBACK,
-            )
-        )
-
-    event = event_store.record(
+    return event_store.record(
         Event(
             repo=repo,
             kind=EventKind.FEEDBACK,
+            area=missing_scope,  # scope hint for the refiner
             query_ref=query_id,
-            helpful_prior_ids=helpful_ids,
-            unhelpful_prior_ids=unhelpful_ids,
+            helpful_prior_ids=_resolve_indices(helpful, served),
+            unhelpful_prior_ids=_resolve_indices(unhelpful, served),
             missing=what_was_missing.strip(),
-            prior_ids=[candidate.id] if candidate else [],
         )
     )
-    return event, candidate
 
 
 def _served_prior_ids(event_store, query_id: str) -> list[str]:

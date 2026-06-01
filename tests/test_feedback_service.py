@@ -68,9 +68,9 @@ def test_feedback_ignores_out_of_range_indices():
     assert fb.helpful_prior_ids == ["p1"]
 
 
-# --- submit_feedback: what_was_missing -> candidate ---
+# --- submit_feedback: capture-only (the refiner creates candidates later) ---
 
-def test_what_was_missing_creates_one_candidate_never_canonical():
+def test_what_was_missing_is_captured_without_creating_a_candidate():
     store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
     qid = _served_query(events, ["p1"])
 
@@ -80,13 +80,12 @@ def test_what_was_missing_creates_one_candidate_never_canonical():
         missing_scope="src/routes/api/order_created",
     )
 
-    candidates = store.list(repo=REPO)
-    assert len(candidates) == 1
-    c = candidates[0]
-    assert c.status is Status.CANDIDATE          # never canonical
-    assert c.origin is Origin.AGENT_FEEDBACK
-    assert "order_created webhook" in c.pattern
-    assert c.scope == "src/routes/api/order_created"
+    # No candidate is created at capture time — the Opus refiner does that later.
+    assert store.list(repo=REPO) == []
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert "order_created webhook" in fb.missing
+    assert fb.area == "src/routes/api/order_created"  # scope hint preserved
+    assert fb.handled is False
 
 
 def test_gap_report_works_without_a_query_id():
@@ -97,8 +96,7 @@ def test_gap_report_works_without_a_query_id():
         what_was_missing="ledger consume must be atomic", missing_scope="src/db",
     )
 
-    assert len(store.list(repo=REPO)) == 1
-    # a FEEDBACK event is still recorded
+    assert store.list(repo=REPO) == []
     assert any(e.kind is EventKind.FEEDBACK for e in events.list_events())
 
 

@@ -40,4 +40,5 @@ class Event(BaseModel):
     query_ref: str = ""                  # the QUERY event this feedback responds to
     helpful_prior_ids: list[str] = Field(default_factory=list)
     unhelpful_prior_ids: list[str] = Field(default_factory=list)
-    missing: str = ""                    # "what was missing" — also seeds a candidate
+    missing: str = ""                    # "what was missing" — refined into priors later
+    handled: bool = False                # feedback: refined into candidates yet?
