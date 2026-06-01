@@ -20,6 +20,11 @@
       padding: 20px 32px; border-bottom: 1px solid var(--border);
       display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
     }
+    footer {
+      padding: 14px 32px; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 12px;
+    }
+    footer #version { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
     .repo-select { margin-left: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; font-size: 13px; }
     .nav { display: flex; gap: 4px; margin-left: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
@@ -143,6 +148,7 @@
       <div id="recent-submissions"></div>
     </section>
   </main>
+  <footer id="footer">metatron · <span id="version">…</span></footer>
 
   <script>
     const state = { repo: "", status: "candidate", scope: "", triage: "", page: 1, pageSize: 20, pages: 1 };
@@ -336,7 +342,14 @@
       if (onObs) loadUsage(); else refreshPriors();
     });
 
-    (async () => { await loadRepos(); await refreshPriors(); })();
+    async function loadVersion() {
+      try {
+        const v = await (await fetch("/api/version")).json();
+        document.getElementById("version").textContent = "rev " + (v.revision || "unknown");
+      } catch { document.getElementById("version").textContent = "rev unknown"; }
+    }
+
+    (async () => { await loadVersion(); await loadRepos(); await refreshPriors(); })();
   </script>
 </body>
 </html>

@@ -76,6 +76,8 @@ def _build_handler(
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/repos":
                 self._send_json(api.repos(store))
+            elif path == "/api/version":
+                self._send_json(api.version())
             elif path == "/api/ingest-cost":
                 repo = _first(parse_qs(parts.query), "repo")
                 if run_store is not None:

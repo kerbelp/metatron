@@ -76,6 +76,19 @@ def test_api_stats_returns_counts(served):
     assert data["total"] == 1
 
 
+def test_api_version_reports_a_revision(served):
+    _, _, base = served
+    _, body = _get(base + "/api/version")
+    data = json.loads(body)
+    assert "revision" in data and isinstance(data["revision"], str) and data["revision"]
+
+
+def test_footer_markup_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    assert b'id="version"' in body
+
+
 def test_post_approve_promotes_prior(served):
     store, prior, base = served
     _, body = _post(base + f"/api/priors/{prior.id}/approve")

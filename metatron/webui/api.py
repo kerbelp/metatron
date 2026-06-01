@@ -10,7 +10,13 @@ from metatron.events import EventKind
 from metatron.models import Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, PriorStore
+from metatron.version import version_string
 from metatron.webui.observability import usage_summary
+
+
+def version() -> dict:
+    """The code revision this server is running (shown in the UI footer)."""
+    return {"revision": version_string()}
 
 
 def list_priors(
