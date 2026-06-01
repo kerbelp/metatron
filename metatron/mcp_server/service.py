@@ -216,25 +216,30 @@ def _coerce_confidence(value: str | Confidence) -> Confidence:
         return Confidence.MEDIUM
 
 
-# Light suffix stemmer so morphological variants match: the task says "owner",
-# the prior says "ownership"; "link" vs "links"; "redirect" vs "redirects". Applied
-# to every token (query, prior, and idf) so the vocabulary is consistent. Stripping
-# is iterative and refuses to leave a stem shorter than 3 chars, which keeps short
-# domain words ("api", "css", "user") intact. No "er"/"ers" — it over-stems.
-_STEM_SUFFIXES = (
-    "izations", "ization", "ships", "ship", "ments", "ment", "sions", "sion",
-    "tions", "tion", "ness", "ings", "ing", "ies", "es", "ed", "s",
-)
+# Conservative stemmer: just enough to unify the variants we actually see (plurals,
+# and a few derivational suffixes like ownership->owner), without mangling words.
+# Single pass, never iterative — the old iterative s-stripper turned class->cla,
+# access->acc, success->succ, status->statu and manufactured collisions. Words ending
+# in "ss"/"us"/"is" are left intact, and "-ing"/"-tion" are deliberately NOT handled
+# (they over-stem and don't unify the cases we care about; route/routing, auth/
+# authentication are a synonym-map concern, not a stemmer one).
+_DERIVATIONAL_SUFFIXES = ("izations", "ization", "ships", "ship", "ments", "ment")
 
 
 def _stem(tok: str) -> str:
-    changed = True
-    while changed and len(tok) > 3:
-        changed = False
-        for suf in _STEM_SUFFIXES:
-            if tok.endswith(suf) and len(tok) - len(suf) >= 3:
-                tok, changed = tok[: -len(suf)], True
-                break
+    for suf in _DERIVATIONAL_SUFFIXES:
+        if tok.endswith(suf) and len(tok) - len(suf) >= 4:
+            return tok[: -len(suf)]
+    if tok.endswith(("ss", "us", "is")):  # class, status, analysis — leave intact
+        return tok
+    if tok.endswith("ies") and len(tok) > 4:  # categories -> category, policies -> policy
+        return tok[:-3] + "y"
+    if tok.endswith("es") and len(tok) > 4:
+        stem = tok[:-2]
+        # sibilant stems take -es (boxes->box, classes->class); others just -s (routes->route)
+        return stem if stem.endswith(("s", "x", "z", "ch", "sh")) else tok[:-1]
+    if tok.endswith("s") and len(tok) > 3:  # links -> link, owners -> owner
+        return tok[:-1]
     return tok
 
 
@@ -305,8 +310,11 @@ def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
     *inside* it) outweighs a broad ancestor that merely contains the area, and
     siblings (sharing only a parent dir) score nothing.
     """
-    if prior_scope == "":  # global prior — applies everywhere, weakly
-        return 1.0
+    if prior_scope == "":
+        # Global priors get NO scope credit — applying "everywhere" is not evidence
+        # of relevance to *this* task. They surface only on a real keyword match
+        # (handled by _relevance), so unrelated doctrine isn't served as filler.
+        return 0.0
     return max((_pair_scope(prior_scope, area) for area in area_paths), default=0.0)
 
 

@@ -1,6 +1,7 @@
 """Tests for the MCP service logic (retrieval + submission), server-independent."""
 
 from metatron.mcp_server.service import (
+    _stem,
     _tokens,
     format_priors,
     get_priors_for_context,
@@ -91,10 +92,34 @@ def test_out_of_scope_priors_are_excluded():
     assert [p.pattern for p in results] == ["storage rule"]
 
 
-def test_global_scope_priors_always_match():
-    store = _store(_canonical(pattern="global rule", scope="", rationale="r"))
-    results = get_priors_for_context(store, REPO, "anywhere/at/all.py", "task")
-    assert [p.pattern for p in results] == ["global rule"]
+def test_global_prior_needs_keyword_evidence_not_just_scope():
+    # "Prefer no priors over plausible filler": a global prior with no keyword
+    # overlap must NOT be served for an unrelated task (the founding-incident rule).
+    store = _store(_canonical(pattern="prefer composition", scope="", rationale="r"))
+    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    assert results == []
+
+
+def test_global_prior_surfaces_on_keyword_match():
+    # needs a corpus where "webhook" is distinguishing (idf > 0), as in any real repo
+    store = _store(
+        _canonical(pattern="always handle webhook retries", scope="", rationale="r"),
+        _canonical(pattern="compose home zones", scope="src/components/Home", rationale="r"),
+        _canonical(pattern="route strings via urls helper", scope="src/utils/i18n", rationale="r"),
+        _canonical(pattern="render FAQ with details elements", scope="src/components/App", rationale="r"),
+    )
+    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    assert "always handle webhook retries" in [p.pattern for p in results]
+
+
+def test_returns_empty_over_filler_when_nothing_relates():
+    # No scope relationship to the area and no keyword overlap -> return nothing.
+    store = _store(
+        _canonical(pattern="compose home zones", scope="src/components/Home", rationale="r"),
+        _canonical(pattern="prefer composition", scope="", rationale="r"),
+    )
+    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    assert results == []
 
 
 def test_keyword_overlap_with_task_ranks_higher():
@@ -248,6 +273,21 @@ def test_tokens_stem_unifies_morphological_variants():
     assert _tokens("owner") & _tokens("ownership")
     assert _tokens("link") & _tokens("links")
     assert _tokens("redirect") & _tokens("redirects")
+    assert _tokens("route") & _tokens("routes")
+    assert _tokens("category") & _tokens("categories")
+
+
+def test_stemmer_does_not_mangle_double_letter_and_us_is_words():
+    # Conservative: these must be left intact (the old stemmer ate them:
+    # class->cla, access->acc, status->statu, success->succ).
+    for w in ("class", "access", "process", "success", "address",
+              "status", "analysis", "session", "business"):
+        assert _stem(w) == w, f"{w} should be stemmed to itself, got {_stem(w)!r}"
+
+
+def test_stemmer_avoids_false_collisions():
+    # access/process must NOT collapse to the same stem (acc/proc) and match.
+    assert not (_tokens("access control") & _tokens("process queue"))
 
 
 def test_stemming_surfaces_keyword_match_despite_suffix():
