@@ -1,0 +1,84 @@
+# Incident: homepage priors returned for an unrelated payments query
+
+- **Date:** 2026-06-01
+- **Surface:** MCP `get_priors_for_context`
+- **Severity:** low (no data loss); trust-relevant (served irrelevant priors)
+- **Status:** diagnosed; precision fix deferred (owner's call)
+
+## Symptom
+
+An agent debugging a payments bug queried:
+
+- **area:** `src/routes/api/order_created, payments table, admin payments panel, review-queue-report email`
+- **task:** "Debug why paid $19 purchases (LemonSqueezy order_created) are not
+  showing up in admin Payments panel and daily admin email shows 0 purchases"
+
+Metatron returned two **homepage** priors, both scoped to
+`src/components/Home/zones` — completely unrelated to payments/orders/admin.
+
+## Root cause
+
+Two distinct factors. The first explains *why homepage content specifically*;
+the second is the real, persistent defect.
+
+### 1. Coverage gap at query time (timing)
+
+The request fired at **15:46**. A bulk-approve of 568 candidates ran at
+**15:53** (7 minutes later). All 11 payments/order/webhook-relevant priors became
+canonical *in that bulk run* — so at 15:46 there were **zero** relevant canonical
+priors. `get_priors_for_context` serves canonical-only, so the retriever had
+almost nothing with any token overlap to choose from.
+
+Re-running the same query *after* the approval no longer returns homepage priors;
+they are pushed out by ~20 genuinely route/payment-related priors.
+
+### 2. The relevance floor is too low (the real bug)
+
+`_relevance` in `metatron/mcp_server/service.py` keeps any prior scoring `> 0`,
+and a **single** keyword overlap on a common verb clears that floor:
+
+```
+score = scope_score*100 + keyword_overlap*10 + confidence_weight
+```
+
+The two homepage priors matched on exactly one token each — generic English
+verbs, not domain terms:
+
+- `"shows"` — "The commit history **shows** a consistent pattern…" ↔ "email **shows** 0 purchases"
+- `"showing"` — "rather than **showing** an empty shell" ↔ "are not **showing** up"
+
+Scope score was `0` for both (Home/zones is unrelated to `routes/api/...`). With
+`keyword_overlap = 1`, score ≈ 11–13 > 0, so they qualified. `"shows"` /
+`"showing"` are effectively stopwords but are not in `_STOPWORDS`.
+
+**The correct contract:** return genuinely relevant priors, or honestly nothing
+("No matching priors") — never filler. Returning irrelevant priors is worse than
+silence: it wastes the agent's attention and erodes trust in everything else
+Metatron serves. At 15:46 the honest answer was genuinely "no matching priors";
+the floor bug is what stopped it from saying so.
+
+## Deferred fix (not yet implemented)
+
+Core problem: **common tokens count as much as rare ones.** `"lemonsqueezy"`
+should be a strong signal; `"shows"` should be ~none.
+
+- **Preferred — corpus frequency (IDF-lite):** weight each token by how rare it is
+  across the canonical corpus, so a lone common-verb overlap scores as the noise it
+  is and a scope-0 prior needs real signal to clear the floor. Self-tuning, no
+  hand-maintained wordlist.
+- **Cheap alternative:** expand `_STOPWORDS` with generic verbs and require
+  scope-match OR ≥2 keyword overlaps to qualify. Simple but brittle, and can drop
+  legitimate single rare-token matches.
+
+Either way, add a regression test using this exact query asserting the homepage
+priors are **not** returned (and that a zero-coverage area yields "No matching
+priors"). Owner chose to defer the change; this note preserves the diagnosis.
+
+## Lessons
+
+- "No relevant knowledge" is a feature, not a gap — the honest empty answer must be
+  reachable.
+- Keyword overlap without term weighting produces confident false positives on
+  high-frequency words.
+- Coverage timing matters when reasoning about a served result: check whether the
+  relevant priors were canonical *at the moment of the query*.
