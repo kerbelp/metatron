@@ -127,6 +127,12 @@
         <option value="reject">✗ Not recommended</option>
         <option value="none">Untriaged</option>
       </select>
+      <select id="origin-filter" class="repo-select" title="Origin">
+        <option value="">Any origin</option>
+        <option value="bootstrap">Ingest</option>
+        <option value="agent_feedback">Feedback</option>
+        <option value="agent_submitted">Agent-submitted</option>
+      </select>
       </div>
       <div id="list"></div>
       <div class="pager" id="pager"></div>
@@ -156,7 +162,7 @@
   <footer id="footer">metatron · <span id="version">…</span></footer>
 
   <script>
-    const state = { repo: "", status: "candidate", scope: "", triage: "", page: 1, pageSize: 20, pages: 1 };
+    const state = { repo: "", status: "candidate", scope: "", triage: "", origin: "", page: 1, pageSize: 20, pages: 1 };
 
     function withRepo(params = {}) {
       const q = new URLSearchParams(params);
@@ -187,6 +193,7 @@
       if (state.status) q.set("status", state.status);
       if (state.scope) q.set("scope", state.scope);
       if (state.triage) q.set("triage", state.triage);
+      if (state.origin) q.set("origin", state.origin);
       const data = await (await fetch("/api/priors?" + q)).json();
       state.pages = data.pages || 1;
       renderPriors(data); renderPager(data);
@@ -382,6 +389,9 @@
     });
     document.getElementById("triage").addEventListener("change", e => {
       state.triage = e.target.value; state.page = 1; loadPriors();
+    });
+    document.getElementById("origin-filter").addEventListener("change", e => {
+      state.origin = e.target.value; state.page = 1; loadPriors();
     });
     document.getElementById("repo").addEventListener("change", e => {
       state.repo = e.target.value; state.page = 1;

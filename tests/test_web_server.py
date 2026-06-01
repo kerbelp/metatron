@@ -96,6 +96,22 @@ def test_quality_analytics_markup_present_in_html(served):
     assert b'id="feedback-summary"' in body
 
 
+def test_origin_filter_dropdown_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    assert b'id="origin-filter"' in body
+
+
+def test_api_priors_filters_by_origin(served):
+    store, _, base = served
+    store.add(Prior(repo="github.com/acme/app", pattern="from feedback", scope="app",
+                    rationale="r", origin=Origin.AGENT_FEEDBACK, status=Status.CANONICAL))
+    _, body = _get(base + "/api/priors?origin=agent_feedback")
+    data = json.loads(body)
+    assert all(it["origin"] == "agent_feedback" for it in data["items"])
+    assert any(it["pattern"] == "from feedback" for it in data["items"])
+
+
 def test_api_origins_returns_breakdown(served):
     _, _, base = served
     _, body = _get(base + "/api/origins")

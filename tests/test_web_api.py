@@ -33,6 +33,17 @@ def _add(store, n, **kw) -> list[Prior]:
     return out
 
 
+def test_list_priors_filters_by_origin(store):
+    _add(store, 2, origin=Origin.BOOTSTRAP)
+    _add(store, 1, origin=Origin.AGENT_FEEDBACK)
+
+    result = list_priors(store, origin="agent_feedback")
+
+    assert result["total"] == 1
+    assert all(it["origin"] == "agent_feedback" for it in result["items"])
+    assert result["origin"] == "agent_feedback"
+
+
 def test_list_priors_paginates_and_reports_totals(store):
     _add(store, 5)
 

@@ -28,6 +28,7 @@ def list_priors(
     status: str | None = None,
     scope: str | None = None,
     triage: str | None = None,
+    origin: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
@@ -35,20 +36,16 @@ def list_priors(
     page_size = max(1, page_size)
     status_enum = Status(status) if status else None
     triage_enum = TriageVerdict(triage) if triage else None
+    origin_enum = Origin(origin) if origin else None
     scope_filter = scope or None
     repo_filter = repo or None
 
-    total = store.count(
-        repo=repo_filter, status=status_enum, scope=scope_filter, triage=triage_enum
+    common = dict(
+        repo=repo_filter, status=status_enum, scope=scope_filter,
+        triage=triage_enum, origin=origin_enum,
     )
-    items = store.list(
-        repo=repo_filter,
-        status=status_enum,
-        scope=scope_filter,
-        triage=triage_enum,
-        limit=page_size,
-        offset=(page - 1) * page_size,
-    )
+    total = store.count(**common)
+    items = store.list(**common, limit=page_size, offset=(page - 1) * page_size)
     return {
         "items": [p.model_dump(mode="json") for p in items],
         "page": page,
@@ -58,6 +55,7 @@ def list_priors(
         "repo": repo,
         "status": status,
         "scope": scope,
+        "origin": origin,
     }
 
 
