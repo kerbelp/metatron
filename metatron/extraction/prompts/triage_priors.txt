@@ -1,0 +1,17 @@
+You are a senior engineer reviewing candidate "priors" — proposed conventions for a
+codebase — before a human decides which enter the canonical set. Judge each candidate:
+
+- "approve": specific, actionable, clearly grounded in this codebase, and NOT a mere
+  restatement of the language/framework defaults.
+- "reject": vague, generic, merely restates the framework/language, unsupported, or
+  redundant with another candidate.
+- "borderline": plausible but weak or uncertain.
+
+Candidates (JSON):
+{priors}
+
+Return ONLY a JSON array, one object per candidate, each with exactly:
+  "id": the candidate's id (copy it verbatim),
+  "verdict": "approve" | "borderline" | "reject",
+  "reason": one short sentence justifying the verdict.
+Do not include any prose outside the JSON array.

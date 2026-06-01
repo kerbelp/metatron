@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from metatron.events import Event
-from metatron.models import Prior, Status
+from metatron.models import Prior, Status, TriageVerdict
 
 
 class PriorStore(ABC):
@@ -30,13 +30,14 @@ class PriorStore(ABC):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
+        triage: TriageVerdict | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
         """Return priors newest-first, optionally filtered and paginated.
 
-        Filters by exact ``repo``, ``status``, ``scope`` and ``model``;
-        ``limit``/``offset`` paginate.
+        Filters by exact ``repo``, ``status``, ``scope``, ``model`` and
+        ``triage``; ``limit``/``offset`` paginate.
         """
 
     @abstractmethod
@@ -47,8 +48,13 @@ class PriorStore(ABC):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
+        triage: TriageVerdict | None = None,
     ) -> int:
-        """Count priors matching the (optional) ``repo``/``status``/``scope``/``model`` filters."""
+        """Count priors matching the (optional) filters."""
+
+    @abstractmethod
+    def set_triage(self, prior_id: str, verdict: TriageVerdict, reason: str) -> Prior:
+        """Set a prior's advisory triage verdict + reason. Raises ``KeyError`` if absent."""
 
     @abstractmethod
     def list_repos(self) -> list[str]:

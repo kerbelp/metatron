@@ -75,8 +75,17 @@ uv run metatron candidates approve <id>      # promote to the canonical set
 uv run metatron candidates reject <id>       # discard
 ```
 
-Or use the local web UI (browse paginated, filter by status/scope, approve/reject
-with a click). It binds to `localhost:1337`, bumping to the next free port if
+For large candidate queues, run the **advisory triage judge** first — a separate
+LLM pass that scores each candidate (recommended / borderline / not-recommended)
+with a reason, so you curate a ranked, pre-filtered queue. It **does not
+auto-curate** — the human still approves; nothing self-promotes.
+
+```bash
+uv run metatron triage --repo <id>     # then filter by recommendation in the UI
+```
+
+Or use the local web UI (browse paginated, filter by status/scope/recommendation,
+approve/reject with a click). It binds to `localhost:1337`, bumping to the next free port if
 taken, and reads/writes the same store as the CLI:
 
 ```bash

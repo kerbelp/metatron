@@ -53,6 +53,10 @@
     .badge.canonical { background: rgba(110,159,255,.15); color: var(--accent); }
     .badge.candidate { background: rgba(210,153,34,.12); color: var(--amber); }
     .badge.rejected { background: rgba(248,81,73,.12); color: var(--red); }
+    .badge.approve { background: rgba(63,185,80,.15); color: var(--green); }
+    .badge.borderline { background: rgba(210,153,34,.15); color: var(--amber); }
+    .badge.reject { background: rgba(248,81,73,.15); color: var(--red); }
+    .triage-reason { color: var(--muted); font-size: 13px; margin-top: 4px; font-style: italic; }
     .scope { color: var(--muted); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .pattern { font-size: 15px; font-weight: 500; margin: 2px 0 6px; }
     .rationale { color: var(--muted); font-size: 14px; }
@@ -110,6 +114,13 @@
           <button class="tab" data-status="">All</button>
         </div>
         <input type="text" id="scope" placeholder="Filter by scope (e.g. src/components/Home)" />
+      <select id="triage" class="repo-select" title="Triage recommendation">
+        <option value="">Any recommendation</option>
+        <option value="approve">✓ Recommended</option>
+        <option value="borderline">~ Borderline</option>
+        <option value="reject">✗ Not recommended</option>
+        <option value="none">Untriaged</option>
+      </select>
       </div>
       <div id="list"></div>
       <div class="pager" id="pager"></div>
@@ -134,7 +145,7 @@
   </main>
 
   <script>
-    const state = { repo: "", status: "candidate", scope: "", page: 1, pageSize: 20, pages: 1 };
+    const state = { repo: "", status: "candidate", scope: "", triage: "", page: 1, pageSize: 20, pages: 1 };
 
     function withRepo(params = {}) {
       const q = new URLSearchParams(params);
@@ -164,6 +175,7 @@
       const q = withRepo({ page: state.page, page_size: state.pageSize });
       if (state.status) q.set("status", state.status);
       if (state.scope) q.set("scope", state.scope);
+      if (state.triage) q.set("triage", state.triage);
       const data = await (await fetch("/api/priors?" + q)).json();
       state.pages = data.pages || 1;
       renderPriors(data); renderPager(data);
@@ -177,10 +189,12 @@
             <span class="badge ${p.confidence}">${p.confidence}</span>
             <span class="scope">${p.scope || "(global)"}</span>
             <span class="badge ${p.status}">${p.status}</span>
+            ${p.triage && p.triage !== "none" ? `<span class="badge ${p.triage}">${p.triage}</span>` : ""}
             <span class="id">${p.id.slice(0, 8)}</span>
           </div>
           <div class="pattern">${esc(p.pattern)}</div>
           <div class="rationale">${esc(p.rationale)}</div>
+          ${p.triage_reason ? `<div class="triage-reason">judge: ${esc(p.triage_reason)}</div>` : ""}
           <div class="times">introduced ${fmtTime(p.created_at)}${
             p.status !== "candidate"
               ? ` · ${p.status === "canonical" ? "accepted" : "rejected"} ${fmtTime(p.updated_at)}`
@@ -312,6 +326,9 @@
     document.getElementById("scope").addEventListener("input", e => {
       clearTimeout(scopeTimer);
       scopeTimer = setTimeout(() => { state.scope = e.target.value.trim(); state.page = 1; loadPriors(); }, 250);
+    });
+    document.getElementById("triage").addEventListener("change", e => {
+      state.triage = e.target.value; state.page = 1; loadPriors();
     });
     document.getElementById("repo").addEventListener("change", e => {
       state.repo = e.target.value; state.page = 1;

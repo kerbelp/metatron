@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS priors (
     model       TEXT NOT NULL DEFAULT '',
     source_refs TEXT NOT NULL,
     status      TEXT NOT NULL,
+    triage        TEXT NOT NULL DEFAULT 'none',
+    triage_reason TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
     updated_at  TEXT NOT NULL
 )
@@ -43,6 +45,8 @@ _COLUMNS = (
     "model",
     "source_refs",
     "status",
+    "triage",
+    "triage_reason",
     "created_at",
     "updated_at",
 )
@@ -65,6 +69,8 @@ class SQLitePriorStore(PriorStore):
         self._conn.execute(_SCHEMA)
         _ensure_column(self._conn, "priors", "repo", "repo TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "priors", "model", "model TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "priors", "triage", "triage TEXT NOT NULL DEFAULT 'none'")
+        _ensure_column(self._conn, "priors", "triage_reason", "triage_reason TEXT NOT NULL DEFAULT ''")
         self._conn.commit()
 
     def add(self, prior: Prior) -> Prior:
@@ -89,10 +95,11 @@ class SQLitePriorStore(PriorStore):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
+        triage: "TriageVerdict | None" = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
-        where, params = _filter(repo, status, scope, model)
+        where, params = _filter(repo, status, scope, model, triage)
         sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
@@ -107,8 +114,9 @@ class SQLitePriorStore(PriorStore):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
+        triage: "TriageVerdict | None" = None,
     ) -> int:
-        where, params = _filter(repo, status, scope, model)
+        where, params = _filter(repo, status, scope, model, triage)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
         return cur.fetchone()[0]
 
@@ -125,6 +133,18 @@ class SQLitePriorStore(PriorStore):
         self._conn.execute(
             "UPDATE priors SET status = ?, updated_at = ? WHERE id = ?",
             (updated.status.value, updated.updated_at.isoformat(), prior_id),
+        )
+        self._conn.commit()
+        return updated
+
+    def set_triage(self, prior_id: str, verdict, reason: str) -> Prior:
+        prior = self.get(prior_id)
+        if prior is None:
+            raise KeyError(prior_id)
+        updated = prior.model_copy(update={"triage": verdict, "triage_reason": reason})
+        self._conn.execute(
+            "UPDATE priors SET triage = ?, triage_reason = ? WHERE id = ?",
+            (updated.triage.value, reason, prior_id),
         )
         self._conn.commit()
         return updated
@@ -258,6 +278,7 @@ def _filter(
     status: Status | None,
     scope: str | None,
     model: str | None = None,
+    triage=None,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
@@ -273,6 +294,9 @@ def _filter(
     if model is not None:
         clauses.append("model = ?")
         params.append(model)
+    if triage is not None:
+        clauses.append("triage = ?")
+        params.append(triage.value)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return where, params
 

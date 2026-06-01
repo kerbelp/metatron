@@ -106,6 +106,37 @@ def test_cli_does_not_override_already_exported_env(tmp_path, monkeypatch):
     assert os.environ["ANTHROPIC_API_KEY"] == "from-shell"
 
 
+class JudgeProvider(LLMProvider):
+    def complete(self, prompt: str) -> str:
+        import json
+        import re
+
+        ids = re.findall(r'"id":\s*"([^"]+)"', prompt)
+        return json.dumps([{"id": i, "verdict": "approve", "reason": "ok"} for i in ids])
+
+
+def test_triage_sets_advisory_verdicts_on_candidates():
+    from metatron.models import TriageVerdict
+
+    store = SQLitePriorStore(":memory:")
+    a, b = _candidate("one"), _candidate("two")
+    store.add(a)
+    store.add(b)
+
+    code = main(
+        ["triage", "--repo", "github.com/acme/app"],
+        store=store,
+        provider=JudgeProvider(),
+        out=io.StringIO(),
+    )
+
+    assert code == 0
+    assert store.get(a.id).triage is TriageVerdict.APPROVE
+    assert store.get(a.id).triage_reason == "ok"
+    # triage does NOT change status — still a candidate
+    assert store.get(a.id).status is Status.CANDIDATE
+
+
 def test_ingest_path_option_scopes_to_subtree(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
     store = SQLitePriorStore(":memory:")

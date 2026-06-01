@@ -7,7 +7,7 @@ in :mod:`metatron.webui.server` is a thin adapter over these.
 from __future__ import annotations
 
 from metatron.events import EventKind
-from metatron.models import Status
+from metatron.models import Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui.observability import usage_summary
@@ -19,20 +19,25 @@ def list_priors(
     repo: str | None = None,
     status: str | None = None,
     scope: str | None = None,
+    triage: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
     page = max(1, page)
     page_size = max(1, page_size)
     status_enum = Status(status) if status else None
+    triage_enum = TriageVerdict(triage) if triage else None
     scope_filter = scope or None
     repo_filter = repo or None
 
-    total = store.count(repo=repo_filter, status=status_enum, scope=scope_filter)
+    total = store.count(
+        repo=repo_filter, status=status_enum, scope=scope_filter, triage=triage_enum
+    )
     items = store.list(
         repo=repo_filter,
         status=status_enum,
         scope=scope_filter,
+        triage=triage_enum,
         limit=page_size,
         offset=(page - 1) * page_size,
     )

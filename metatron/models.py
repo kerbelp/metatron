@@ -37,6 +37,15 @@ class SourceRefKind(str, enum.Enum):
     COMMIT = "commit"
 
 
+class TriageVerdict(str, enum.Enum):
+    """A judge pass's recommendation to the human curator. Advisory only."""
+
+    NONE = "none"          # not yet triaged
+    APPROVE = "approve"    # clearly a useful canonical convention
+    BORDERLINE = "borderline"
+    REJECT = "reject"      # vague / generic / framework-restating / unsupported
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -77,5 +86,7 @@ class Prior(BaseModel):
     model: str = ""  # the model that extracted it ("" for agent-submitted priors)
     source_refs: list[SourceRef] = Field(default_factory=list)
     status: Status = Status.CANDIDATE
+    triage: TriageVerdict = TriageVerdict.NONE  # advisory judge recommendation
+    triage_reason: str = ""
     created_at: datetime = Field(default_factory=_now)
     updated_at: datetime = Field(default_factory=_now)

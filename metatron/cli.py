@@ -70,6 +70,12 @@ def main(
             SQLiteIngestRunStore(settings.db_path),
             args.port,
         )
+    if args.command == "triage":
+        if provider is None:
+            provider = AnthropicProvider(
+                model=settings.model, api_key=settings.anthropic_api_key
+            )
+        return _cmd_triage(args, store, provider, out)
     if args.command == "candidates":
         return _cmd_candidates(args, store, out)
 
@@ -110,6 +116,44 @@ def _cmd_ui(store, event_store, run_store, port) -> int:
     from metatron.webui.server import serve
 
     serve(store, event_store, start_port=port, run_store=run_store)
+    return 0
+
+
+def _cmd_triage(args, store, provider, out) -> int:
+    from collections import Counter
+
+    from metatron.extraction.triage import PriorJudge
+    from metatron.models import TriageVerdict
+    from metatron.pricing import estimate_cost
+
+    candidates = store.list(
+        repo=args.repo,
+        status=Status.CANDIDATE,
+        triage=TriageVerdict.NONE,
+        limit=args.limit,
+    )
+    if not candidates:
+        print("No untriaged candidate priors.", file=out)
+        return 0
+
+    results = PriorJudge(provider).evaluate(candidates)
+    for prior_id, (verdict, reason) in results.items():
+        store.set_triage(prior_id, verdict, reason)
+
+    counts = Counter(verdict.value for verdict, _ in results.values())
+    print(
+        f"Triaged {len(results)} candidates: "
+        + ", ".join(f"{v}={counts.get(v, 0)}" for v in ("approve", "borderline", "reject")),
+        file=out,
+    )
+    cost = estimate_cost(
+        getattr(provider, "model", ""),
+        getattr(provider, "input_tokens", 0),
+        getattr(provider, "output_tokens", 0),
+    )
+    if cost is not None:
+        print(f"  judge cost: ~${cost:.2f}", file=out)
+    print("Review by recommendation in the UI's Candidates filter.", file=out)
     return 0
 
 
@@ -172,6 +216,12 @@ def _build_parser() -> argparse.ArgumentParser:
     ui_p.add_argument(
         "--port", type=int, default=1337, help="starting port (bumps if taken)"
     )
+
+    triage_p = sub.add_parser(
+        "triage", help="run the advisory judge over candidate priors (does not auto-curate)"
+    )
+    triage_p.add_argument("--repo", default=None, help="limit to one repo")
+    triage_p.add_argument("--limit", type=int, default=None, help="max candidates to judge")
 
     cand = sub.add_parser("candidates", help="review and curate candidate priors")
     cand_sub = cand.add_subparsers(dest="candidates_command")
