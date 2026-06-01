@@ -3,7 +3,7 @@
 - **Date:** 2026-06-01
 - **Surface:** MCP `get_priors_for_context`
 - **Severity:** low (no data loss); trust-relevant (served irrelevant priors)
-- **Status:** diagnosed; precision fix deferred (owner's call)
+- **Status:** diagnosed; precision + ranking fix implemented (see "Resolution")
 
 ## Symptom
 
@@ -73,6 +73,34 @@ should be a strong signal; `"shows"` should be ~none.
 Either way, add a regression test using this exact query asserting the homepage
 priors are **not** returned (and that a zero-coverage area yields "No matching
 priors"). Owner chose to defer the change; this note preserves the diagnosis.
+
+## Resolution (2026-06-01)
+
+Implemented in `metatron/mcp_server/service.py`. A second real query the next
+session exposed a related ranking failure (the agent named four precise paths and
+broad-ancestor priors with zero keyword overlap outranked the prior scoped to the
+exact sub-path), so both were fixed together:
+
+- **Area splitting** — `area` is split into individual path candidates; scope is
+  matched against the best of them, so naming a precise sub-path is rewarded
+  instead of diluted in a comma-joined blob.
+- **Specificity-aware scope** — exact / inside-the-area matches outweigh a broad
+  ancestor that merely contains the area; siblings (sharing only a parent dir)
+  score nothing. This fixed `src/components/Home/zones` getting credit against
+  `src/components/SubmitFlow`.
+- **IDF keyword weighting** — overlap is weighted by inverse document frequency
+  across the repo's canonical priors, so rare domain terms (`checkout`, `webhook`)
+  count and boilerplate (`rather than`, `commit`) counts for ~nothing. No
+  hand-maintained verb stoplist.
+- **Focused payload** — default page reduced from 20 to 8.
+
+Result on the original payments-ledger prior: rank #127 → #1; the homepage filler
+no longer surfaces for this class of query.
+
+**Known residual:** scope still outweighs topical match *within* a named directory
+— an off-topic prior sharing the path can outrank an on-topic prior in a directory
+the agent did not name. The scope/keyword balance (`_SCOPE_SCALE`) is a tuning knob
+left for live feedback.
 
 ## Lessons
 

@@ -12,6 +12,7 @@ Kept independent of the MCP server so it can be tested directly. Two operations:
 
 from __future__ import annotations
 
+import math
 import re
 
 from metatron.models import Confidence, Origin, Prior, SourceRef, Status
@@ -23,6 +24,12 @@ _STOPWORDS = {
     "add", "should", "when", "your", "you", "are", "but", "not", "all", "any",
 }
 
+# Relevance is scope_weight * _SCOPE_SCALE + idf_keyword_sum + confidence * _CONF_SCALE.
+# Scope dominates ties (the agent named a path), but term weighting decides between
+# priors at the same scope and lets a strong rare-keyword match beat a broad ancestor.
+_SCOPE_SCALE = 10.0
+_CONF_SCALE = 0.1
+
 
 def get_priors_for_context(
     store: PriorStore,
@@ -30,16 +37,27 @@ def get_priors_for_context(
     file_path_or_area: str,
     task_description: str,
     *,
-    limit: int = 20,
+    limit: int = 8,
 ) -> list[Prior]:
-    # Scope is a ranking signal, not a hard gate: a prior is relevant if it
-    # overlaps the area's path OR shares keywords with the task/area. This lets
-    # textually-relevant priors surface even when the agent enters from a
-    # different directory (e.g. a route file) than where the prior lives.
+    # Two relevance signals, neither a hard gate:
+    #   1. scope — how specifically the prior's path relates to the area(s) the
+    #      agent named (exact/inside > broad ancestor > sibling/none), so naming a
+    #      precise sub-path surfaces the prior scoped there rather than generic
+    #      advice for its parent directory.
+    #   2. keywords — overlap with the task/area, weighted by inverse document
+    #      frequency across this repo's canonical priors, so rare domain terms
+    #      ("checkout", "webhook") count and boilerplate ("rather than", "commit")
+    #      counts for ~nothing.
+    # A prior with no scope relationship still surfaces on a real keyword match,
+    # but a lone overlap on a corpus-common word carries almost no weight.
+    priors = store.list(repo=repo, status=Status.CANONICAL)
+    idf = _build_idf(priors)
+    area_paths = _area_paths(file_path_or_area)
     query_tokens = _tokens(task_description) | _tokens(file_path_or_area)
-    scored: list[tuple[Prior, int]] = []
-    for prior in store.list(repo=repo, status=Status.CANONICAL):
-        score = _relevance(prior, file_path_or_area, query_tokens)
+
+    scored: list[tuple[Prior, float]] = []
+    for prior in priors:
+        score = _relevance(prior, area_paths, query_tokens, idf)
         if score > 0:
             scored.append((prior, score))
     scored.sort(key=lambda ps: ps[1], reverse=True)
@@ -98,30 +116,75 @@ def _tokens(text: str) -> set[str]:
     }
 
 
-def _relevance(prior: Prior, area: str, query_tokens: set[str]) -> int:
+def _build_idf(priors: list[Prior]) -> dict[str, float]:
+    """Inverse document frequency for tokens across the served priors.
+
+    A token in nearly every prior (boilerplate like "commit"/"shared") gets an idf
+    near 0; a rare domain term gets a high idf. Computed over the same set being
+    ranked, so it is self-tuning per repo with no hand-maintained stopword list.
+    """
+    n = len(priors)
+    df: dict[str, int] = {}
+    for prior in priors:
+        for tok in _tokens(f"{prior.pattern} {prior.rationale}"):
+            df[tok] = df.get(tok, 0) + 1
+    return {tok: math.log((n + 1) / (count + 1)) for tok, count in df.items()}
+
+
+def _area_paths(area: str) -> list[str]:
+    """Split an area into the individual path candidates the agent named.
+
+    Agents commonly pass several comma- or space-separated paths
+    ("src/routes/api/order_created, src/components/SubmitFlow"). Scope is matched
+    against the best of these so a precise sub-path is rewarded, not diluted by
+    being one item in a blob.
+    """
+    return [part.strip("/") for part in re.split(r"[,\s]+", area.strip()) if part.strip("/")]
+
+
+def _relevance(
+    prior: Prior, area_paths: list[str], query_tokens: set[str], idf: dict[str, float]
+) -> float:
     """Relevance score; 0 means "no signal" (filtered out).
 
-    Scope relationship dominates, then keyword overlap, then confidence — so
-    exact-path priors rank first, but a strong keyword match in another directory
-    still beats nothing.
+    Scope relationship dominates ties, then idf-weighted keyword overlap, then
+    confidence — so the prior scoped to the exact area ranks first, but a strong
+    rare-keyword match still beats a broad ancestor with no keyword overlap.
     """
-    scope = _scope_score(prior.scope, area)
-    keywords = len(_tokens(f"{prior.pattern} {prior.rationale}") & query_tokens)
+    scope = _scope_weight(prior.scope, area_paths)
+    overlap = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
+    keywords = sum(idf.get(tok, 0.0) for tok in overlap)
     if scope == 0 and keywords == 0:
-        return 0
-    return scope * 100 + keywords * 10 + _CONFIDENCE_WEIGHT[prior.confidence]
+        return 0.0
+    return scope * _SCOPE_SCALE + keywords + _CONFIDENCE_WEIGHT[prior.confidence] * _CONF_SCALE
 
 
-def _scope_score(prior_scope: str, area: str) -> int:
-    """How strongly a prior's scope relates to the queried area (0 = unrelated)."""
+def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
+    """Best scope relationship between a prior and any of the queried paths.
+
+    Rewards specificity: an exact or deeper match (the prior is the area, or sits
+    *inside* it) outweighs a broad ancestor that merely contains the area, and
+    siblings (sharing only a parent dir) score nothing.
+    """
     if prior_scope == "":  # global prior — applies everywhere, weakly
-        return 1
-    scope = prior_scope.strip("/")
-    target = area.strip("/")
-    if target == scope:
-        return 4
-    if target.startswith(scope + "/"):  # the area sits inside the prior's scope
-        return 3
-    if scope.startswith(target + "/"):  # the prior's scope sits inside the area
-        return 2
-    return 0
+        return 1.0
+    return max((_pair_scope(prior_scope, area) for area in area_paths), default=0.0)
+
+
+def _pair_scope(prior_scope: str, area: str) -> float:
+    scope = prior_scope.strip("/").split("/")
+    target = area.strip("/").split("/")
+    shared = 0
+    for a, b in zip(scope, target):
+        if a != b:
+            break
+        shared += 1
+    if shared == 0:
+        return 0.0
+    if shared == len(scope) == len(target):  # exact match — most specific
+        return 3.0 + shared
+    if shared == len(target):  # prior sits inside the queried area — specific
+        return 2.0 + shared
+    if shared == len(scope):  # prior is a broad ancestor of the area — weak
+        return 1.0
+    return 0.0  # siblings: share a parent dir but diverge — not relevant

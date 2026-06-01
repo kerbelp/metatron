@@ -105,6 +105,83 @@ def test_keyword_overlap_with_task_ranks_higher():
     assert results[0].pattern == "use retries for network calls"
 
 
+def test_specific_subpath_outranks_broad_ancestor_for_multipath_area():
+    # Regression for the real www query: the agent named several precise paths
+    # (comma-joined), and a broad ancestor prior (src/routes) with no domain
+    # keywords outranked the prior scoped to the exact sub-path the task was about.
+    store = _store(
+        _canonical(
+            pattern="record sale events in the shared payments ledger",
+            scope="src/routes/api/subscription",
+            rationale="webhook handling writes to the ledger",
+        ),
+        _canonical(
+            pattern="build route components as thin orchestrators",
+            scope="src/routes",
+            rationale="structure routes consistently",
+        ),
+    )
+    area = (
+        "src/routes/api/order_created, src/routes/api/subscription, "
+        "src/components/SubmitFlow"
+    )
+    results = get_priors_for_context(store, REPO, area, "account for payment webhook logic")
+    assert results[0].pattern == "record sale events in the shared payments ledger"
+
+
+def test_rare_domain_keyword_outranks_common_token_overlap():
+    # Two priors share the same scope and both overlap the task. The one matching
+    # a RARE domain term (checkout) should beat one matching only common, low-signal
+    # tokens (components/logic/shared) that appear all over the corpus.
+    filler = [
+        _canonical(
+            pattern=f"use shared components and logic helper {i}",
+            scope="app",
+            rationale="general structure",
+        )
+        for i in range(8)
+    ]
+    rare = _canonical(pattern="use LemonSqueezy for checkout", scope="app", rationale="billing")
+    common = _canonical(
+        pattern="structure with shared components and logic", scope="app", rationale="general"
+    )
+    store = _store(rare, common, *filler)
+    results = get_priors_for_context(
+        store, REPO, "app", "wire up checkout using shared components and logic"
+    )
+    assert results[0].pattern == "use LemonSqueezy for checkout"
+
+
+def test_sibling_directory_without_keywords_is_not_returned():
+    # A sibling under the same parent dir (Home vs SubmitFlow under src/components)
+    # is NOT relevant just for sharing a prefix; with no keyword overlap it is dropped.
+    store = _store(
+        _canonical(
+            pattern="render homepage zones",
+            scope="src/components/Home/zones",
+            rationale="section layout",
+        ),
+        _canonical(
+            pattern="drive the submit flow via SubmitFlow",
+            scope="src/components/SubmitFlow",
+            rationale="checkout",
+        ),
+    )
+    results = get_priors_for_context(store, REPO, "src/components/SubmitFlow", "wire the checkout step")
+    assert [p.pattern for p in results] == ["drive the submit flow via SubmitFlow"]
+
+
+def test_response_is_capped_to_a_focused_set():
+    # The served payload should be a focused set, not a 20-item dump.
+    priors = [
+        _canonical(pattern=f"rule {i}", scope="app", rationale="retries on the network client")
+        for i in range(20)
+    ]
+    store = _store(*priors)
+    results = get_priors_for_context(store, REPO, "app", "improve retries on the network client")
+    assert len(results) <= 8
+
+
 def test_submit_candidate_learning_stores_uncurated_agent_prior():
     store = SQLitePriorStore(":memory:")
     prior = submit_candidate_learning(
