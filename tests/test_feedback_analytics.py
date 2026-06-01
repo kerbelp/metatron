@@ -8,7 +8,7 @@ feedback events, never mutates priors.
 from metatron.events import Event, EventKind
 from metatron.models import Origin, Prior, Status
 from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
-from metatron.webui.api import feedback_analytics, origin_breakdown
+from metatron.webui.api import feedback_analytics, feedback_events, origin_breakdown
 
 REPO = "github.com/acme/app"
 
@@ -62,3 +62,40 @@ def test_feedback_analytics_tallies_helpful_and_noise_by_origin():
     assert by["bootstrap"]["noise"] == 1
     per = {p["id"]: p for p in out["priors"]}
     assert per[fb.id]["helpful"] == 2 and per[fb.id]["pattern"] == "feedback rule"
+
+
+def test_feedback_events_returns_raw_stream_newest_first():
+    s, ev = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    helpful = _p(Origin.BOOTSTRAP, Status.CANONICAL, pattern="useful one")
+    noisy = _p(Origin.BOOTSTRAP, Status.CANONICAL, pattern="off-topic one")
+    s.add(helpful)
+    s.add(noisy)
+    # a query event should NOT appear in the feedback stream
+    ev.record(Event(repo=REPO, kind=EventKind.QUERY, area="src/api", task="add x"))
+    ev.record(Event(
+        repo=REPO, kind=EventKind.FEEDBACK, area="src/credit",
+        helpful_prior_ids=[helpful.id], unhelpful_prior_ids=[noisy.id],
+        missing="the credit path must mirror the order_created webhook chain",
+    ))
+
+    out = feedback_events(ev, s)
+    assert len(out["events"]) == 1
+    e = out["events"][0]
+    assert e["area"] == "src/credit"
+    assert e["missing"].startswith("the credit path")
+    assert e["handled"] is False
+    assert [p["pattern"] for p in e["helpful"]] == ["useful one"]
+    assert [p["pattern"] for p in e["unhelpful"]] == ["off-topic one"]
+    assert e["produced"] == []
+
+
+def test_feedback_events_resolves_produced_candidates_when_handled():
+    s, ev = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    born = _p(Origin.AGENT_FEEDBACK, Status.CANDIDATE, pattern="refined prior")
+    s.add(born)
+    fb = ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap text"))
+    ev.mark_handled(fb.id, [born.id])
+
+    e = feedback_events(ev, s)["events"][0]
+    assert e["handled"] is True
+    assert [p["pattern"] for p in e["produced"]] == ["refined prior"]

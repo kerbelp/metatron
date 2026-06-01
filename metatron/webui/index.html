@@ -106,7 +106,9 @@
     <select id="repo" class="repo-select" title="Repository"></select>
     <div class="nav" id="nav">
       <button class="active" data-view="priors">Priors</button>
-      <button data-view="obs">Observability</button>
+      <button data-view="usage">Usage</button>
+      <button data-view="quality">Quality</button>
+      <button data-view="feedback">Feedback</button>
     </div>
   </header>
   <main>
@@ -138,14 +140,8 @@
       <div class="pager" id="pager"></div>
     </section>
 
-    <section id="view-obs" hidden>
+    <section id="view-usage" hidden>
       <div class="stats" id="usage-stats"></div>
-      <div class="section-title">Onboarding ingest cost (one-time)</div>
-      <div id="ingest-cost"></div>
-      <div class="section-title">Prior quality by origin (ingest vs feedback)</div>
-      <div id="origin-breakdown"></div>
-      <div class="section-title">Feedback — helpful vs noise (advisory)</div>
-      <div id="feedback-summary"></div>
       <div class="card">
         <div>Coverage — queries that returned at least one canonical prior</div>
         <div class="bar"><span id="cov-bar"></span></div>
@@ -158,11 +154,25 @@
       <div class="section-title">Recent submissions</div>
       <div id="recent-submissions"></div>
     </section>
+
+    <section id="view-quality" hidden>
+      <div class="section-title">Prior quality by origin (ingest vs feedback)</div>
+      <div id="origin-breakdown"></div>
+      <div class="section-title">Onboarding ingest cost (one-time)</div>
+      <div id="ingest-cost"></div>
+    </section>
+
+    <section id="view-feedback" hidden>
+      <div class="section-title">Feedback from agents (what was missing)</div>
+      <div id="feedback-stream"></div>
+      <div class="section-title">Helpful vs noise (advisory)</div>
+      <div id="feedback-summary"></div>
+    </section>
   </main>
   <footer id="footer">metatron · <span id="version">…</span></footer>
 
   <script>
-    const state = { repo: "", status: "candidate", scope: "", triage: "", origin: "", page: 1, pageSize: 20, pages: 1 };
+    const state = { view: "priors", repo: "", status: "candidate", scope: "", triage: "", origin: "", page: 1, pageSize: 20, pages: 1 };
 
     function withRepo(params = {}) {
       const q = new URLSearchParams(params);
@@ -254,8 +264,6 @@
 
       renderEvents("recent-queries", u.recent_queries || [], "query", "q");
       renderEvents("recent-submissions", u.recent_submissions || [], "submit", "s");
-      loadIngestCost();
-      loadQuality();
     }
 
     const ORIGIN_LABELS = { bootstrap: "ingest", agent_feedback: "feedback", agent_submitted: "agent" };
@@ -274,11 +282,21 @@
           }</tbody></table>
           <div class="muted" style="margin-top:6px">Accept rate = canonical / (canonical + rejected) — how often a curated prior from that origin was kept.</div>`
         : `<div class="empty">No priors yet.</div>`;
+      loadIngestCost();
+    }
+
+    // ---- Feedback view ----
+    async function loadFeedback() {
+      const { events } = await (await fetch("/api/feedback-events?" + withRepo())).json();
+      const sEl = document.getElementById("feedback-stream");
+      sEl.innerHTML = events.length
+        ? events.map(renderFeedbackCard).join("")
+        : `<div class="empty">No feedback yet. Agents report it via submit_feedback.</div>`;
 
       const fb = await (await fetch("/api/feedback?" + withRepo())).json();
       const fEl = document.getElementById("feedback-summary");
       if (!fb.by_origin.length) {
-        fEl.innerHTML = `<div class="empty">No feedback yet. Agents report it via submit_feedback.</div>`;
+        fEl.innerHTML = `<div class="empty">No ratings yet.</div>`;
         return;
       }
       const byOrigin = `<table><thead><tr><th>Origin</th><th class="num">Helpful</th>
@@ -296,6 +314,32 @@
           }</tbody></table>`
         : "";
       fEl.innerHTML = byOrigin + noisyTable;
+    }
+
+    function renderFeedbackCard(e) {
+      const rated = (label, priors, cls) => priors.length
+        ? `<div class="kv">${label}: ${priors.map(p =>
+            `<span class="scope ${cls}">${esc(p.pattern)}</span>`).join(", ")}</div>`
+        : "";
+      const produced = e.produced.length
+        ? `<div class="kv">refined into: ${e.produced.map(p =>
+            `<span class="scope">${esc(p.pattern)}</span>`).join(", ")}</div>`
+        : "";
+      const handled = e.handled
+        ? `<span class="badge canonical">handled</span>`
+        : `<span class="badge candidate">unhandled</span>`;
+      return `<div class="card">
+        <div class="meta">
+          ${handled}
+          ${e.area ? `<span class="scope">${esc(e.area)}</span>` : ""}
+          <span class="id">${fmtTime(e.timestamp)}</span>
+        </div>
+        ${e.missing ? `<div class="pattern">${esc(e.missing)}</div>`
+                    : `<div class="rationale">(no gap text — ratings only)</div>`}
+        ${rated("helpful", e.helpful, "hit")}
+        ${rated("noise", e.unhelpful, "miss")}
+        ${produced}
+      </div>`;
     }
 
     async function loadIngestCost() {
@@ -367,14 +411,24 @@
     function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
     function fmtTime(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
+    const VIEWS = {
+      priors: { el: "view-priors", load: refreshPriors },
+      usage: { el: "view-usage", load: loadUsage },
+      quality: { el: "view-quality", load: loadQuality },
+      feedback: { el: "view-feedback", load: loadFeedback },
+    };
+    function showView(name) {
+      for (const [n, v] of Object.entries(VIEWS)) {
+        document.getElementById(v.el).hidden = n !== name;
+      }
+      VIEWS[name].load();
+    }
     document.getElementById("nav").addEventListener("click", e => {
       if (!e.target.dataset.view) return;
       document.querySelectorAll("#nav button").forEach(b => b.classList.remove("active"));
       e.target.classList.add("active");
-      const obs = e.target.dataset.view === "obs";
-      document.getElementById("view-obs").hidden = !obs;
-      document.getElementById("view-priors").hidden = obs;
-      if (obs) loadUsage(); else refreshPriors();
+      state.view = e.target.dataset.view;
+      showView(state.view);
     });
     document.getElementById("tabs").addEventListener("click", e => {
       if (!e.target.dataset.hasOwnProperty("status")) return;
@@ -395,8 +449,7 @@
     });
     document.getElementById("repo").addEventListener("change", e => {
       state.repo = e.target.value; state.page = 1;
-      const onObs = !document.getElementById("view-obs").hidden;
-      if (onObs) loadUsage(); else refreshPriors();
+      showView(state.view);
     });
 
     async function loadVersion() {

@@ -126,6 +126,20 @@ def test_api_feedback_returns_tallies(served):
     assert "priors" in data and "by_origin" in data
 
 
+def test_api_feedback_events_returns_stream(served):
+    _, _, base = served
+    _, body = _get(base + "/api/feedback-events")
+    data = json.loads(body)
+    assert "events" in data and isinstance(data["events"], list)
+
+
+def test_nav_has_usage_quality_feedback_tabs(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    for view in (b'data-view="usage"', b'data-view="quality"', b'data-view="feedback"'):
+        assert view in body
+
+
 def test_post_approve_promotes_prior(served):
     store, prior, base = served
     _, body = _post(base + f"/api/priors/{prior.id}/approve")

@@ -203,6 +203,51 @@ def feedback_analytics(
     return {"priors": priors, "by_origin": by_origin_out}
 
 
+def feedback_events(
+    event_store: EventStore, store: PriorStore, *, repo: str | None = None, recent: int = 100
+) -> dict:
+    """The raw feedback stream — what agents actually told us, newest-first.
+
+    Each event carries the free-text gap ("what was missing"), the priors flagged
+    helpful/unhelpful (resolved for display), whether it's been refined yet, and the
+    candidates it produced once handled. This is the read view behind the Feedback page.
+    """
+    repo_filter = repo or None
+    feedback = [
+        e for e in event_store.list_events(repo=repo_filter)
+        if e.kind is EventKind.FEEDBACK
+    ][:recent]
+
+    def resolve(ids: list[str]) -> list[dict]:
+        out = []
+        for pid in ids:
+            prior = store.get(pid)
+            out.append({
+                "id": pid,
+                "pattern": prior.pattern if prior is not None else "(deleted)",
+                "scope": prior.scope if prior is not None else "",
+                "origin": prior.origin.value if prior is not None else "unknown",
+            })
+        return out
+
+    events = [
+        {
+            "id": e.id,
+            "timestamp": e.timestamp.isoformat(),
+            "area": e.area,
+            "missing": e.missing,
+            "handled": e.handled,
+            "version": e.version,
+            "query_ref": e.query_ref,
+            "helpful": resolve(e.helpful_prior_ids),
+            "unhelpful": resolve(e.unhelpful_prior_ids),
+            "produced": resolve(e.prior_ids) if e.handled else [],
+        }
+        for e in feedback
+    ]
+    return {"events": events}
+
+
 def _set_status(store: PriorStore, prior_id: str, status: Status) -> dict:
     try:
         prior = store.set_status(prior_id, status)
