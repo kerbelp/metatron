@@ -40,6 +40,11 @@ FIRST call the metatron MCP tool `get_priors_for_context(file_path_or_area,
 task_description)` for the area you'll touch, and follow the priors it returns.
 Do not rediscover conventions manually until you've consulted Metatron. If you
 learn a durable new convention, record it via `submit_candidate_learning(...)`.
+When the task is done, call `submit_feedback(query_id, helpful, unhelpful,
+what_was_missing)`: pass the query id from the priors output, mark by [index]
+which priors helped vs were noise, and — most important — report any convention
+Metatron should have known but didn't. Gap reports become candidates for human
+review; nothing you send is auto-applied.
 EOF
 echo "  wrote $REMINDER"
 
@@ -64,6 +69,13 @@ When you find a durable convention not already covered, call
 `submit_candidate_learning(pattern, scope, rationale, confidence)`. It is stored
 as an uncurated candidate for human review and is never treated as canonical
 automatically.
+
+**After completing the task, give feedback** via `submit_feedback(query_id,
+helpful, unhelpful, what_was_missing, missing_scope)`: reference the `query_id`
+Metatron returned with the priors, mark by `[index]` which served priors helped or
+were noise, and — most valuably — record any convention Metatron should have known
+but didn't. Feedback is advisory; gap reports become candidates for human curation
+and nothing is applied to the canonical set automatically.
 <!-- METATRON:END -->
 EOF
   echo "  appended Metatron block to CLAUDE.md"

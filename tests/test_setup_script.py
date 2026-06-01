@@ -53,6 +53,29 @@ def test_fresh_repo_gets_claude_md_block_and_hook(tmp_path):
     assert any("metatron_reminder" in c for c in cmds)
 
 
+def test_reminder_text_guides_feedback(tmp_path):
+    run_setup(tmp_path)
+    reminder = (tmp_path / ".claude" / "metatron_reminder.txt").read_text()
+    assert "submit_feedback" in reminder
+
+
+def test_claude_md_block_guides_feedback(tmp_path):
+    run_setup(tmp_path)
+    assert "submit_feedback" in (tmp_path / "CLAUDE.md").read_text()
+
+
+def test_reminder_is_refreshed_on_rerun_so_guidance_propagates(tmp_path):
+    # The reminder is the channel the hook injects every turn; re-running must
+    # converge it to the current managed text (how already-onboarded repos pick
+    # up new guidance like feedback).
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "metatron_reminder.txt").write_text("stale old reminder\n")
+    run_setup(tmp_path)
+    reminder = (tmp_path / ".claude" / "metatron_reminder.txt").read_text()
+    assert "stale old reminder" not in reminder
+    assert "submit_feedback" in reminder
+
+
 def test_existing_claude_md_is_preserved(tmp_path):
     (tmp_path / "CLAUDE.md").write_text("# My project rules\n\nKeep this line.\n")
     run_setup(tmp_path)
