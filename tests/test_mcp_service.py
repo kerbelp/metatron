@@ -1,6 +1,7 @@
 """Tests for the MCP service logic (retrieval + submission), server-independent."""
 
 from metatron.mcp_server.service import (
+    _tokens,
     format_priors,
     get_priors_for_context,
     submit_candidate_learning,
@@ -238,3 +239,64 @@ def test_format_priors_is_compact_and_names_each_pattern():
 
 def test_format_priors_handles_no_matches():
     assert "no" in format_priors([]).lower()
+
+
+# --- stemming: morphological variants should match on keywords ---
+
+def test_tokens_stem_unifies_morphological_variants():
+    # the task says "owner", the prior says "ownership"; "link" vs "links"
+    assert _tokens("owner") & _tokens("ownership")
+    assert _tokens("link") & _tokens("links")
+    assert _tokens("redirect") & _tokens("redirects")
+
+
+def test_stemming_surfaces_keyword_match_despite_suffix():
+    # prior phrased with "-ship"/"-s" suffixes still matches a bare-stem task
+    store = _store(
+        _canonical(pattern="filler one", scope="app", rationale="x"),
+        _canonical(pattern="filler two", scope="app", rationale="y"),
+        _canonical(pattern="Resolve resource ownership and gate owners",
+                   scope="src/utils/ownership", rationale="z"),
+    )
+    results = get_priors_for_context(
+        store, REPO, "app", "restrict this to the resource owner", limit=8
+    )
+    assert any("ownership" in p.pattern for p in results)
+
+
+# --- reserved slots: a strong cross-scope keyword match is not shut out ---
+
+def test_reserved_slots_surface_cross_scope_keyword_match():
+    # The agent names src/components/ApplicationPage and many generic priors live
+    # there (exact-scope, no task-keyword overlap). One prior elsewhere is the real
+    # answer to the task. Pure scope ranking buries it; reserved slots surface it.
+    area = "src/components/ApplicationPage"
+    generic = [
+        _canonical(pattern=f"structure rule {i}", scope=area, rationale="layout")
+        for i in range(8)
+    ]
+    link_prior = _canonical(
+        pattern="Build internal links through the urls helper instead of hardcoding hrefs",
+        scope="src/utils/i18n", rationale="routing convention",
+    )
+    store = _store(*generic, link_prior)
+
+    results = get_priors_for_context(
+        store, REPO, area,
+        "change the CTA href to /blog/write using internal links", limit=8,
+    )
+    assert any(p.scope == "src/utils/i18n" for p in results), \
+        "the keyword-relevant cross-scope prior should occupy a reserved slot"
+
+
+def test_reserved_slots_still_return_scope_matches_when_no_keyword_signal():
+    # No cross-scope keyword match exists: all 8 slots go to the scope matches.
+    area = "src/components/ApplicationPage"
+    generic = [
+        _canonical(pattern=f"structure rule {i}", scope=area, rationale="layout")
+        for i in range(10)
+    ]
+    store = _store(*generic)
+    results = get_priors_for_context(store, REPO, area, "unrelated task words", limit=8)
+    assert len(results) == 8
+    assert all(p.scope == area for p in results)

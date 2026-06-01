@@ -23,6 +23,13 @@ _CONFIDENCE_WEIGHT = {Confidence.LOW: 1, Confidence.MEDIUM: 2, Confidence.HIGH: 
 _STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "into", "use", "using",
     "add", "should", "when", "your", "you", "are", "but", "not", "all", "any",
+    # Instruction/filler language: common in task phrasing, absent from priors, so
+    # idf (computed over priors) wrongly rates it rare/high. Stop it so keyword
+    # relevance reflects domain terms, not "change the X to Y instead" boilerplate.
+    "change", "find", "its", "only", "instead", "free", "make", "update", "new",
+    "set", "get", "via", "per", "each", "one", "want", "need", "like", "also",
+    # Generic path/structure tokens that carry no domain meaning as keywords.
+    "src", "lib", "app", "index", "components", "component",
 }
 
 # Relevance is scope_weight * _SCOPE_SCALE + idf_keyword_sum + confidence * _CONF_SCALE.
@@ -30,6 +37,9 @@ _STOPWORDS = {
 # priors at the same scope and lets a strong rare-keyword match beat a broad ancestor.
 _SCOPE_SCALE = 10.0
 _CONF_SCALE = 0.1
+# Of the returned slots, hold this many for the best pure task-keyword matches so a
+# relevant prior scoped outside the named area isn't crowded out by same-scope priors.
+_RESERVED_KEYWORD_SLOTS = 3
 
 
 def get_priors_for_context(
@@ -45,24 +55,52 @@ def get_priors_for_context(
     #      agent named (exact/inside > broad ancestor > sibling/none), so naming a
     #      precise sub-path surfaces the prior scoped there rather than generic
     #      advice for its parent directory.
-    #   2. keywords — overlap with the task/area, weighted by inverse document
-    #      frequency across this repo's canonical priors, so rare domain terms
-    #      ("checkout", "webhook") count and boilerplate ("rather than", "commit")
-    #      counts for ~nothing.
-    # A prior with no scope relationship still surfaces on a real keyword match,
-    # but a lone overlap on a corpus-common word carries almost no weight.
+    #   2. keywords — overlap with the *task description*, weighted by inverse
+    #      document frequency across this repo's canonical priors, so rare domain
+    #      terms ("checkout", "webhook") count and boilerplate counts for ~nothing.
+    # Area path segments (src, components, the dir name) are deliberately NOT used as
+    # keywords — they're the scope signal, and as keywords they only inflate every
+    # cross-scope prior with noise. A prior with no scope relationship still surfaces
+    # on a real task keyword match; a lone corpus-common overlap carries almost none.
     priors = store.list(repo=repo, status=Status.CANONICAL)
     idf = _build_idf(priors)
     area_paths = _area_paths(file_path_or_area)
-    query_tokens = _tokens(task_description) | _tokens(file_path_or_area)
+    query_tokens = _tokens(task_description)
 
     scored: list[tuple[Prior, float]] = []
+    by_keyword: list[tuple[Prior, float]] = []
     for prior in priors:
         score = _relevance(prior, area_paths, query_tokens, idf)
         if score > 0:
             scored.append((prior, score))
+        kw = _keyword_score(prior, query_tokens, idf)
+        if kw > 0:
+            by_keyword.append((prior, kw))
     scored.sort(key=lambda ps: ps[1], reverse=True)
-    return [prior for prior, _ in scored[:limit]]
+    by_keyword.sort(key=lambda ps: ps[1], reverse=True)
+
+    # Fill most slots by the scope-led combined score, but reserve a few for the
+    # strongest *task-keyword* matches — otherwise a directory full of generic
+    # same-scope priors (each scoring ~scope*scale) shuts out a genuinely relevant
+    # prior that happens to live elsewhere (e.g. the link/url convention in
+    # src/utils/i18n for an href-editing task). Reserved slots only kick in when
+    # such keyword matches exist; with no keyword signal, scope takes every slot.
+    primary_n = max(0, limit - _RESERVED_KEYWORD_SLOTS) if by_keyword else limit
+    picked: list[Prior] = []
+    seen: set[str] = set()
+
+    def take(pairs: list[tuple[Prior, float]], cap: int) -> None:
+        for prior, _ in pairs:
+            if len(picked) >= cap:
+                break
+            if prior.id not in seen:
+                picked.append(prior)
+                seen.add(prior.id)
+
+    take(scored, primary_n)       # scope-led primary picks
+    take(by_keyword, limit)       # reserved slots: best keyword matches not yet picked
+    take(scored, limit)           # backfill if keyword matches were few
+    return picked[:limit]
 
 
 def submit_candidate_learning(
@@ -178,9 +216,31 @@ def _coerce_confidence(value: str | Confidence) -> Confidence:
         return Confidence.MEDIUM
 
 
+# Light suffix stemmer so morphological variants match: the task says "owner",
+# the prior says "ownership"; "link" vs "links"; "redirect" vs "redirects". Applied
+# to every token (query, prior, and idf) so the vocabulary is consistent. Stripping
+# is iterative and refuses to leave a stem shorter than 3 chars, which keeps short
+# domain words ("api", "css", "user") intact. No "er"/"ers" — it over-stems.
+_STEM_SUFFIXES = (
+    "izations", "ization", "ships", "ship", "ments", "ment", "sions", "sion",
+    "tions", "tion", "ness", "ings", "ing", "ies", "es", "ed", "s",
+)
+
+
+def _stem(tok: str) -> str:
+    changed = True
+    while changed and len(tok) > 3:
+        changed = False
+        for suf in _STEM_SUFFIXES:
+            if tok.endswith(suf) and len(tok) - len(suf) >= 3:
+                tok, changed = tok[: -len(suf)], True
+                break
+    return tok
+
+
 def _tokens(text: str) -> set[str]:
     return {
-        tok
+        _stem(tok)
         for tok in re.split(r"[^a-z0-9]+", text.lower())
         if len(tok) >= 3 and tok not in _STOPWORDS
     }
@@ -222,11 +282,20 @@ def _relevance(
     rare-keyword match still beats a broad ancestor with no keyword overlap.
     """
     scope = _scope_weight(prior.scope, area_paths)
-    overlap = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
-    keywords = sum(idf.get(tok, 0.0) for tok in overlap)
+    keywords = _keyword_score(prior, query_tokens, idf)
     if scope == 0 and keywords == 0:
         return 0.0
     return scope * _SCOPE_SCALE + keywords + _CONFIDENCE_WEIGHT[prior.confidence] * _CONF_SCALE
+
+
+def _keyword_score(prior: Prior, query_tokens: set[str], idf: dict[str, float]) -> float:
+    """idf-weighted overlap between the prior's text and the task/area tokens.
+
+    The pure task-relevance signal — no scope, no confidence — used both inside
+    ``_relevance`` and to pick the reserved keyword slots in retrieval.
+    """
+    overlap = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
+    return sum(idf.get(tok, 0.0) for tok in overlap)
 
 
 def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
