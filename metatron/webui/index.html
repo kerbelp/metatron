@@ -61,6 +61,7 @@
     .badge.approve { background: rgba(63,185,80,.15); color: var(--green); }
     .badge.borderline { background: rgba(210,153,34,.15); color: var(--amber); }
     .badge.reject { background: rgba(248,81,73,.15); color: var(--red); }
+    .badge.origin { background: rgba(139,148,158,.12); color: var(--muted); }
     .triage-reason { color: var(--muted); font-size: 13px; margin-top: 4px; font-style: italic; }
     .scope { color: var(--muted); font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .pattern { font-size: 15px; font-weight: 500; margin: 2px 0 6px; }
@@ -135,6 +136,10 @@
       <div class="stats" id="usage-stats"></div>
       <div class="section-title">Onboarding ingest cost (one-time)</div>
       <div id="ingest-cost"></div>
+      <div class="section-title">Prior quality by origin (ingest vs feedback)</div>
+      <div id="origin-breakdown"></div>
+      <div class="section-title">Feedback — helpful vs noise (advisory)</div>
+      <div id="feedback-summary"></div>
       <div class="card">
         <div>Coverage — queries that returned at least one canonical prior</div>
         <div class="bar"><span id="cov-bar"></span></div>
@@ -196,6 +201,7 @@
             <span class="scope">${p.scope || "(global)"}</span>
             <span class="badge ${p.status}">${p.status}</span>
             ${p.triage && p.triage !== "none" ? `<span class="badge ${p.triage}">${p.triage}</span>` : ""}
+            <span class="badge origin">${originLabel(p.origin)}</span>
             <span class="id">${p.id.slice(0, 8)}</span>
           </div>
           <div class="pattern">${esc(p.pattern)}</div>
@@ -242,6 +248,47 @@
       renderEvents("recent-queries", u.recent_queries || [], "query", "q");
       renderEvents("recent-submissions", u.recent_submissions || [], "submit", "s");
       loadIngestCost();
+      loadQuality();
+    }
+
+    const ORIGIN_LABELS = { bootstrap: "ingest", agent_feedback: "feedback", agent_submitted: "agent" };
+    function originLabel(o) { return ORIGIN_LABELS[o] || o || "?"; }
+    function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
+
+    async function loadQuality() {
+      const ob = await (await fetch("/api/origins?" + withRepo())).json();
+      const oEl = document.getElementById("origin-breakdown");
+      oEl.innerHTML = ob.origins.length
+        ? `<table><thead><tr><th>Origin</th><th class="num">Candidate</th><th class="num">Canonical</th>
+             <th class="num">Rejected</th><th class="num">Accept rate</th></tr></thead><tbody>${
+            ob.origins.map(o => `<tr><td class="scope">${originLabel(o.origin)}</td>
+              <td class="num">${o.candidate}</td><td class="num">${o.canonical}</td>
+              <td class="num">${o.rejected}</td><td class="num">${pct(o.accept_rate)}</td></tr>`).join("")
+          }</tbody></table>
+          <div class="muted" style="margin-top:6px">Accept rate = canonical / (canonical + rejected) — how often a curated prior from that origin was kept.</div>`
+        : `<div class="empty">No priors yet.</div>`;
+
+      const fb = await (await fetch("/api/feedback?" + withRepo())).json();
+      const fEl = document.getElementById("feedback-summary");
+      if (!fb.by_origin.length) {
+        fEl.innerHTML = `<div class="empty">No feedback yet. Agents report it via submit_feedback.</div>`;
+        return;
+      }
+      const byOrigin = `<table><thead><tr><th>Origin</th><th class="num">Helpful</th>
+          <th class="num">Noise</th><th class="num">Helpful rate</th></tr></thead><tbody>${
+          fb.by_origin.map(o => `<tr><td class="scope">${originLabel(o.origin)}</td>
+            <td class="num">${o.helpful}</td><td class="num">${o.noise}</td>
+            <td class="num">${pct(o.helpful_rate)}</td></tr>`).join("")
+        }</tbody></table>`;
+      const noisy = fb.priors.filter(p => p.noise > 0).slice(0, 8);
+      const noisyTable = noisy.length
+        ? `<div class="muted" style="margin-top:10px">Flagged as noise — review candidates for demotion:</div>
+           <table><thead><tr><th>Pattern</th><th>Origin</th><th class="num">Helpful</th><th class="num">Noise</th></tr></thead><tbody>${
+            noisy.map(p => `<tr><td>${esc(p.pattern)}</td><td class="scope">${originLabel(p.origin)}</td>
+              <td class="num">${p.helpful}</td><td class="num">${p.noise}</td></tr>`).join("")
+          }</tbody></table>`
+        : "";
+      fEl.innerHTML = byOrigin + noisyTable;
     }
 
     async function loadIngestCost() {

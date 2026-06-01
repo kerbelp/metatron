@@ -89,6 +89,13 @@ def test_footer_markup_present_in_html(served):
     assert b'id="version"' in body
 
 
+def test_quality_analytics_markup_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    assert b'id="origin-breakdown"' in body
+    assert b'id="feedback-summary"' in body
+
+
 def test_api_origins_returns_breakdown(served):
     _, _, base = served
     _, body = _get(base + "/api/origins")
