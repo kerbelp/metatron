@@ -11,7 +11,7 @@ Candidates (JSON):
 {priors}
 
 Return ONLY a JSON array, one object per candidate, each with exactly:
-  "id": the candidate's id (copy it verbatim),
+  "n": the candidate's number (the integer "n" field, copied exactly),
   "verdict": "approve" | "borderline" | "reject",
   "reason": one short sentence justifying the verdict.
 Do not include any prose outside the JSON array.

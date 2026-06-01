@@ -138,7 +138,10 @@ def _cmd_triage(args, store, provider, out) -> int:
 
     results = PriorJudge(provider).evaluate(candidates)
     for prior_id, (verdict, reason) in results.items():
-        store.set_triage(prior_id, verdict, reason)
+        try:
+            store.set_triage(prior_id, verdict, reason)
+        except KeyError:
+            continue  # defensive: ignore any verdict that doesn't map to a prior
 
     counts = Counter(verdict.value for verdict, _ in results.values())
     print(

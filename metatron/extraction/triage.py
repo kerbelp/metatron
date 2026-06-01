@@ -39,14 +39,20 @@ class PriorJudge:
         self._batch_size = max(1, batch_size)
 
     def evaluate(self, priors: list[Prior]) -> dict[str, tuple[TriageVerdict, str]]:
-        """Return ``{prior_id: (verdict, reason)}`` for the given candidates."""
+        """Return ``{prior_id: (verdict, reason)}`` for the given candidates.
+
+        Candidates are numbered per batch and mapped back by index, so the judge
+        never echoes a uuid (which it mangles); a bogus/out-of-range index from
+        the judge is ignored rather than fatal.
+        """
         results: dict[str, tuple[TriageVerdict, str]] = {}
         for batch in _batches(priors, self._batch_size):
             prompt = render(self._template, priors=_format_priors(batch))
             for item in _parse_json_array(self._provider.complete(prompt)):
-                prior_id = item.get("id")
-                if prior_id:
-                    results[prior_id] = (
+                index = item.get("n")
+                if isinstance(index, int) and 1 <= index <= len(batch):
+                    prior = batch[index - 1]
+                    results[prior.id] = (
                         _parse_verdict(item.get("verdict")),
                         item.get("reason", ""),
                     )
@@ -62,13 +68,13 @@ def _format_priors(priors: list[Prior]) -> str:
     return json.dumps(
         [
             {
-                "id": p.id,
+                "n": i,  # 1-based index within this batch; map back locally
                 "pattern": p.pattern,
                 "scope": p.scope,
                 "rationale": p.rationale,
                 "confidence": p.confidence.value,
             }
-            for p in priors
+            for i, p in enumerate(priors, start=1)
         ],
         indent=2,
     )

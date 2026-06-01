@@ -111,8 +111,8 @@ class JudgeProvider(LLMProvider):
         import json
         import re
 
-        ids = re.findall(r'"id":\s*"([^"]+)"', prompt)
-        return json.dumps([{"id": i, "verdict": "approve", "reason": "ok"} for i in ids])
+        ns = [int(n) for n in re.findall(r'"n":\s*(\d+)', prompt)]
+        return json.dumps([{"n": n, "verdict": "approve", "reason": "ok"} for n in ns])
 
 
 def test_triage_sets_advisory_verdicts_on_candidates():

@@ -1,4 +1,8 @@
-"""Tests for the triage judge (advisory scoring of candidate priors)."""
+"""Tests for the triage judge (advisory scoring of candidate priors).
+
+Candidates are presented to the judge with a small integer index (``n``) and
+mapped back locally — the judge never has to echo a uuid, which it gets wrong.
+"""
 
 import json
 import re
@@ -10,8 +14,8 @@ from metatron.extraction.triage import PriorJudge, TriageError
 from metatron.models import Origin, Prior, TriageVerdict
 
 
-class IdAwareJudge(LLMProvider):
-    """Returns the given verdict for every prior id it sees in the prompt."""
+class IndexJudge(LLMProvider):
+    """Returns the given verdict for every candidate index it sees in the prompt."""
 
     def __init__(self, verdict: str = "approve") -> None:
         self.verdict = verdict
@@ -19,8 +23,8 @@ class IdAwareJudge(LLMProvider):
 
     def complete(self, prompt: str) -> str:
         self.calls += 1
-        ids = re.findall(r'"id":\s*"([^"]+)"', prompt)
-        return json.dumps([{"id": i, "verdict": self.verdict, "reason": "because"} for i in ids])
+        ns = [int(n) for n in re.findall(r'"n":\s*(\d+)', prompt)]
+        return json.dumps([{"n": n, "verdict": self.verdict, "reason": "because"} for n in ns])
 
 
 class StaticJudge(LLMProvider):
@@ -36,26 +40,40 @@ def _prior(pid: str) -> Prior:
 
 
 def test_evaluate_returns_a_verdict_and_reason_per_prior():
-    priors = [_prior("a"), _prior("b")]
-    result = PriorJudge(IdAwareJudge("approve")).evaluate(priors)
-    assert set(result) == {"a", "b"}
-    assert result["a"] == (TriageVerdict.APPROVE, "because")
+    priors = [_prior("aaaa"), _prior("bbbb")]
+    result = PriorJudge(IndexJudge("approve")).evaluate(priors)
+    assert set(result) == {"aaaa", "bbbb"}
+    assert result["aaaa"] == (TriageVerdict.APPROVE, "because")
 
 
 def test_batches_candidates_to_limit_calls():
-    judge = IdAwareJudge()
+    judge = IndexJudge()
     PriorJudge(judge, batch_size=2).evaluate([_prior(str(i)) for i in range(5)])
     assert judge.calls == 3  # ceil(5/2)
 
 
+def test_maps_indices_back_to_real_ids_per_batch():
+    # 3 priors, batch_size 2: batch1 = [x,y] (n=1,2), batch2 = [z] (n=1)
+    priors = [_prior("x"), _prior("y"), _prior("z")]
+    result = PriorJudge(IndexJudge("reject"), batch_size=2).evaluate(priors)
+    assert set(result) == {"x", "y", "z"}
+
+
 def test_unknown_verdict_defaults_to_borderline():
-    resp = json.dumps([{"id": "a", "verdict": "huh", "reason": "x"}])
+    resp = json.dumps([{"n": 1, "verdict": "huh", "reason": "x"}])
     result = PriorJudge(StaticJudge(resp)).evaluate([_prior("a")])
     assert result["a"][0] is TriageVerdict.BORDERLINE
 
 
+def test_out_of_range_or_bogus_index_is_skipped_not_crashed():
+    # The judge hallucinates an index that doesn't exist — must be ignored.
+    resp = json.dumps([{"n": 99, "verdict": "approve", "reason": "x"}])
+    result = PriorJudge(StaticJudge(resp)).evaluate([_prior("a")])
+    assert result == {}
+
+
 def test_handles_markdown_fenced_json():
-    resp = "```json\n" + json.dumps([{"id": "a", "verdict": "reject", "reason": "vague"}]) + "\n```"
+    resp = "```json\n" + json.dumps([{"n": 1, "verdict": "reject", "reason": "vague"}]) + "\n```"
     result = PriorJudge(StaticJudge(resp)).evaluate([_prior("a")])
     assert result["a"][0] is TriageVerdict.REJECT
 
