@@ -104,6 +104,13 @@ combined with the event stamping below — lets us track quality across builds.
   - `helpful_prior_ids: list[str]`, `unhelpful_prior_ids: list[str]` (JSON).
   - `missing: str` — the gap text (also copied onto the created candidate's rationale).
 - `EventStore` gains `get(event_id)` so `submit_feedback` can resolve indices.
+- `Prior` gains `created_version: str` — the build that **created/extracted** the
+  prior (the code-side complement to the existing `model` field, which records the
+  LLM). Stamped at creation from the cached `version_string()`, immutable thereafter
+  (re-ingest produces new candidates, so it never churns). This is the *extraction*
+  axis: `Event.version` measures serving quality over builds, `Prior.created_version`
+  measures extraction quality over builds (e.g. curation reject-rate by extractor
+  build). Migrated via `_ensure_column`.
 
 No new tables; feedback is a usage event in the existing `events` table.
 
@@ -120,6 +127,13 @@ No new tables; feedback is a usage event in the existing `events` table.
   be grouped by build — the basis for "did this change actually improve serving?"
   (Phase-4 surfaces the per-prior tally; a build-over-build view can follow once
   there is enough feedback to be meaningful.)
+- **Feedback vs ingest (origin breakdown):** since `Prior.origin` distinguishes
+  `bootstrap` (ingest) from `agent_feedback` (feedback) and `agent_submitted`,
+  Phase 4 shows, per origin, the **curation accept-rate**
+  (`canonical / (canonical + rejected)`) and the **helpful-rate** — directly
+  answering "are feedback-born priors better than ingest-born ones?" This needs
+  `origin` added as a `PriorStore.list/count` filter dimension (alongside the
+  existing `model`/`triage` filters) — a small, additive change folded into Phase 4.
 
 ## Agent guidance
 
