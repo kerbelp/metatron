@@ -34,8 +34,12 @@ def _settings(target: Path) -> dict:
 
 
 def _userprompt_hook_commands(settings: dict) -> list[str]:
+    return _hook_commands(settings, "UserPromptSubmit")
+
+
+def _hook_commands(settings: dict, event: str) -> list[str]:
     cmds = []
-    for entry in settings.get("hooks", {}).get("UserPromptSubmit", []):
+    for entry in settings.get("hooks", {}).get(event, []):
         for h in entry.get("hooks", []):
             cmds.append(h.get("command", ""))
     return cmds
@@ -74,6 +78,28 @@ def test_reminder_is_refreshed_on_rerun_so_guidance_propagates(tmp_path):
     reminder = (tmp_path / ".claude" / "metatron_reminder.txt").read_text()
     assert "stale old reminder" not in reminder
     assert "submit_feedback" in reminder
+
+
+def test_installs_stop_hook_for_feedback_reminder(tmp_path):
+    run_setup(tmp_path)
+
+    assert (tmp_path / ".claude" / "metatron_feedback_reminder.py").exists()
+    stop_cmds = _hook_commands(_settings(tmp_path), "Stop")
+    assert any("metatron_feedback_reminder" in c for c in stop_cmds)
+
+
+def test_stop_hook_is_idempotent_and_preserves_existing(tmp_path):
+    claude_dir = tmp_path / ".claude"
+    claude_dir.mkdir()
+    (claude_dir / "settings.json").write_text(
+        json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo bye"}]}]}})
+    )
+    run_setup(tmp_path)
+    run_setup(tmp_path)  # twice: must not duplicate
+
+    stop_cmds = _hook_commands(_settings(tmp_path), "Stop")
+    assert "echo bye" in stop_cmds  # existing Stop hook kept
+    assert sum("metatron_feedback_reminder" in c for c in stop_cmds) == 1
 
 
 def test_existing_claude_md_is_preserved(tmp_path):

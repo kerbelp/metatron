@@ -48,6 +48,13 @@ review; nothing you send is auto-applied.
 EOF
 echo "  wrote $REMINDER"
 
+# --- 1b. Stop-hook script (managed copy, refreshed each run) ----------------
+# Nudges the agent to submit_feedback when it finishes a task where it consulted
+# Metatron — CLAUDE.md guidance alone is unreliable.
+FEEDBACK_HOOK="$CLAUDE_DIR/metatron_feedback_reminder.py"
+cp "$SCRIPT_DIR/metatron_feedback_reminder.py" "$FEEDBACK_HOOK"
+echo "  wrote $FEEDBACK_HOOK"
+
 # --- 2. CLAUDE.md block (append once, between markers) ----------------------
 if [[ -f "$CLAUDE_MD" ]] && grep -q "METATRON:START" "$CLAUDE_MD"; then
   echo "  CLAUDE.md already has the Metatron block — left as is"
@@ -108,6 +115,36 @@ else:
         json.dump(data, f, indent=2)
         f.write("\n")
     print(f"  added UserPromptSubmit hook to {path}")
+PYEOF
+
+# --- 3b. Stop hook (merge into settings.json, additive) ---------------------
+STOP_CMD='python3 "${CLAUDE_PROJECT_DIR:-.}/.claude/metatron_feedback_reminder.py"'
+python3 - "$SETTINGS" "$STOP_CMD" <<'PYEOF'
+import json, os, sys
+
+path, cmd = sys.argv[1], sys.argv[2]
+data = {}
+if os.path.exists(path):
+    with open(path) as f:
+        text = f.read().strip()
+    data = json.loads(text) if text else {}
+
+hooks = data.setdefault("hooks", {})
+stop = hooks.setdefault("Stop", [])
+
+already = any(
+    "metatron_feedback_reminder" in h.get("command", "")
+    for entry in stop
+    for h in entry.get("hooks", [])
+)
+if already:
+    print("  settings.json already has the Metatron Stop hook — left as is")
+else:
+    stop.append({"hooks": [{"type": "command", "command": cmd}]})
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+        f.write("\n")
+    print(f"  added Stop hook to {path}")
 PYEOF
 
 # --- 4. MCP server config (.mcp.json, additive) ----------------------------
