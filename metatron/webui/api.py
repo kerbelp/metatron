@@ -207,30 +207,61 @@ def feedback_analytics(
 
 
 def feedback_events(
-    event_store: EventStore, store: PriorStore, *, repo: str | None = None, recent: int = 100
+    event_store: EventStore,
+    store: PriorStore,
+    *,
+    repo: str | None = None,
+    status: str = "all",
+    recent: int = 100,
 ) -> dict:
     """The raw feedback stream — what agents actually told us, newest-first.
 
     Each event carries the free-text gap ("what was missing"), the priors flagged
     helpful/unhelpful (resolved for display), whether it's been refined yet, and the
-    candidates it produced once handled. This is the read view behind the Feedback page.
+    candidates it produced once handled. ``status`` filters to "handled"/"unhandled"
+    ("all" by default). For a handled event, each produced candidate carries its
+    current curation status plus usefulness signals tallied from later usage — how
+    often it was served by a query and rated helpful/unhelpful — so curators can see
+    whether a refined prior is actually earning its place. This is the read view
+    behind the Feedback page.
     """
     repo_filter = repo or None
-    feedback = [
-        e for e in event_store.list_events(repo=repo_filter)
-        if e.kind is EventKind.FEEDBACK
-    ][:recent]
+    all_events = list(event_store.list_events(repo=repo_filter))
 
-    def resolve(ids: list[str]) -> list[dict]:
+    # Tally usefulness per prior id from later usage: served = appearances in QUERY
+    # results; helpful/unhelpful = ratings on subsequent feedback events.
+    served, helpful_n, unhelpful_n = Counter(), Counter(), Counter()
+    for e in all_events:
+        if e.kind is EventKind.QUERY:
+            served.update(e.prior_ids)
+        elif e.kind is EventKind.FEEDBACK:
+            helpful_n.update(e.helpful_prior_ids)
+            unhelpful_n.update(e.unhelpful_prior_ids)
+
+    feedback = [e for e in all_events if e.kind is EventKind.FEEDBACK]
+    if status == "handled":
+        feedback = [e for e in feedback if e.handled]
+    elif status == "unhandled":
+        feedback = [e for e in feedback if not e.handled]
+    feedback = feedback[:recent]
+
+    def resolve(ids: list[str], *, with_stats: bool = False) -> list[dict]:
         out = []
         for pid in ids:
             prior = store.get(pid)
-            out.append({
+            entry = {
                 "id": pid,
                 "pattern": prior.pattern if prior is not None else "(deleted)",
                 "scope": prior.scope if prior is not None else "",
                 "origin": prior.origin.value if prior is not None else "unknown",
-            })
+            }
+            if with_stats:
+                entry["rationale"] = prior.rationale if prior is not None else ""
+                entry["status"] = prior.status.value if prior is not None else "deleted"
+                entry["served"] = served.get(pid, 0)
+                entry["helpful"] = helpful_n.get(pid, 0)
+                entry["unhelpful"] = unhelpful_n.get(pid, 0)
+            out.append(entry)
         return out
 
     events = [
@@ -244,7 +275,7 @@ def feedback_events(
             "query_ref": e.query_ref,
             "helpful": resolve(e.helpful_prior_ids),
             "unhelpful": resolve(e.unhelpful_prior_ids),
-            "produced": resolve(e.prior_ids) if e.handled else [],
+            "produced": resolve(e.prior_ids, with_stats=True) if e.handled else [],
         }
         for e in feedback
     ]

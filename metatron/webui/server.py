@@ -89,9 +89,13 @@ def _build_handler(
                 else:
                     self._send_json({"priors": [], "by_origin": []})
             elif path == "/api/feedback-events":
-                repo = _first(parse_qs(parts.query), "repo")
+                query = parse_qs(parts.query)
+                repo = _first(query, "repo")
+                status = _first(query, "status") or "all"
                 if event_store is not None:
-                    self._send_json(api.feedback_events(event_store, store, repo=repo))
+                    self._send_json(
+                        api.feedback_events(event_store, store, repo=repo, status=status)
+                    )
                 else:
                     self._send_json({"events": []})
             elif path == "/api/ingest-cost":

@@ -148,6 +148,20 @@ def test_api_feedback_events_returns_stream(served):
     assert "events" in data and isinstance(data["events"], list)
 
 
+def test_feedback_filter_tabs_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    for f in (b'data-fstatus="all"', b'data-fstatus="unhandled"', b'data-fstatus="handled"'):
+        assert f in body
+
+
+def test_api_feedback_events_accepts_status_filter(served):
+    _, _, base = served
+    _, body = _get(base + "/api/feedback-events?status=handled")
+    data = json.loads(body)
+    assert "events" in data and isinstance(data["events"], list)
+
+
 def test_nav_has_usage_quality_feedback_tabs(served):
     _, _, base = served
     _, body = _get(base + "/")

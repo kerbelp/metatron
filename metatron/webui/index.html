@@ -98,6 +98,11 @@
     .detail-prior .pat { margin: 3px 0; }
     .muted { color: var(--muted); font-size: 13px; }
     .kv { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+    .produced { border-left: 2px solid var(--border); padding-left: 10px; margin-top: 6px; }
+    .prow { padding: 6px 0; border-top: 1px solid var(--border); }
+    .prow:first-child { border-top: none; }
+    .prow-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
+    .prow-actions { margin-left: auto; display: flex; gap: 6px; }
   </style>
 </head>
 <body>
@@ -165,6 +170,11 @@
 
     <section id="view-feedback" hidden>
       <div class="section-title">Feedback from agents (what was missing)</div>
+      <div class="tabs" id="feedback-filter">
+        <button class="tab active" data-fstatus="all">All</button>
+        <button class="tab" data-fstatus="unhandled">Unhandled</button>
+        <button class="tab" data-fstatus="handled">Handled</button>
+      </div>
       <div id="feedback-stream"></div>
       <div class="section-title">Helpful vs noise (advisory)</div>
       <div id="feedback-summary"></div>
@@ -173,7 +183,7 @@
   <footer id="footer">metatron · <span id="version">…</span></footer>
 
   <script>
-    const state = { view: "priors", repo: "", status: "candidate", scope: "", search: "", triage: "", origin: "", page: 1, pageSize: 20, pages: 1 };
+    const state = { view: "priors", repo: "", status: "candidate", scope: "", search: "", triage: "", origin: "", page: 1, pageSize: 20, pages: 1, feedbackStatus: "all" };
 
     function withRepo(params = {}) {
       const q = new URLSearchParams(params);
@@ -289,11 +299,11 @@
 
     // ---- Feedback view ----
     async function loadFeedback() {
-      const { events } = await (await fetch("/api/feedback-events?" + withRepo())).json();
+      const { events } = await (await fetch("/api/feedback-events?" + withRepo({ status: state.feedbackStatus }))).json();
       const sEl = document.getElementById("feedback-stream");
       sEl.innerHTML = events.length
         ? events.map(renderFeedbackCard).join("")
-        : `<div class="empty">No feedback yet. Agents report it via submit_feedback.</div>`;
+        : `<div class="empty">No ${state.feedbackStatus === "all" ? "" : state.feedbackStatus + " "}feedback yet. Agents report it via submit_feedback.</div>`;
 
       const fb = await (await fetch("/api/feedback?" + withRepo())).json();
       const fEl = document.getElementById("feedback-summary");
@@ -324,9 +334,11 @@
             `<span class="scope ${cls}">${esc(p.pattern)}</span>`).join(", ")}</div>`
         : "";
       const produced = e.produced.length
-        ? `<div class="kv">refined into: ${e.produced.map(p =>
-            `<span class="scope">${esc(p.pattern)}</span>`).join(", ")}</div>`
-        : "";
+        ? `<div class="produced">
+             <div class="muted" style="margin:8px 0 4px">Refined into ${e.produced.length} candidate prior(s):</div>
+             ${e.produced.map(renderProducedPrior).join("")}
+           </div>`
+        : (e.handled ? `<div class="muted" style="margin-top:6px">Handled — ratings only, no priors produced.</div>` : "");
       const handled = e.handled
         ? `<span class="badge canonical">handled</span>`
         : `<span class="badge candidate">unhandled</span>`;
@@ -342,6 +354,29 @@
         ${rated("noise", e.unhelpful, "miss")}
         ${produced}
       </div>`;
+    }
+
+    // A single candidate produced by refinement: its curation status, the usefulness
+    // it has earned since (served / helpful / noise), and inline approve/reject.
+    function renderProducedPrior(p) {
+      const badge = `<span class="badge ${p.status}">${p.status}</span>`;
+      const stats = `<span class="muted" style="margin-left:8px">served ${p.served} · 👍 ${p.helpful} · 👎 ${p.unhelpful}</span>`;
+      const actions = p.status === "candidate"
+        ? `<span class="prow-actions">
+             <button class="act approve" onclick="actFb('${p.id}','approve')">Approve</button>
+             <button class="act reject" onclick="actFb('${p.id}','reject')">Reject</button>
+           </span>`
+        : "";
+      return `<div class="prow">
+        <div class="prow-head">${badge}${p.scope ? `<span class="scope">${esc(p.scope)}</span>` : ""}${stats}${actions}</div>
+        <div class="pattern">${esc(p.pattern)}</div>
+        ${p.rationale ? `<div class="rationale">${esc(p.rationale)}</div>` : ""}
+      </div>`;
+    }
+
+    async function actFb(id, action) {
+      await fetch(`/api/priors/${id}/${action}`, { method: "POST" });
+      await loadFeedback();
     }
 
     async function loadIngestCost() {
@@ -434,9 +469,15 @@
     });
     document.getElementById("tabs").addEventListener("click", e => {
       if (!e.target.dataset.hasOwnProperty("status")) return;
-      document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll("#tabs .tab").forEach(t => t.classList.remove("active"));
       e.target.classList.add("active");
       state.status = e.target.dataset.status; state.page = 1; loadPriors();
+    });
+    document.getElementById("feedback-filter").addEventListener("click", e => {
+      if (!e.target.dataset.hasOwnProperty("fstatus")) return;
+      document.querySelectorAll("#feedback-filter .tab").forEach(t => t.classList.remove("active"));
+      e.target.classList.add("active");
+      state.feedbackStatus = e.target.dataset.fstatus; loadFeedback();
     });
     let scopeTimer;
     document.getElementById("scope").addEventListener("input", e => {

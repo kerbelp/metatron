@@ -7,7 +7,15 @@ import pytest
 from metatron.events import Event, EventKind
 from metatron.models import Origin, Prior, Status
 from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
-from metatron.webui.api import approve, ingest_cost, list_priors, reject, stats, usage
+from metatron.webui.api import (
+    approve,
+    feedback_events,
+    ingest_cost,
+    list_priors,
+    reject,
+    stats,
+    usage,
+)
 
 
 @pytest.fixture
@@ -139,6 +147,51 @@ def test_usage_splits_kinds_and_resolves_returned_priors():
     assert q["priors"][0]["pattern"] == "use zones"
     assert q["priors"][0]["scope"] == "app"
     json.dumps(result)  # must be serializable
+
+
+def test_feedback_events_filters_by_handled_status():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK, missing="gap A", handled=False))
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK, missing="gap B", handled=True))
+
+    assert len(feedback_events(events, store)["events"]) == 2
+    assert len(feedback_events(events, store, status="all")["events"]) == 2
+
+    unhandled = feedback_events(events, store, status="unhandled")["events"]
+    assert [e["missing"] for e in unhandled] == ["gap A"]
+    assert all(e["handled"] is False for e in unhandled)
+
+    handled = feedback_events(events, store, status="handled")["events"]
+    assert [e["missing"] for e in handled] == ["gap B"]
+    assert all(e["handled"] is True for e in handled)
+
+
+def test_feedback_events_produced_priors_carry_status_and_usefulness():
+    store = SQLitePriorStore(":memory:")
+    refined = Prior(repo="r", pattern="refined rule", scope="app", rationale="why",
+                    origin=Origin.AGENT_FEEDBACK, status=Status.CANDIDATE)
+    store.add(refined)
+    events = SQLiteEventStore(":memory:")
+    # the handled feedback that produced the candidate (mark_handled stores produced
+    # ids on the feedback event's prior_ids)
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK, missing="gap",
+                        handled=True, prior_ids=[refined.id]))
+    # the produced prior later gets served by a query, then rated helpful once
+    events.record(Event(repo="r", kind=EventKind.QUERY, area="app",
+                        result_count=1, prior_ids=[refined.id]))
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK,
+                        helpful_prior_ids=[refined.id], handled=True))
+
+    handled = feedback_events(events, store, status="handled")["events"]
+    produced = next(e for e in handled if e["missing"] == "gap")["produced"]
+    assert len(produced) == 1
+    p = produced[0]
+    assert p["status"] == "candidate"
+    assert p["rationale"] == "why"
+    assert p["served"] == 1
+    assert p["helpful"] == 1
+    assert p["unhelpful"] == 0
 
 
 def test_ingest_cost_returns_runs_with_estimated_dollars():
