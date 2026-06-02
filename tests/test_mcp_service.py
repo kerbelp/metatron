@@ -290,6 +290,38 @@ def test_stemmer_avoids_false_collisions():
     assert not (_tokens("access control") & _tokens("process queue"))
 
 
+# --- P1b: alias canonicalization + code-literal preservation ---
+
+def test_alias_unifies_link_vocabulary():
+    # href/url/link are the same hyperlink-target concept -> one canonical token.
+    # (route/anchor/slug deliberately excluded — different concept, hurts precision.)
+    assert _tokens("href") == _tokens("url") == _tokens("link") == _tokens("hyperlink")
+
+
+def test_alias_unifies_auth_vocabulary():
+    assert _tokens("clerk") == _tokens("authentication") == _tokens("authorize")
+
+
+def test_alias_closes_href_url_vocabulary_gap():
+    # task says "href"; the relevant prior says only "urls/links" and lives elsewhere.
+    # Without aliasing the only overlap is the (common) word "dashboard" -> filtered.
+    area = "src/components/Button"
+    filler = [_canonical(pattern=f"compose layout piece {i}", scope=area, rationale="x")
+              for i in range(4)]
+    commons = [_canonical(pattern=f"dashboard widget {i} loads data", scope=f"src/d{i}", rationale="r")
+               for i in range(6)]  # make "dashboard" common (low idf)
+    link_prior = _canonical(pattern="build dashboard links through the urls helper",
+                            scope="src/utils/i18n", rationale="r")
+    store = _store(*filler, *commons, link_prior)
+    results = get_priors_for_context(store, REPO, area, "fix the href on the dashboard", limit=8)
+    assert any(p.scope == "src/utils/i18n" for p in results)
+
+
+def test_code_literal_preserved_as_single_token():
+    assert "order_created" in _tokens("mirror the order_created webhook chain")
+    assert "db_insertapplication" in _tokens("call db.insertApplication carefully")
+
+
 def test_stemming_surfaces_keyword_match_despite_suffix():
     # prior phrased with "-ship"/"-s" suffixes still matches a bare-stem task
     store = _store(

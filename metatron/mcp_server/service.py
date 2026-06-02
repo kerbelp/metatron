@@ -43,6 +43,20 @@ _CONF_SCALE = 0.1
 # Stops a lone common token (e.g. "write") from admitting off-topic filler.
 _MIN_KEYWORD_HITS = 2
 
+# Curated synonym groups (P1b). Members of a group canonicalize to one token so a
+# task's word matches a prior's synonym — closing the lexical vocabulary gap (a task
+# says "href", the prior says "url"/"link"). Keep this tight and high-confidence:
+# over-broad groups manufacture false matches. Stemming is applied to members at load.
+_ALIAS_GROUPS = (
+    # hyperlink target — kept narrow on purpose. "route"/"anchor"/"slug" are a
+    # *different* concept (server routing, TOC anchors); folding them in here made
+    # generic routing/anchor priors spuriously match href tasks and crowd out the
+    # genuinely relevant cross-scope priors.
+    ("href", "url", "urls", "link", "links", "hyperlink"),
+    # authentication / authorization
+    ("auth", "authn", "authentication", "authenticate", "authorize", "authorization", "login", "signin", "clerk", "session"),
+)
+
 
 def get_priors_for_context(
     store: PriorStore,
@@ -240,12 +254,30 @@ def _stem(tok: str) -> str:
     return tok
 
 
+# alias member (stemmed) -> canonical token (stemmed first member of its group)
+_CANONICAL_TOKEN: dict[str, str] = {
+    _stem(member): _stem(group[0])
+    for group in _ALIAS_GROUPS
+    for member in group
+}
+
+# Identifiers like order_created / db.insertApplication / search_index: keep the whole
+# literal as one token (rare -> high idf -> strong evidence), not just its split parts.
+# camelCase already survives the splitter (no separator), so we only need _ and . forms.
+_CODE_LITERAL_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[_.][A-Za-z0-9]+)+")
+
+
+def _code_literals(text: str) -> set[str]:
+    return {m.lower().replace(".", "_") for m in _CODE_LITERAL_RE.findall(text)}
+
+
 def _tokens(text: str) -> set[str]:
-    return {
-        _stem(tok)
-        for tok in re.split(r"[^a-z0-9]+", text.lower())
-        if len(tok) >= 3 and tok not in _STOPWORDS
-    }
+    words = set()
+    for tok in re.split(r"[^a-z0-9]+", text.lower()):
+        if len(tok) >= 3 and tok not in _STOPWORDS:
+            stem = _stem(tok)
+            words.add(_CANONICAL_TOKEN.get(stem, stem))
+    return words | _code_literals(text)
 
 
 def _build_idf(priors: list[Prior]) -> dict[str, float]:
