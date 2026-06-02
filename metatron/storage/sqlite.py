@@ -100,10 +100,11 @@ class SQLitePriorStore(PriorStore):
         model: str | None = None,
         triage: "TriageVerdict | None" = None,
         origin: "Origin | None" = None,
+        search: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
-        where, params = _filter(repo, status, scope, model, triage, origin)
+        where, params = _filter(repo, status, scope, model, triage, origin, search)
         sql = f"SELECT * FROM priors{where} ORDER BY created_at DESC, id"
         if limit is not None:
             sql += " LIMIT ? OFFSET ?"
@@ -120,8 +121,9 @@ class SQLitePriorStore(PriorStore):
         model: str | None = None,
         triage: "TriageVerdict | None" = None,
         origin: "Origin | None" = None,
+        search: str | None = None,
     ) -> int:
-        where, params = _filter(repo, status, scope, model, triage, origin)
+        where, params = _filter(repo, status, scope, model, triage, origin, search)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM priors{where}", params)
         return cur.fetchone()[0]
 
@@ -328,6 +330,7 @@ def _filter(
     model: str | None = None,
     triage=None,
     origin=None,
+    search: str | None = None,
 ) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
@@ -349,6 +352,10 @@ def _filter(
     if origin is not None:
         clauses.append("origin = ?")
         params.append(origin.value)
+    if search:
+        clauses.append("(LOWER(pattern) LIKE ? OR LOWER(rationale) LIKE ?)")
+        like = f"%{search.lower()}%"
+        params.extend([like, like])
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     return where, params
 

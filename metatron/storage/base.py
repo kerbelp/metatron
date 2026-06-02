@@ -32,13 +32,15 @@ class PriorStore(ABC):
         model: str | None = None,
         triage: TriageVerdict | None = None,
         origin: Origin | None = None,
+        search: str | None = None,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[Prior]:
         """Return priors newest-first, optionally filtered and paginated.
 
         Filters by exact ``repo``, ``status``, ``scope``, ``model``, ``triage`` and
-        ``origin``; ``limit``/``offset`` paginate.
+        ``origin``; ``search`` is a case-insensitive substring over pattern/rationale;
+        ``limit``/``offset`` paginate.
         """
 
     @abstractmethod
@@ -51,6 +53,7 @@ class PriorStore(ABC):
         model: str | None = None,
         triage: TriageVerdict | None = None,
         origin: Origin | None = None,
+        search: str | None = None,
     ) -> int:
         """Count priors matching the (optional) filters."""
 

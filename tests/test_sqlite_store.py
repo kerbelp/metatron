@@ -41,6 +41,30 @@ def test_sqlite_store_is_a_prior_store(store):
     assert isinstance(store, PriorStore)
 
 
+def test_search_matches_pattern_and_rationale_case_insensitively(store):
+    store.add(_prior(pattern="Keep review output positive: emit Highlights only",
+                     rationale="avoid disparaging listed apps", scope="src/review"))
+    store.add(_prior(pattern="Gate dashboard access via Clerk",
+                     rationale="auth", scope="src/dashboard"))
+
+    by_pattern = store.list(search="highlights")
+    assert [p.scope for p in by_pattern] == ["src/review"]
+
+    by_rationale = store.list(search="DISPARAGING")  # case-insensitive
+    assert [p.scope for p in by_rationale] == ["src/review"]
+
+    assert store.count(search="clerk") == 1
+    assert store.count(search="nonexistent term") == 0
+
+
+def test_search_combines_with_other_filters(store):
+    store.add(_prior(pattern="positive review highlights", scope="a", status=Status.CANONICAL))
+    store.add(_prior(pattern="positive review highlights", scope="b", status=Status.CANDIDATE))
+
+    results = store.list(search="highlights", status=Status.CANONICAL)
+    assert [p.scope for p in results] == ["a"]
+
+
 def test_prior_store_is_abstract():
     with pytest.raises(TypeError):
         PriorStore()  # type: ignore[abstract]

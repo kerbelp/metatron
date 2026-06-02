@@ -29,6 +29,7 @@ def list_priors(
     scope: str | None = None,
     triage: str | None = None,
     origin: str | None = None,
+    search: str | None = None,
     page: int = 1,
     page_size: int = 20,
 ) -> dict:
@@ -39,10 +40,11 @@ def list_priors(
     origin_enum = Origin(origin) if origin else None
     scope_filter = scope or None
     repo_filter = repo or None
+    search_filter = search or None
 
     common = dict(
         repo=repo_filter, status=status_enum, scope=scope_filter,
-        triage=triage_enum, origin=origin_enum,
+        triage=triage_enum, origin=origin_enum, search=search_filter,
     )
     total = store.count(**common)
     items = store.list(**common, limit=page_size, offset=(page - 1) * page_size)
@@ -56,6 +58,7 @@ def list_priors(
         "status": status,
         "scope": scope,
         "origin": origin,
+        "search": search,
     }
 
 

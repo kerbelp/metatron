@@ -33,6 +33,19 @@ def _add(store, n, **kw) -> list[Prior]:
     return out
 
 
+def test_list_priors_filters_by_search(store):
+    _add(store, 1, scope="keep-me")  # pattern "p0"
+    store.add(Prior(repo="github.com/acme/app", pattern="emit Highlights only",
+                    scope="src/review", rationale="avoid disparaging apps",
+                    origin=Origin.BOOTSTRAP))
+
+    result = list_priors(store, search="highlights")
+
+    assert result["total"] == 1
+    assert result["items"][0]["scope"] == "src/review"
+    assert result["search"] == "highlights"
+
+
 def test_list_priors_filters_by_origin(store):
     _add(store, 2, origin=Origin.BOOTSTRAP)
     _add(store, 1, origin=Origin.AGENT_FEEDBACK)

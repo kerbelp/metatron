@@ -102,6 +102,21 @@ def test_origin_filter_dropdown_present_in_html(served):
     assert b'id="origin-filter"' in body
 
 
+def test_search_box_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    assert b'id="search"' in body
+
+
+def test_api_priors_filters_by_search(served):
+    store, _, base = served
+    store.add(Prior(repo="github.com/acme/app", pattern="emit highlights only",
+                    scope="src/review", rationale="r", origin=Origin.BOOTSTRAP))
+    _, body = _get(base + "/api/priors?search=highlights")
+    data = json.loads(body)
+    assert [it["scope"] for it in data["items"]] == ["src/review"]
+
+
 def test_api_priors_filters_by_origin(served):
     store, _, base = served
     store.add(Prior(repo="github.com/acme/app", pattern="from feedback", scope="app",

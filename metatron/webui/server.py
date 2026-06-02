@@ -153,6 +153,7 @@ def _list(store: PriorStore, query: dict[str, list[str]]) -> dict:
         scope=_first(query, "scope"),
         triage=_first(query, "triage"),
         origin=_first(query, "origin"),
+        search=_first(query, "search"),
         page=int(_first(query, "page") or "1"),
         page_size=int(_first(query, "page_size") or "20"),
     )
