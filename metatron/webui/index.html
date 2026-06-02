@@ -353,6 +353,9 @@
         ${rated("helpful", e.helpful, "hit")}
         ${rated("noise", e.unhelpful, "miss")}
         ${produced}
+        ${(!e.handled && e.missing) ? `<div class="prow-actions" style="margin-top:8px">
+            <button class="act approve" onclick="refineFb('${e.id}', this)">Refine into priors</button>
+          </div>` : ""}
       </div>`;
     }
 
@@ -376,6 +379,22 @@
 
     async function actFb(id, action) {
       await fetch(`/api/priors/${id}/${action}`, { method: "POST" });
+      await loadFeedback();
+    }
+
+    // Run the LLM refiner on one feedback event. It calls Opus, so it can take a few
+    // seconds — disable the button meanwhile. On success the event becomes handled and
+    // its produced candidates appear (with approve/reject) on reload.
+    async function refineFb(id, btn) {
+      if (btn) { btn.disabled = true; btn.textContent = "Refining…"; }
+      const reset = () => { if (btn) { btn.disabled = false; btn.textContent = "Refine into priors"; } };
+      try {
+        const res = await (await fetch(`/api/feedback/${id}/refine`, { method: "POST" })).json();
+        if (!res.ok) { alert(res.error || "Refinement failed."); reset(); return; }
+        if (res.priors_created === 0) { alert("No priors produced (no gap text, or already refined)."); }
+      } catch (err) {
+        alert("Refinement failed: " + err); reset(); return;
+      }
       await loadFeedback();
     }
 

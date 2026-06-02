@@ -73,6 +73,7 @@ def main(
             event_store or SQLiteEventStore(settings.db_path),
             SQLiteIngestRunStore(settings.db_path),
             args.port,
+            settings,
         )
     if args.command == "triage":
         if provider is None:
@@ -125,10 +126,27 @@ def _cmd_serve(store, repo, event_store) -> int:
     return 0
 
 
-def _cmd_ui(store, event_store, run_store, port) -> int:
+def _cmd_ui(store, event_store, run_store, port, settings) -> int:
     from metatron.webui.server import serve
 
-    serve(store, event_store, start_port=port, run_store=run_store)
+    # The UI's manual "Refine" button needs an LLM provider. Build it lazily (only
+    # when a button is clicked) and only if a key is configured — otherwise the button
+    # reports refinement is unavailable rather than the server failing to start. Opus,
+    # like the `refine-feedback` CLI, since reshaping feedback is the higher-stakes step.
+    refiner_factory = None
+    if settings.anthropic_api_key:
+        def refiner_factory():
+            from metatron.extraction.feedback_refiner import FeedbackRefiner
+
+            provider = AnthropicProvider(
+                model=REFINE_MODEL, api_key=settings.anthropic_api_key
+            )
+            return FeedbackRefiner(provider, model=REFINE_MODEL)
+
+    serve(
+        store, event_store, start_port=port, run_store=run_store,
+        refiner_factory=refiner_factory,
+    )
     return 0
 
 

@@ -282,6 +282,36 @@ def feedback_events(
     return {"events": events}
 
 
+def refine_one(store: PriorStore, event_store, refiner_factory, event_id: str) -> dict:
+    """Run the LLM refiner on a single feedback event (the UI "Refine" button).
+
+    ``refiner_factory`` lazily builds the refiner (so the API key/provider is only
+    touched on demand). If none is configured — e.g. no API key — return a clean
+    ``ok: False`` rather than a 500, and surface provider/parse errors the same way.
+    Idempotent: an already-handled event reports ``events_processed: 0``.
+    """
+    if event_store is None:
+        return {"ok": False, "error": "No event store configured."}
+    if refiner_factory is None:
+        return {
+            "ok": False,
+            "error": "Refinement unavailable — no LLM provider configured. "
+                     "Set ANTHROPIC_API_KEY and restart `metatron ui`.",
+        }
+    from metatron.pipeline import refine_feedback_event
+
+    try:
+        refiner = refiner_factory()
+        result = refine_feedback_event(store, event_store, refiner, event_id)
+    except Exception as exc:  # provider/network/parse errors -> message, not a crash
+        return {"ok": False, "error": str(exc)}
+    return {
+        "ok": True,
+        "events_processed": result.events_processed,
+        "priors_created": result.priors_created,
+    }
+
+
 def _set_status(store: PriorStore, prior_id: str, status: Status) -> dict:
     try:
         prior = store.set_status(prior_id, status)

@@ -38,8 +38,11 @@ def make_server(
     port: int,
     event_store: EventStore | None = None,
     run_store=None,
+    refiner_factory=None,
 ) -> HTTPServer:
-    return HTTPServer((host, port), _build_handler(store, event_store, run_store))
+    return HTTPServer(
+        (host, port), _build_handler(store, event_store, run_store, refiner_factory)
+    )
 
 
 def serve(
@@ -48,9 +51,10 @@ def serve(
     host: str = "127.0.0.1",
     start_port: int = 1337,
     run_store=None,
+    refiner_factory=None,
 ) -> None:
     port = find_free_port(start=start_port, host=host)
-    httpd = make_server(store, host, port, event_store, run_store)
+    httpd = make_server(store, host, port, event_store, run_store, refiner_factory)
     print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
     try:
         httpd.serve_forever()
@@ -61,7 +65,10 @@ def serve(
 
 
 def _build_handler(
-    store: PriorStore, event_store: EventStore | None = None, run_store=None
+    store: PriorStore,
+    event_store: EventStore | None = None,
+    run_store=None,
+    refiner_factory=None,
 ) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
@@ -126,6 +133,15 @@ def _build_handler(
                     return self._send_json(api.approve(store, prior_id))
                 if action == "reject":
                     return self._send_json(api.reject(store, prior_id))
+            # /api/feedback/<id>/refine — run the LLM refiner on one feedback event
+            if (
+                len(segments) == 4
+                and segments[:2] == ["api", "feedback"]
+                and segments[3] == "refine"
+            ):
+                return self._send_json(
+                    api.refine_one(store, event_store, refiner_factory, segments[2])
+                )
             self._send_json({"error": "not found"}, status=404)
 
         def _send_json(self, payload: dict, status: int = 200) -> None:

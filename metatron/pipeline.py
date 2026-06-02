@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from metatron.extraction.extractor import PriorExtractor
 from metatron.extraction.provider import LLMProvider
+from metatron.events import EventKind
 from metatron.extraction.signals import collect_signals
 from metatron.gitlog.reader import GitLogReader
 from metatron.models import IngestRun
@@ -59,15 +60,34 @@ def refine_feedback(store, event_store, refiner, *, repo=None, limit=None) -> Re
 
     priors_created = 0
     for event in events:
-        produced: list[str] = []
-        if event.missing.strip():
-            for prior in refiner.refine(event.missing, event.area, event.task):
-                stored = store.add(prior.model_copy(update={"repo": event.repo}))
-                produced.append(stored.id)
-                priors_created += 1
-        event_store.mark_handled(event.id, produced)
+        produced = _refine_one(store, event_store, refiner, event)
+        priors_created += len(produced)
 
     return RefineResult(events_processed=len(events), priors_created=priors_created)
+
+
+def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineResult:
+    """Refine a single feedback event by id — the manual "Refine" action in the UI.
+
+    Idempotent: an unknown id, a non-feedback event, or an already-handled event is a
+    no-op (events_processed=0), so re-clicking can't double-produce candidates.
+    """
+    event = event_store.get(event_id)
+    if event is None or event.kind is not EventKind.FEEDBACK or event.handled:
+        return RefineResult(events_processed=0, priors_created=0)
+    produced = _refine_one(store, event_store, refiner, event)
+    return RefineResult(events_processed=1, priors_created=len(produced))
+
+
+def _refine_one(store, event_store, refiner, event) -> list[str]:
+    """Refine one feedback event into candidates and mark it handled; return their ids."""
+    produced: list[str] = []
+    if event.missing.strip():
+        for prior in refiner.refine(event.missing, event.area, event.task):
+            stored = store.add(prior.model_copy(update={"repo": event.repo}))
+            produced.append(stored.id)
+    event_store.mark_handled(event.id, produced)
+    return produced
 
 
 def ingest(

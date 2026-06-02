@@ -155,6 +155,12 @@ def test_feedback_filter_tabs_present_in_html(served):
         assert f in body
 
 
+def test_refine_button_handler_present_in_html(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    assert b"refineFb(" in body
+
+
 def test_api_feedback_events_accepts_status_filter(served):
     _, _, base = served
     _, body = _get(base + "/api/feedback-events?status=handled")
@@ -167,6 +173,44 @@ def test_nav_has_usage_quality_feedback_tabs(served):
     _, body = _get(base + "/")
     for view in (b'data-view="usage"', b'data-view="quality"', b'data-view="feedback"'):
         assert view in body
+
+
+class _FakeRefiner:
+    def refine(self, gap, scope_hint="", task=""):
+        return [Prior(repo="x", pattern="refined from gap", scope=scope_hint,
+                      rationale="r", origin=Origin.AGENT_FEEDBACK, status=Status.CANDIDATE)]
+
+
+def test_post_refine_feedback_produces_candidates_and_marks_handled():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    e = Event(repo="r", kind=EventKind.FEEDBACK, missing="gap text", area="src/a")
+    events.record(e)
+    port = find_free_port(start=8900, host="127.0.0.1")
+    httpd = make_server(store, "127.0.0.1", port, events,
+                        refiner_factory=lambda: _FakeRefiner())
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{port}"
+        _, body = _post(base + f"/api/feedback/{e.id}/refine")
+        data = json.loads(body)
+        assert data["ok"] is True
+        assert data["priors_created"] == 1
+        assert events.get(e.id).handled is True
+        assert len(store.list(repo="r", status=Status.CANDIDATE)) == 1
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_post_refine_feedback_without_factory_is_graceful(served):
+    # no refiner configured (e.g. missing API key) -> ok:false, not a 500
+    _, _, base = served
+    _, body = _post(base + "/api/feedback/any-id/refine")
+    data = json.loads(body)
+    assert data["ok"] is False
+    assert "error" in data
 
 
 def test_post_approve_promotes_prior(served):
