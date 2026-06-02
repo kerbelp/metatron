@@ -32,14 +32,16 @@ _STOPWORDS = {
     "src", "lib", "app", "index", "components", "component",
 }
 
-# Relevance is scope_weight * _SCOPE_SCALE + idf_keyword_sum + confidence * _CONF_SCALE.
-# Scope dominates ties (the agent named a path), but term weighting decides between
-# priors at the same scope and lets a strong rare-keyword match beat a broad ancestor.
+# Ranking weights. Scope and keyword evidence are combined for ordering *within* a
+# tier; the tiering itself (see get_priors_for_context) decides admission, so scope
+# no longer absolutely dominates — a strong topical match outranks generic same-scope.
 _SCOPE_SCALE = 10.0
 _CONF_SCALE = 0.1
-# Of the returned slots, hold this many for the best pure task-keyword matches so a
-# relevant prior scoped outside the named area isn't crowded out by same-scope priors.
-_RESERVED_KEYWORD_SLOTS = 3
+# Evidence floor for priors with no scope relationship to the area (global/sibling):
+# admit only on real lexical evidence — at least this many distinct meaningful token
+# overlaps, OR a single hit on a term rare enough to clear _idf_evidence_threshold.
+# Stops a lone common token (e.g. "write") from admitting off-topic filler.
+_MIN_KEYWORD_HITS = 2
 
 
 def get_priors_for_context(
@@ -66,41 +68,36 @@ def get_priors_for_context(
     idf = _build_idf(priors)
     area_paths = _area_paths(file_path_or_area)
     query_tokens = _tokens(task_description)
+    threshold = _idf_evidence_threshold(idf)
+    conf = lambda p: _CONFIDENCE_WEIGHT[p.confidence] * _CONF_SCALE
 
-    scored: list[tuple[Prior, float]] = []
-    by_keyword: list[tuple[Prior, float]] = []
+    # Admission by tier, filled in priority order up to `limit`. This replaces the old
+    # "scope*10 swamps keywords, then a fixed 3 reserved slots" scheme, which both
+    # admitted single-weak-keyword filler and capped real cross-scope recall.
+    on_scope_topical: list[tuple[Prior, float]] = []   # A: in/under the area AND task-relevant
+    cross_scope_topical: list[tuple[Prior, float]] = []  # B: elsewhere but strong lexical evidence
+    on_scope_generic: list[tuple[Prior, float]] = []   # C: in/under the area, no task keyword
     for prior in priors:
-        score = _relevance(prior, area_paths, query_tokens, idf)
-        if score > 0:
-            scored.append((prior, score))
-        kw = _keyword_score(prior, query_tokens, idf)
-        if kw > 0:
-            by_keyword.append((prior, kw))
-    scored.sort(key=lambda ps: ps[1], reverse=True)
-    by_keyword.sort(key=lambda ps: ps[1], reverse=True)
+        scope = _scope_weight(prior.scope, area_paths)
+        hits = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
+        kw = sum(idf.get(tok, 0.0) for tok in hits)
+        if scope > 0 and kw > 0:
+            on_scope_topical.append((prior, scope * _SCOPE_SCALE + kw + conf(prior)))
+        elif scope > 0:
+            on_scope_generic.append((prior, scope * _SCOPE_SCALE + conf(prior)))
+        elif _clears_evidence_floor(hits, idf, threshold):
+            cross_scope_topical.append((prior, kw + conf(prior)))
+        # else: no scope relationship and insufficient lexical evidence -> dropped
+        #       (prefer returning nothing over plausible filler).
 
-    # Fill most slots by the scope-led combined score, but reserve a few for the
-    # strongest *task-keyword* matches — otherwise a directory full of generic
-    # same-scope priors (each scoring ~scope*scale) shuts out a genuinely relevant
-    # prior that happens to live elsewhere (e.g. the link/url convention in
-    # src/utils/i18n for an href-editing task). Reserved slots only kick in when
-    # such keyword matches exist; with no keyword signal, scope takes every slot.
-    primary_n = max(0, limit - _RESERVED_KEYWORD_SLOTS) if by_keyword else limit
     picked: list[Prior] = []
-    seen: set[str] = set()
-
-    def take(pairs: list[tuple[Prior, float]], cap: int) -> None:
-        for prior, _ in pairs:
-            if len(picked) >= cap:
-                break
-            if prior.id not in seen:
-                picked.append(prior)
-                seen.add(prior.id)
-
-    take(scored, primary_n)       # scope-led primary picks
-    take(by_keyword, limit)       # reserved slots: best keyword matches not yet picked
-    take(scored, limit)           # backfill if keyword matches were few
-    return picked[:limit]
+    for tier in (on_scope_topical, cross_scope_topical, on_scope_generic):
+        tier.sort(key=lambda ps: ps[1], reverse=True)
+        for prior, _ in tier:
+            if len(picked) >= limit:
+                return picked
+            picked.append(prior)
+    return picked
 
 
 def submit_candidate_learning(
@@ -277,30 +274,31 @@ def _area_paths(area: str) -> list[str]:
     return [part.strip("/") for part in re.split(r"[,\s]+", area.strip()) if part.strip("/")]
 
 
-def _relevance(
-    prior: Prior, area_paths: list[str], query_tokens: set[str], idf: dict[str, float]
-) -> float:
-    """Relevance score; 0 means "no signal" (filtered out).
+def _idf_evidence_threshold(idf: dict[str, float]) -> float:
+    """idf a single keyword hit must clear to admit an out-of-scope prior on its own.
 
-    Scope relationship dominates ties, then idf-weighted keyword overlap, then
-    confidence — so the prior scoped to the exact area ranks first, but a strong
-    rare-keyword match still beats a broad ancestor with no keyword overlap.
+    A term appearing in only one or two priors (≈ max idf, minus log 1.5 for the df=2
+    case) is rare/domain-specific enough that one hit is real evidence ("webhook",
+    "ledger"); a common verb like "write" sits well below it. Self-tuning off the
+    corpus's own idf — no hand-set constant, and robust to the skewed idf distribution
+    (most tokens are rare, so percentile thresholds collapse to the max).
     """
-    scope = _scope_weight(prior.scope, area_paths)
-    keywords = _keyword_score(prior, query_tokens, idf)
-    if scope == 0 and keywords == 0:
-        return 0.0
-    return scope * _SCOPE_SCALE + keywords + _CONFIDENCE_WEIGHT[prior.confidence] * _CONF_SCALE
+    if not idf:
+        return float("inf")
+    return max(idf.values()) - math.log(1.5)
 
 
-def _keyword_score(prior: Prior, query_tokens: set[str], idf: dict[str, float]) -> float:
-    """idf-weighted overlap between the prior's text and the task/area tokens.
+def _clears_evidence_floor(
+    hits: set[str], idf: dict[str, float], threshold: float
+) -> bool:
+    """Whether a prior with no scope relationship has enough lexical evidence.
 
-    The pure task-relevance signal — no scope, no confidence — used both inside
-    ``_relevance`` and to pick the reserved keyword slots in retrieval.
+    Needs several distinct task-keyword overlaps, or one overlap on a rare term —
+    so a single common token can't pull off-topic priors into the result.
     """
-    overlap = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
-    return sum(idf.get(tok, 0.0) for tok in overlap)
+    if len(hits) >= _MIN_KEYWORD_HITS:
+        return True
+    return any(idf.get(tok, 0.0) >= threshold for tok in hits)
 
 
 def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
@@ -312,8 +310,8 @@ def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
     """
     if prior_scope == "":
         # Global priors get NO scope credit — applying "everywhere" is not evidence
-        # of relevance to *this* task. They surface only on a real keyword match
-        # (handled by _relevance), so unrelated doctrine isn't served as filler.
+        # of relevance to *this* task. With scope 0 they fall to the cross-scope tier
+        # and must clear the lexical evidence floor, so unrelated doctrine isn't filler.
         return 0.0
     return max((_pair_scope(prior_scope, area) for area in area_paths), default=0.0)
 

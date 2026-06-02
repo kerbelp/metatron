@@ -329,6 +329,46 @@ def test_reserved_slots_surface_cross_scope_keyword_match():
         "the keyword-relevant cross-scope prior should occupy a reserved slot"
 
 
+def test_single_weak_keyword_does_not_admit_out_of_scope_prior():
+    # P1a: a cross-scope prior matching only ONE low-value token ("write", common in
+    # this corpus so low idf) must NOT be admitted as filler.
+    area = "src/components/App"
+    same_scope = [_canonical(pattern=f"structure rule {i}", scope=area, rationale="layout")
+                  for i in range(5)]
+    writers = [_canonical(pattern=f"write {x} to disk carefully", scope=f"src/io/{x}", rationale="io")
+               for x in ("logs", "cache", "temp", "blob", "queue", "meta")]  # make "write" common
+    docs = _canonical(pattern="write a dedicated spec document for each feature",
+                      scope="docs/specs", rationale="process")
+    store = _store(*same_scope, *writers, docs)
+    results = get_priors_for_context(store, REPO, area, "write a free review for the page", limit=8)
+    assert all(p.scope != "docs/specs" for p in results)
+
+
+def test_more_than_three_topical_outsiders_can_be_returned():
+    # P2: with generic same-scope filler present, strong cross-scope matches are not
+    # capped at 3 — they fill ahead of keyword-less same-scope priors.
+    area = "src/components/ApplicationPage"
+    structure = [_canonical(pattern=f"compose discrete piece {i}", scope=area, rationale="layout")
+                 for i in range(8)]
+    outsiders = [
+        _canonical(pattern="authenticate webhook payments via clerk auth",
+                   scope="src/routes/api/payments", rationale="r"),
+        _canonical(pattern="record ledger entries for webhook payments",
+                   scope="src/db/ledger", rationale="r"),
+        _canonical(pattern="send email report of webhook payments daily",
+                   scope="src/jobs/report", rationale="r"),
+        _canonical(pattern="render admin payments table with webhook status",
+                   scope="src/views/admin", rationale="r"),
+        _canonical(pattern="ensure webhook payments stay idempotent on retry",
+                   scope="src/utils/idempotency", rationale="r"),
+    ]
+    store = _store(*structure, *outsiders)
+    task = "handle webhook payments: ledger, email report, admin table, idempotent retry"
+    results = get_priors_for_context(store, REPO, area, task, limit=8)
+    n_outsiders = sum(1 for p in results if p.scope != area)
+    assert n_outsiders >= 4, f"expected >3 topical outsiders, got {n_outsiders}"
+
+
 def test_reserved_slots_still_return_scope_matches_when_no_keyword_signal():
     # No cross-scope keyword match exists: all 8 slots go to the scope matches.
     area = "src/components/ApplicationPage"
