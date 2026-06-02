@@ -401,6 +401,37 @@ def test_more_than_three_topical_outsiders_can_be_returned():
     assert n_outsiders >= 4, f"expected >3 topical outsiders, got {n_outsiders}"
 
 
+def test_weak_same_scope_keyword_does_not_block_strong_cross_scope():
+    # P1: 8 same-scope priors overlap the task only on a COMMON word ("review", low
+    # idf); one cross-scope prior matches a RARE term ("webhook"). Tier A must not be
+    # filled by weak same-scope hits and bury the strong cross-scope evidence — a weak
+    # same-scope match is demoted to the generic tier, behind strong cross-scope.
+    area = "src/components/ApplicationPage"
+    weak = [_canonical(pattern=f"review the layout for rule {i}", scope=area, rationale="review")
+            for i in range(8)]  # "review" everywhere -> low idf, weak evidence
+    strong = _canonical(pattern="verify the webhook signature before processing",
+                        scope="src/routes/api/payments", rationale="security")
+    store = _store(*weak, strong)
+    results = get_priors_for_context(
+        store, REPO, area, "review the webhook handling on this page", limit=8
+    )
+    assert any(p.scope == "src/routes/api/payments" for p in results), \
+        "a strong cross-scope match must not be shut out by weak same-scope keyword hits"
+
+
+def test_path_literal_preserved_as_single_token():
+    # P2a: "/blog/write" should survive as one rare token, not split into blog + write.
+    assert "blog_write" in _tokens("change the CTA href to /blog/write")
+
+
+def test_kebab_literal_unifies_with_snake_case():
+    # P2a: event names appear kebab in prose ("order-created") and snake in code
+    # ("order_created"); both should canonicalize to the same literal token so a task
+    # phrased either way matches a prior phrased the other.
+    assert "order_created" in _tokens("listen for the order-created event")
+    assert _tokens("emit order-created") & _tokens("the order_created webhook")
+
+
 def test_reserved_slots_still_return_scope_matches_when_no_keyword_signal():
     # No cross-scope keyword match exists: all 8 slots go to the scope matches.
     area = "src/components/ApplicationPage"

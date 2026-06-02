@@ -95,11 +95,16 @@ def get_priors_for_context(
         scope = _scope_weight(prior.scope, area_paths)
         hits = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
         kw = sum(idf.get(tok, 0.0) for tok in hits)
-        if scope > 0 and kw > 0:
+        # The SAME evidence floor gates topical admission for both scopes. A same-scope
+        # prior counts as topical only if its keyword overlap is real (≥2 distinct hits,
+        # or one rare term); a lone common-word overlap ("review") is weak and drops to
+        # the generic tier instead of pre-empting strong cross-scope evidence (P1).
+        strong = _clears_evidence_floor(hits, idf, threshold)
+        if scope > 0 and strong:
             on_scope_topical.append((prior, scope * _SCOPE_SCALE + kw + conf(prior)))
         elif scope > 0:
-            on_scope_generic.append((prior, scope * _SCOPE_SCALE + conf(prior)))
-        elif _clears_evidence_floor(hits, idf, threshold):
+            on_scope_generic.append((prior, scope * _SCOPE_SCALE + kw + conf(prior)))
+        elif strong:
             cross_scope_topical.append((prior, kw + conf(prior)))
         # else: no scope relationship and insufficient lexical evidence -> dropped
         #       (prefer returning nothing over plausible filler).
@@ -261,14 +266,18 @@ _CANONICAL_TOKEN: dict[str, str] = {
     for member in group
 }
 
-# Identifiers like order_created / db.insertApplication / search_index: keep the whole
-# literal as one token (rare -> high idf -> strong evidence), not just its split parts.
-# camelCase already survives the splitter (no separator), so we only need _ and . forms.
-_CODE_LITERAL_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[_.][A-Za-z0-9]+)+")
+# Identifiers and paths like order_created / db.insertApplication / order-created /
+# /blog/write: keep the whole literal as one token (rare -> high idf -> strong
+# evidence), not just its split parts. camelCase already survives the splitter (no
+# separator); we capture the _ . - / joined forms and normalise every separator to "_"
+# so a kebab event name ("order-created") and its code form ("order_created") unify,
+# and a route the task names ("/blog/write") matches a prior that references it.
+_CODE_LITERAL_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_./][A-Za-z0-9]+)+")
+_LITERAL_SEP_RE = re.compile(r"[-./]")
 
 
 def _code_literals(text: str) -> set[str]:
-    return {m.lower().replace(".", "_") for m in _CODE_LITERAL_RE.findall(text)}
+    return {_LITERAL_SEP_RE.sub("_", m).lower() for m in _CODE_LITERAL_RE.findall(text)}
 
 
 def _tokens(text: str) -> set[str]:
