@@ -10,6 +10,7 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from metatron.events import Event, EventKind
+from metatron.feedback_score import helpfulness_scores
 from metatron.mcp_server import service
 from metatron.storage.base import EventStore, PriorStore
 from metatron.version import current_version
@@ -25,6 +26,15 @@ def build_server(
         if event_store is not None:
             event_store.record(event)
 
+    def _helpfulness() -> dict[str, float]:
+        # Centered helpfulness signal per prior, from this repo's feedback ratings.
+        # Empty when there's no event store yet — serving then falls back to pure
+        # scope/keyword ranking, exactly as before this feature.
+        if event_store is None:
+            return {}
+        scores = helpfulness_scores(event_store.list_events(repo=repo))
+        return {pid: s.centered for pid, s in scores.items()}
+
     @server.tool()
     def get_priors_for_context(file_path_or_area: str, task_description: str) -> str:
         """Return the canonical priors relevant to an area and task.
@@ -34,7 +44,8 @@ def build_server(
             task_description: what the agent is about to do there.
         """
         priors = service.get_priors_for_context(
-            store, repo, file_path_or_area, task_description
+            store, repo, file_path_or_area, task_description,
+            helpfulness=_helpfulness(),
         )
         # Record the query first so its id can be surfaced as the feedback token;
         # the token is only meaningful (resolvable) when events are persisted.

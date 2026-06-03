@@ -37,6 +37,12 @@ _STOPWORDS = {
 # no longer absolutely dominates — a strong topical match outranks generic same-scope.
 _SCOPE_SCALE = 10.0
 _CONF_SCALE = 0.1
+# Helpfulness weight. Agent ratings (see metatron/feedback_score.py) arrive as a
+# centered signal in roughly [-1, 1]; this scales it into the within-tier sort. At
+# 2.0 a loved prior gets a nudge comparable to a couple of keyword-idf hits — enough
+# to reorder peers, never enough to cross a tier (admission is decided before this
+# term is applied), so helpfulness can't override the scope/keyword relevance gate.
+_HELP_SCALE = 2.0
 # Evidence floor for priors with no scope relationship to the area (global/sibling):
 # admit only on real lexical evidence — at least this many distinct meaningful token
 # overlaps, OR a single hit on a term rare enough to clear _idf_evidence_threshold.
@@ -65,6 +71,7 @@ def get_priors_for_context(
     task_description: str,
     *,
     limit: int = 8,
+    helpfulness: dict[str, float] | None = None,
 ) -> list[Prior]:
     # Two relevance signals, neither a hard gate:
     #   1. scope — how specifically the prior's path relates to the area(s) the
@@ -84,6 +91,11 @@ def get_priors_for_context(
     query_tokens = _tokens(task_description)
     threshold = _idf_evidence_threshold(idf)
     conf = lambda p: _CONFIDENCE_WEIGHT[p.confidence] * _CONF_SCALE
+    # Agent-rated helpfulness, applied only to the *within-tier* sort score below.
+    # Tier admission is decided before this term, so a loved prior can outrank its
+    # peers but never jump the scope/keyword gate into a higher tier.
+    help_score = helpfulness or {}
+    helpful = lambda p: _HELP_SCALE * help_score.get(p.id, 0.0)
 
     # Admission by tier, filled in priority order up to `limit`. This replaces the old
     # "scope*10 swamps keywords, then a fixed 3 reserved slots" scheme, which both
@@ -101,11 +113,11 @@ def get_priors_for_context(
         # the generic tier instead of pre-empting strong cross-scope evidence (P1).
         strong = _clears_evidence_floor(hits, idf, threshold)
         if scope > 0 and strong:
-            on_scope_topical.append((prior, scope * _SCOPE_SCALE + kw + conf(prior)))
+            on_scope_topical.append((prior, scope * _SCOPE_SCALE + kw + conf(prior) + helpful(prior)))
         elif scope > 0:
-            on_scope_generic.append((prior, scope * _SCOPE_SCALE + kw + conf(prior)))
+            on_scope_generic.append((prior, scope * _SCOPE_SCALE + kw + conf(prior) + helpful(prior)))
         elif strong:
-            cross_scope_topical.append((prior, kw + conf(prior)))
+            cross_scope_topical.append((prior, kw + conf(prior) + helpful(prior)))
         # else: no scope relationship and insufficient lexical evidence -> dropped
         #       (prefer returning nothing over plausible filler).
 

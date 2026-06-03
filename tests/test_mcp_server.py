@@ -68,6 +68,26 @@ def test_submit_feedback_tool_accepts_graded_ratings_by_index():
     assert fb.helpful_prior_ids == ["pa"] and fb.unhelpful_prior_ids == ["pb"]
 
 
+def test_ratings_influence_the_next_serving_order():
+    # Two equally-relevant priors; after one is rated 10, it is served first.
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    for tag in ("alpha", "beta"):  # tag words aren't in the task, so they don't sway keywords
+        store.add(Prior(repo=REPO, pattern=f"webhook ledger handling {tag}", scope="src/api",
+                        rationale="r", origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
+    server = build_server(store, REPO, events)
+    args = {"file_path_or_area": "src/api", "task_description": "webhook ledger"}
+
+    asyncio.run(server.call_tool("get_priors_for_context", args))  # records the query
+    q = [e for e in events.list_events() if e.kind is EventKind.QUERY][0]
+    beta_idx = next(i for i, pid in enumerate(q.prior_ids, start=1)
+                    if store.get(pid).pattern.endswith("beta"))
+    asyncio.run(server.call_tool("submit_feedback", {"query_id": q.id, "ratings": {str(beta_idx): 10}}))
+
+    out = _result(asyncio.run(server.call_tool("get_priors_for_context", args)))
+    assert out.index("beta") < out.index("alpha")  # the rated prior now leads
+
+
 def test_get_priors_tool_returns_formatted_canonical_priors():
     store = SQLitePriorStore(":memory:")
     store.add(

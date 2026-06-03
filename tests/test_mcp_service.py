@@ -44,6 +44,37 @@ def test_only_the_requested_repos_priors_are_served():
     assert [p.pattern for p in results] == ["mine"]
 
 
+def test_helpfulness_reorders_peers_within_a_tier():
+    # Two equally-relevant on-scope priors; the higher-rated one is served first.
+    loved = _canonical(pattern="webhook ledger handling", scope="src/api", rationale="r")
+    meh = _canonical(pattern="webhook ledger handling", scope="src/api", rationale="r")
+    store = _store(meh, loved)  # insertion order puts meh first absent ratings
+
+    results = get_priors_for_context(
+        store, REPO, "src/api", "webhook ledger",
+        helpfulness={loved.id: 1.0},  # loved gets the full positive nudge
+    )
+    assert results[0].id == loved.id
+
+
+def test_helpfulness_cannot_lift_a_prior_across_a_scope_tier():
+    # A loved off-scope prior must NOT outrank an on-scope prior with the same
+    # keywords — helpfulness only reorders within a tier, never across the gate.
+    on_scope = _canonical(pattern="webhook ledger retry", scope="src/api/orders", rationale="r")
+    off_scope = _canonical(pattern="webhook ledger retry", scope="docs/notes", rationale="r")
+    store = _store(on_scope, off_scope)
+
+    results = get_priors_for_context(
+        store, REPO, "src/api/orders", "webhook ledger retry",
+        helpfulness={off_scope.id: 1.0, on_scope.id: -1.0},  # try hard to invert it
+    )
+    assert results.index(_by_id(results, on_scope.id)) < results.index(_by_id(results, off_scope.id))
+
+
+def _by_id(priors, pid):
+    return next(p for p in priors if p.id == pid)
+
+
 def test_keyword_relevant_prior_surfaces_across_directories():
     # The agent enters from the route file, but the relevant prior lives under
     # the components dir. Keyword overlap ("section") should still surface it.
