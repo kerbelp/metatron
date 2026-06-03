@@ -38,15 +38,28 @@ conventions extraction can't see (cross-file/workflow rules).
 - **Git** (installed on your system, to analyze repository commit history and parse files)
 - **An Anthropic API key** — only for the LLM extraction steps (`ingest`, `triage`, `refine-feedback`). `serve`, `ui`, and `candidates` are fully local and need no key.
 
-*Note: The installer automatically downloads and manages `uv` and Python 3.12+ in an isolated user directory, so you do not need to pre-install them.*
+*Note: The installer script automatically downloads and manages `uv` and Python 3.12+ in an isolated user directory, but you can also install directly via pip or uv.*
 
 ## Installation
 
-To install `metatron` as a global tool on your `PATH`:
+To install `metatron` as a global tool:
+
+```bash
+pip install getmetatron
+```
+
+Or if you use [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install getmetatron
+```
+
+Alternatively, you can use our installer script which handles Python, `uv`, and path configuration automatically:
 
 ```bash
 curl -sSf https://getmetatron.com/install.sh | sh
 ```
+
 
 ### Manual Installation & Development
 
@@ -320,6 +333,23 @@ metatron:query b1f2… · rev 1101886 (reference the query id in submit_feedback
 ### Manual MCP client config
 
 If you wire the server up yourself instead of using the script:
+
+**For PyPI / Global Installation:**
+
+```json
+{
+  "mcpServers": {
+    "metatron": {
+      "command": "metatron",
+      "args": ["serve", "--repo", "github.com/acme/app"]
+    }
+  }
+}
+```
+
+*Note: If you have a custom database location, you can specify it via the `METATRON_DB` environment variable.*
+
+**For Local Clone / Development:**
 
 ```json
 {
