@@ -53,25 +53,27 @@ conventions extraction can't see (cross-file/workflow rules).
 
 ## Installation
 
-To install `metatron` as a global tool on your `PATH` (using `uv`):
+To install `metatron` as a global tool on your `PATH`:
 
 ```bash
-# Install directly from GitHub
-uv tool install git+https://github.com/kerbelp/metatron.git
-
-# Or install from a local clone
-git clone https://github.com/kerbelp/metatron.git
-cd metatron
-uv tool install .
+curl -sSf https://getmetatron.com/install.sh | sh
 ```
 
-To run it locally for development or contribution:
+### Manual Installation & Development
+
+To run it locally from source or contribute to the project:
 
 ```bash
 git clone https://github.com/kerbelp/metatron.git
 cd metatron
 uv sync           # create the venv and install dependencies
 uv run metatron --help
+```
+
+To install from your local clone as a global tool:
+
+```bash
+uv tool install .
 ```
 
 > The examples below use `uv run metatron`. If you installed globally, drop the
