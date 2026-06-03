@@ -85,16 +85,24 @@ def reject(store: PriorStore, prior_id: str) -> dict:
     return _set_status(store, prior_id, Status.REJECTED)
 
 
-def approve_recommended(store: PriorStore, *, repo: str | None = None) -> dict:
+def approve_recommended(
+    store: PriorStore, *, repo: str | None = None, origin: str | None = None
+) -> dict:
     """Promote every candidate the judge marked ``approve`` to canonical, at once.
 
     This is the one-click "Approve recommended" action: a human triggers it after
     reviewing the valuation, so the human-in-the-loop invariant holds — nothing
     self-promotes, the person decides to accept the recommended batch.
+
+    ``origin`` narrows the batch to one provenance (e.g. ``agent_feedback`` for the
+    Feedback screen's button); ``None`` means every recommended candidate in the repo
+    (the Priors screen's button).
     """
-    repo_filter = repo or None
     recommended = store.list(
-        repo=repo_filter, status=Status.CANDIDATE, triage=TriageVerdict.APPROVE
+        repo=repo or None,
+        status=Status.CANDIDATE,
+        triage=TriageVerdict.APPROVE,
+        origin=Origin(origin) if origin else None,
     )
     for prior in recommended:
         store.set_status(prior.id, Status.CANONICAL)

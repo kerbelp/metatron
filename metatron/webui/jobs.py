@@ -143,8 +143,18 @@ class TriageJob:
         with self._lock:
             return dict(self._status)
 
-    def start(self, repo: str | None) -> dict:
-        from metatron.models import Status, TriageVerdict
+    def start(
+        self, repo: str | None, *, origin: str | None = None, approve_after: bool = False
+    ) -> dict:
+        """Value a repo's untriaged candidates, optionally approving the winners.
+
+        ``origin`` scopes the batch to one provenance (e.g. ``agent_feedback`` for the
+        Feedback screen). ``approve_after`` promotes the candidates the judge rates
+        ``approve`` (within the same scope) to canonical when valuation finishes — the
+        one-click "valuate then approve high-quality" action. Still human-triggered, so
+        the curation invariant holds.
+        """
+        from metatron.models import Origin, Status, TriageVerdict
 
         with self._lock:
             if self._status.get("state") == "running":
@@ -155,30 +165,44 @@ class TriageJob:
                     "error": "Valuation needs an LLM provider. Set ANTHROPIC_API_KEY "
                              "and restart `metatron ui`.",
                 }
+            origin_enum = Origin(origin) if origin else None
             candidates = self._store.list(
-                repo=repo or None, status=Status.CANDIDATE, triage=TriageVerdict.NONE
+                repo=repo or None, status=Status.CANDIDATE,
+                triage=TriageVerdict.NONE, origin=origin_enum,
             )
             if not candidates:
+                # Nothing new to judge — but if asked, still approve anything already
+                # rated 'approve' in scope (e.g. a prior valuation left winners).
+                approved = 0
+                if approve_after:
+                    approved = self._approve(repo, origin)
                 self._status = {
-                    "state": "done", "phase": "done", "repo": repo,
+                    "state": "done", "phase": "done", "repo": repo, "origin": origin,
+                    "approve_after": approve_after, "approved": approved,
                     "total": 0, "triaged": 0,
                     "counts": {"approve": 0, "borderline": 0, "reject": 0},
                     "input_tokens": 0, "output_tokens": 0, "est_cost": None, "error": None,
                 }
-                return {"ok": True, "total": 0}
+                return {"ok": True, "total": 0, "approved": approved}
             self._status = {
-                "state": "running", "phase": "valuating", "repo": repo,
+                "state": "running", "phase": "valuating", "repo": repo, "origin": origin,
+                "approve_after": approve_after, "approved": 0,
                 "total": len(candidates), "triaged": 0,
                 "counts": {"approve": 0, "borderline": 0, "reject": 0},
                 "input_tokens": 0, "output_tokens": 0, "est_cost": None, "error": None,
             }
             self._thread = threading.Thread(
-                target=self._run, args=(candidates,), daemon=True
+                target=self._run, args=(candidates, repo, origin, approve_after), daemon=True
             )
             self._thread.start()
             return {"ok": True, "total": len(candidates)}
 
-    def _run(self, candidates) -> None:
+    def _approve(self, repo: str | None, origin: str | None) -> int:
+        from metatron.webui.api import approve_recommended
+
+        return approve_recommended(self._store, repo=repo, origin=origin)["approved"]
+
+    def _run(self, candidates, repo, origin, approve_after) -> None:
         try:
             provider = self._provider_factory()
             judge = self._judge_factory(provider)
@@ -207,8 +231,9 @@ class TriageJob:
                 self._record_cost(provider)
             return
 
+        approved = self._approve(repo, origin) if approve_after else 0
         with self._lock:
-            self._status.update(state="done", phase="done")
+            self._status.update(state="done", phase="done", approved=approved)
             self._record_cost(provider)
 
     def _record_cost(self, provider) -> None:

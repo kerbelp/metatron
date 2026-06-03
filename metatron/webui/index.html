@@ -128,6 +128,8 @@
     .ingest-phase.err { color: var(--red); }
     .valuate-box { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
     .valuate-counts { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    .va-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
+    .va-bar .muted { font-size: 12px; }
   </style>
 </head>
 <body>
@@ -168,6 +170,11 @@
         <option value="agent_feedback">Feedback</option>
         <option value="agent_submitted">Agent-submitted</option>
       </select>
+      </div>
+      <div class="va-bar" id="priorsVaBar">
+        <button class="act approve" id="priorsValuateApprove">Valuate &amp; approve recommended</button>
+        <span class="ingest-phase" id="priorsVaPhase" style="margin:0"></span>
+        <span class="muted">Judges any un-judged candidates, then promotes the ones it recommends — one human action.</span>
       </div>
       <div id="list"></div>
       <div class="pager" id="pager"></div>
@@ -227,6 +234,11 @@
 
     <section id="view-feedback" hidden>
       <div class="section-title">Feedback from agents (what was missing)</div>
+      <div class="va-bar" id="fbVaBar">
+        <button class="act approve" id="fbValuateApprove">Valuate &amp; approve high-quality feedback priors</button>
+        <span class="ingest-phase" id="fbVaPhase" style="margin:0"></span>
+        <span class="muted">Judges feedback-born candidates, then promotes the recommended ones — one human action.</span>
+      </div>
       <div class="tabs" id="feedback-filter">
         <button class="tab active" data-fstatus="all">All</button>
         <button class="tab" data-fstatus="unhandled">Unhandled</button>
@@ -662,6 +674,47 @@
     document.getElementById("ingestStart").addEventListener("click", startIngest);
     document.getElementById("valuateStart").addEventListener("click", startValuate);
     document.getElementById("approveRecommended").addEventListener("click", approveRecommended);
+
+    // One-click "valuate then approve high-quality" — scope by origin (null = all
+    // candidates, "agent_feedback" = the Feedback screen). The judge runs on any
+    // un-judged candidates, then the ones it recommends are promoted; a human
+    // clicked the button, so nothing self-promotes.
+    let vaTimer = null;
+    async function valuateAndApprove({ origin, btn, phaseEl, onDone }) {
+      const repo = state.repo;
+      if (!repo) { alert("No repo selected."); return; }
+      btn.disabled = true; phaseEl.classList.remove("err"); phaseEl.textContent = "Valuating…";
+      const body = JSON.stringify({ repo, origin: origin || undefined, approve: true });
+      const res = await (await fetch("/api/valuate/start", { method:"POST", headers:{"Content-Type":"application/json"}, body })).json();
+      if (!res.ok) { phaseEl.classList.add("err"); phaseEl.textContent = res.error || "Could not start."; btn.disabled = false; return; }
+      clearInterval(vaTimer);
+      const finish = (s) => {
+        btn.disabled = false;
+        if (s.state === "error") { phaseEl.classList.add("err"); phaseEl.textContent = "Failed: " + (s.error || ""); return; }
+        phaseEl.textContent = `Approved ${s.approved || 0} high-quality prior(s) — ${fmtCost(s.est_cost)}.`;
+        if (onDone) onDone();
+      };
+      vaTimer = setInterval(async () => {
+        const s = await (await fetch("/api/valuate/status")).json();
+        if (s.state === "running") { phaseEl.textContent = `Valuating ${s.triaged||0}/${s.total||0}… (${fmtCost(s.est_cost)})`; return; }
+        clearInterval(vaTimer); vaTimer = null; finish(s);
+      }, 1000);
+    }
+
+    document.getElementById("priorsValuateApprove").addEventListener("click", () =>
+      valuateAndApprove({
+        origin: null,
+        btn: document.getElementById("priorsValuateApprove"),
+        phaseEl: document.getElementById("priorsVaPhase"),
+        onDone: refreshPriors,
+      }));
+    document.getElementById("fbValuateApprove").addEventListener("click", () =>
+      valuateAndApprove({
+        origin: "agent_feedback",
+        btn: document.getElementById("fbValuateApprove"),
+        phaseEl: document.getElementById("fbVaPhase"),
+        onDone: loadFeedback,
+      }));
 
     // ---- shared ----
     function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }

@@ -146,16 +146,21 @@ def _build_handler(
                 return self._send_json(
                     ingest_job.start(body.get("path"), body.get("repo") or None)
                 )
-            # /api/valuate/start — run the advisory judge over a repo's candidates
+            # /api/valuate/start — run the advisory judge over a repo's candidates,
+            # optionally scoped by origin and approving the winners (one-click loop)
             if segments == ["api", "valuate", "start"]:
                 body = self._read_json()
-                return self._send_json(triage_job.start(body.get("repo") or None))
+                return self._send_json(triage_job.start(
+                    body.get("repo") or None,
+                    origin=body.get("origin") or None,
+                    approve_after=bool(body.get("approve")),
+                ))
             # /api/priors/approve-recommended — one-click bulk approve of "approve" picks
             if segments == ["api", "priors", "approve-recommended"]:
                 body = self._read_json()
-                return self._send_json(
-                    api.approve_recommended(store, repo=body.get("repo") or None)
-                )
+                return self._send_json(api.approve_recommended(
+                    store, repo=body.get("repo") or None, origin=body.get("origin") or None
+                ))
             # /api/priors/<id>/<action>
             if len(segments) == 4 and segments[:2] == ["api", "priors"]:
                 prior_id, action = segments[2], segments[3]

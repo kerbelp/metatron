@@ -103,6 +103,42 @@ def test_valuate_status_idle_and_approve_recommended_wired(served):
     assert res["ok"] is True and res["approved"] == 0
 
 
+def test_approve_recommended_accepts_an_origin_filter(served):
+    # The Feedback screen's button scopes the bulk approve to one origin.
+    _, _, base = served
+    req = urllib.request.Request(
+        base + "/api/priors/approve-recommended",
+        data=b'{"repo": "github.com/acme/app", "origin": "agent_feedback"}',
+        method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        res = json.loads(r.read())
+    assert res["ok"] is True and res["approved"] == 0
+
+
+def test_valuate_start_accepts_origin_and_approve_and_is_graceful(served):
+    # The one-click "valuate & approve" passes origin + approve; with no provider
+    # configured in the fixture it refuses cleanly rather than 500-ing.
+    _, _, base = served
+    req = urllib.request.Request(
+        base + "/api/valuate/start",
+        data=b'{"repo": "github.com/acme/app", "origin": "agent_feedback", "approve": true}',
+        method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        res = json.loads(r.read())
+    assert res["ok"] is False  # no provider in the test server
+
+
+def test_valuate_and_approve_controls_present_in_html(served):
+    # Both screens carry a one-click "valuate & approve" button.
+    _, _, base = served
+    _, body = _get(base + "/")
+    html = body.decode()
+    for token in ('id="priorsValuateApprove"', 'id="fbValuateApprove"', "valuateAndApprove"):
+        assert token in html, token
+
+
 def test_ui_is_repo_exclusive_no_all_option(served):
     # Priors are scoped to one repo: the UI must not offer an "all repos" view,
     # and it surfaces the active repo id as a title.

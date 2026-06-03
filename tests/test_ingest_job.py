@@ -171,3 +171,64 @@ def test_approve_recommended_promotes_only_approve_picks():
     assert store.get(a.id).status is Status.CANONICAL
     assert store.get(b.id).status is Status.CANDIDATE   # not recommended → untouched
     assert store.get(c.id).status is Status.CANDIDATE
+
+
+def _feedback_candidate(store, pattern):
+    return store.add(Prior(repo="github.com/acme/app", pattern=pattern, scope="app",
+                           rationale="r", origin=Origin.AGENT_FEEDBACK))
+
+
+def test_approve_recommended_can_scope_to_one_origin():
+    from metatron.webui.api import approve_recommended
+
+    store = SQLitePriorStore(":memory:")
+    ingest_pick = _candidate(store, "ingest approve")           # BOOTSTRAP
+    fb_pick = _feedback_candidate(store, "feedback approve")     # AGENT_FEEDBACK
+    for p in (ingest_pick, fb_pick):
+        store.set_triage(p.id, TriageVerdict.APPROVE, "good")
+
+    res = approve_recommended(store, repo="github.com/acme/app", origin="agent_feedback")
+
+    assert res == {"ok": True, "approved": 1}
+    assert store.get(fb_pick.id).status is Status.CANONICAL
+    assert store.get(ingest_pick.id).status is Status.CANDIDATE  # other origin untouched
+
+
+def test_triage_job_valuate_then_approve_scoped_to_feedback():
+    store = SQLitePriorStore(":memory:")
+    fb_good = _feedback_candidate(store, "feedback approve")
+    fb_bad = _feedback_candidate(store, "feedback reject")
+    ingest_good = _candidate(store, "ingest approve")  # different origin, must be ignored
+    verdicts = {
+        "feedback approve": TriageVerdict.APPROVE,
+        "feedback reject": TriageVerdict.REJECT,
+        "ingest approve": TriageVerdict.APPROVE,
+    }
+
+    job = TriageJob(store, provider_factory=FakeProvider,
+                    judge_factory=lambda p: FakeJudge(verdicts))
+    assert job.start("github.com/acme/app", origin="agent_feedback",
+                     approve_after=True)["ok"] is True
+    s = _wait(job, state="done")
+
+    # only the two feedback candidates were judged; only the approved one promoted
+    assert s["total"] == 2 and s["approved"] == 1
+    assert store.get(fb_good.id).status is Status.CANONICAL
+    assert store.get(fb_bad.id).status is Status.CANDIDATE
+    # the ingest candidate was outside scope: never judged, never promoted
+    assert store.get(ingest_good.id).triage is TriageVerdict.NONE
+    assert store.get(ingest_good.id).status is Status.CANDIDATE
+
+
+def test_triage_job_approve_after_with_nothing_new_still_approves_prior_winners():
+    store = SQLitePriorStore(":memory:")
+    already = _feedback_candidate(store, "already judged")
+    store.set_triage(already.id, TriageVerdict.APPROVE, "good")  # judged in a prior run
+
+    job = TriageJob(store, provider_factory=FakeProvider,
+                    judge_factory=lambda p: FakeJudge({}))
+    res = job.start("github.com/acme/app", origin="agent_feedback", approve_after=True)
+
+    assert res["ok"] is True and res["total"] == 0 and res["approved"] == 1
+    assert job.status()["state"] == "done"
+    assert store.get(already.id).status is Status.CANONICAL
