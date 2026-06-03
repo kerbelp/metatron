@@ -1,0 +1,35 @@
+name: Publish to PyPI
+
+# Releases are cut by pushing a version tag, e.g.:
+#   git tag v0.2.0 && git push origin v0.2.0
+# The job builds the sdist + wheel and publishes the `getmetatron` distribution to
+# PyPI using Trusted Publishing (OIDC) — no API token is stored in the repo.
+#
+# One-time PyPI setup (web UI): on the `getmetatron` project →
+# Settings → Publishing → add a GitHub trusted publisher with
+#   owner: kerbelp · repository: metatron · workflow: publish.yml · environment: pypi
+# and create a GitHub Environment named `pypi` in this repo's settings.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    name: Build and publish getmetatron
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write   # mint the OIDC token PyPI Trusted Publishing needs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Run tests
+        run: uv run pytest -q
+      - name: Build sdist + wheel
+        run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
