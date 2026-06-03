@@ -78,7 +78,52 @@ To install from your local clone as a global tool:
 uv tool install .
 ```
 
+## Run with Docker
 
+A `Dockerfile` is included (it's also what the [Glama.ai](https://glama.ai) listing
+builds). The image's entrypoint is the `metatron` CLI and its default command serves
+the MCP server over stdio, so `docker run` with no arguments starts the server.
+
+```bash
+docker build -t getmetatron .
+```
+
+Priors live in a SQLite database, so mount a volume to persist it across runs.
+Ingest a repo (mount it read-only and pass your API key), curate, then serve:
+
+```bash
+# 1. ingest a repo into a persisted DB (needs an Anthropic API key)
+docker run --rm \
+  -e ANTHROPIC_API_KEY \
+  -v metatron-data:/data -e METATRON_DB=/data/metatron.db \
+  -v /path/to/your/repo:/repo:ro \
+  getmetatron ingest /repo
+
+# 2. serve the curated priors over stdio (no API key needed)
+docker run -i --rm \
+  -v metatron-data:/data -e METATRON_DB=/data/metatron.db \
+  getmetatron serve --repo <id>
+```
+
+`ingest` prints the `<id>` to pass to `serve`. Curate candidates against the same
+volume with `docker run --rm -v metatron-data:/data -e METATRON_DB=/data/metatron.db
+getmetatron candidates list` (then `… candidates approve <prior-id>`). The `-i` flag
+on `serve` is required — stdio needs an open stdin. To point a coding agent at the
+container, use it as the MCP command:
+
+```json
+{
+  "mcpServers": {
+    "metatron": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm",
+               "-v", "metatron-data:/data",
+               "-e", "METATRON_DB=/data/metatron.db",
+               "getmetatron", "serve", "--repo", "<id>"]
+    }
+  }
+}
+```
 
 ## Metatron vs. Code Graphs & RAG
 
