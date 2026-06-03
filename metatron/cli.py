@@ -161,6 +161,29 @@ def main(
     return 1
 
 
+def _ingest_progress(out):
+    """A progress reporter for ingest: a header, then a line as each scope is extracted.
+
+    Extraction is one LLM call per scope; without this a large repo looks hung for
+    minutes. The first report (scopes_done=0) carries the parsed totals for a header.
+    """
+    def report(p: dict) -> None:
+        total = p["scopes_total"]
+        if p["scopes_done"] == 0:
+            print(
+                f"Ingesting {p['repo']}: parsed {p['files_parsed']} files, "
+                f"{p['commits_read']} commits across {total} scope(s) — extracting…",
+                file=out, flush=True,
+            )
+        else:
+            print(
+                f"  [{p['scopes_done']}/{total}] {p['priors_created']} candidate(s) so far …",
+                file=out, flush=True,
+            )
+
+    return report
+
+
 def _cmd_ingest(args, store, provider, run_store, out) -> int:
     result = ingest(
         args.repo_path,
@@ -171,6 +194,7 @@ def _cmd_ingest(args, store, provider, run_store, out) -> int:
         since=args.since,
         path_prefix=args.path,
         run_store=run_store,
+        on_progress=_ingest_progress(out),
     )
     print(
         f"Ingested repo '{result.repo}' from {args.repo_path}: "
@@ -240,7 +264,7 @@ def _cmd_triage(args, store, provider, settings, out) -> int:
         print("No untriaged candidate priors.", file=out)
         return 0
 
-    results = PriorJudge(provider).evaluate(candidates)
+    results = PriorJudge(provider).evaluate(candidates, on_progress=_triage_progress(out))
     for prior_id, (verdict, reason) in results.items():
         try:
             store.set_triage(prior_id, verdict, reason)
@@ -262,6 +286,32 @@ def _cmd_triage(args, store, provider, settings, out) -> int:
         print(f"  judge cost: ~${cost:.2f}", file=out)
     print("Review by recommendation in the UI's Candidates filter.", file=out)
     return 0
+
+
+def _triage_progress(out):
+    """A progress reporter for triage: a header, then a line per judged batch.
+
+    The judge runs one LLM call per batch (15 candidates), so without this a long
+    queue looks hung. A line prints as each batch goes in flight.
+    """
+    def report(p: dict) -> None:
+        total = p["candidates_total"]
+        batches = p["batches_total"]
+        if p["phase"] == "start":
+            if total:
+                print(
+                    f"Judging {total} candidate(s) in {batches} batch(es) — "
+                    "one call each, this can take a moment…",
+                    file=out, flush=True,
+                )
+        elif p["phase"] == "judging":
+            print(
+                f"  [batch {p['batches_done'] + 1}/{batches}] "
+                f"{p['candidates_done']}/{total} judged so far …",
+                file=out, flush=True,
+            )
+
+    return report
 
 
 def _refine_progress(out):

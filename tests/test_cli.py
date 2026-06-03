@@ -293,6 +293,20 @@ def test_triage_sets_advisory_verdicts_on_candidates():
     assert store.get(a.id).status is Status.CANDIDATE
 
 
+def test_triage_prints_live_progress():
+    store = SQLitePriorStore(":memory:")
+    for i in range(3):
+        store.add(_candidate(f"cand {i}"))
+    out = io.StringIO()
+
+    main(["triage", "--repo", "github.com/acme/app"],
+         store=store, provider=JudgeProvider(), out=out)
+
+    output = out.getvalue()
+    assert "Judging 3 candidate(s)" in output
+    assert "[batch 1/1]" in output
+
+
 class RefinerProvider(LLMProvider):
     model = "claude-opus-4-8"
 
@@ -348,6 +362,26 @@ def test_refine_feedback_prints_live_progress():
     assert "Refining 2 unhandled feedback report(s)" in output
     assert "[1/2] src/api" in output
     assert "[2/2] src/db" in output
+
+
+def test_ingest_prints_live_progress(git_repo):
+    # Extraction is one LLM call per scope; the CLI must show it's working.
+    git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
+    store = SQLitePriorStore(":memory:")
+    out = io.StringIO()
+
+    code = main(
+        ["ingest", str(git_repo.path)],
+        store=store,
+        provider=FakeProvider(),
+        run_store=SQLiteIngestRunStore(":memory:"),
+        out=out,
+    )
+
+    assert code == 0
+    output = out.getvalue()
+    assert "Ingesting" in output and "extracting" in output
+    assert "[1/" in output  # at least one per-scope progress line
 
 
 def test_ingest_path_option_scopes_to_subtree(git_repo):

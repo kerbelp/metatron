@@ -52,6 +52,19 @@ def test_batches_candidates_to_limit_calls():
     assert judge.calls == 3  # ceil(5/2)
 
 
+def test_evaluate_reports_progress_per_batch():
+    seen: list[dict] = []
+    priors = [_prior(str(i)) for i in range(5)]  # batch_size 2 -> 3 batches
+    PriorJudge(IndexJudge(), batch_size=2).evaluate(priors, on_progress=seen.append)
+
+    phases = [p["phase"] for p in seen]
+    assert phases == ["start", "judging", "judging", "judging"]
+    assert all(p["batches_total"] == 3 and p["candidates_total"] == 5 for p in seen)
+    # candidates_done advances as whole batches complete (0 before each judging call)
+    assert [p["candidates_done"] for p in seen] == [0, 0, 2, 4]
+    assert [p["batches_done"] for p in seen] == [0, 0, 1, 2]
+
+
 def test_maps_indices_back_to_real_ids_per_batch():
     # 3 priors, batch_size 2: batch1 = [x,y] (n=1,2), batch2 = [z] (n=1)
     priors = [_prior("x"), _prior("y"), _prior("z")]

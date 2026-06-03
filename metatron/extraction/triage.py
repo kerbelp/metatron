@@ -9,6 +9,7 @@ auto-promoted; the human still curates. Candidates are batched to limit calls.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
@@ -38,15 +39,41 @@ class PriorJudge:
         )
         self._batch_size = max(1, batch_size)
 
-    def evaluate(self, priors: list[Prior]) -> dict[str, tuple[TriageVerdict, str]]:
+    def evaluate(
+        self,
+        priors: list[Prior],
+        *,
+        on_progress: Callable[[dict], None] | None = None,
+    ) -> dict[str, tuple[TriageVerdict, str]]:
         """Return ``{prior_id: (verdict, reason)}`` for the given candidates.
 
         Candidates are numbered per batch and mapped back by index, so the judge
         never echoes a uuid (which it mangles); a bogus/out-of-range index from
         the judge is ignored rather than fatal.
+
+        Each batch is a (slow) LLM call, so ``on_progress`` — if given — is invoked
+        before the run and before each batch with ``{phase, batches_total,
+        batches_done, candidates_total, candidates_done}`` (``phase`` is ``start``
+        then ``judging``), letting a caller show live progress.
         """
+        batches = list(_batches(priors, self._batch_size))
+        total_batches = len(batches)
+
+        def report(phase: str, done_batches: int, done_candidates: int) -> None:
+            if on_progress is not None:
+                on_progress({
+                    "phase": phase,
+                    "batches_total": total_batches,
+                    "batches_done": done_batches,
+                    "candidates_total": len(priors),
+                    "candidates_done": done_candidates,
+                })
+
+        report("start", 0, 0)
         results: dict[str, tuple[TriageVerdict, str]] = {}
-        for batch in _batches(priors, self._batch_size):
+        done_candidates = 0
+        for batch_index, batch in enumerate(batches):
+            report("judging", batch_index, done_candidates)
             prompt = render(self._template, priors=_format_priors(batch))
             for item in _parse_json_array(self._provider.complete(prompt)):
                 index = item.get("n")
@@ -56,6 +83,7 @@ class PriorJudge:
                         _parse_verdict(item.get("verdict")),
                         item.get("reason", ""),
                     )
+            done_candidates += len(batch)
         return results
 
 
