@@ -14,6 +14,7 @@ Only git-tracked files are read — untracked scratch files and ignored paths
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -100,6 +101,7 @@ def ingest(
     since: str | None = None,
     path_prefix: str | None = None,
     run_store=None,
+    on_progress: Callable[[dict], None] | None = None,
 ) -> IngestResult:
     repo_path = Path(repo_path)
     repo = repo_id(repo_path, override=repo)
@@ -113,11 +115,28 @@ def ingest(
 
     model = getattr(provider, "model", "")
     extractor = PriorExtractor(provider, repo, model)
+    scopes_total = len(signals.scopes)
+
+    def report(scopes_done: int, priors_created: int) -> None:
+        # Per-scope progress so a caller (e.g. the UI) can show priors landing and
+        # cost rising live. The provider's token counts are read by the caller.
+        if on_progress is not None:
+            on_progress({
+                "repo": repo,
+                "files_parsed": len(parsed_files),
+                "commits_read": len(commits),
+                "scopes_total": scopes_total,
+                "scopes_done": scopes_done,
+                "priors_created": priors_created,
+            })
+
+    report(0, 0)
     priors_created = 0
-    for scope_signals in signals.scopes:
+    for i, scope_signals in enumerate(signals.scopes, start=1):
         for prior in extractor.extract(scope_signals):
             store.add(prior)
             priors_created += 1
+        report(i, priors_created)
 
     result = IngestResult(
         repo=repo,

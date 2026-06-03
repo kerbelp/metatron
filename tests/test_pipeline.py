@@ -115,3 +115,20 @@ def test_ingest_calls_provider_once_per_scope(git_repo):
     provider = FakeProvider(_RESPONSE)
     result = ingest(repo.path, SQLitePriorStore(":memory:"), provider)
     assert provider.calls == result.scopes
+
+
+def test_ingest_reports_progress_per_scope(git_repo):
+    repo = _populated_repo(git_repo)
+    store = SQLitePriorStore(":memory:")
+    seen = []
+
+    result = ingest(repo.path, store, FakeProvider(_RESPONSE), on_progress=seen.append)
+
+    assert seen, "expected at least one progress callback"
+    # starts at 0, ends at the full scope count
+    assert seen[0]["scopes_done"] == 0
+    assert seen[-1]["scopes_done"] == result.scopes == seen[-1]["scopes_total"]
+    # scopes_done is monotonic non-decreasing
+    assert [p["scopes_done"] for p in seen] == sorted(p["scopes_done"] for p in seen)
+    # final priors count matches what was stored
+    assert seen[-1]["priors_created"] == result.priors_created == len(store.list())
