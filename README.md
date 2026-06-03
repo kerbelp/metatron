@@ -79,7 +79,17 @@ uv tool install .
 > The examples below use `uv run metatron`. If you installed globally, drop the
 > `uv run` prefix.
 
-### Configuration
+## Metatron vs. Code Graphs & RAG
+
+| Dimension | Code RAG (e.g., Cursor, Copilot) | Code Graphs (e.g., Graphify) | Metatron (Priors) |
+| :--- | :--- | :--- | :--- |
+| **Primary Focus** | Text similarity search | Code architecture & call chains | Intent, gotchas & conventions |
+| **Primary Data Source** | Raw source files | Abstract Syntax Trees (AST) | Git logs + Developer feedback |
+| **What it Captures** | What code is written *where* | How files/functions are connected | *Why* decisions were made |
+| **Curation Gate** | None (fully automated) | None (fully automated) | **Curated (Human-in-the-loop)** |
+| **Best For** | Finding code examples & functions | System navigation & exploration | Writing code like a team senior |
+
+## Configuration
 
 **Secrets** come from the environment only. The CLI auto-loads a `.env` from the
 working directory (it never overrides an already-exported variable, and `.env` is
