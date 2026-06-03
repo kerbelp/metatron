@@ -76,8 +76,7 @@ To install from your local clone as a global tool:
 uv tool install .
 ```
 
-> The examples below use `uv run metatron`. If you installed globally, drop the
-> `uv run` prefix.
+
 
 ## Metatron vs. Code Graphs & RAG
 
@@ -114,10 +113,10 @@ model   = "claude-sonnet-4-6"  # default extraction model
 ## Quick start
 
 ```bash
-uv run metatron ingest /path/to/your/repo      # 1. bootstrap candidates (needs API key)
-uv run metatron candidates list                # 2. review …
-uv run metatron candidates approve <id>        #    … and curate
-uv run metatron serve --repo <id>              # 3. serve canonical priors over MCP
+metatron ingest /path/to/your/repo      # 1. bootstrap candidates (needs API key)
+metatron candidates list                # 2. review …
+metatron candidates approve <id>        #    … and curate
+metatron serve --repo <id>              # 3. serve canonical priors over MCP
 ```
 
 `ingest` prints the `<id>` to use for `serve`. To wire it into a coding agent
@@ -126,7 +125,7 @@ automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
 ## Command reference
 
 ```text
-$ uv run metatron --help
+$ metatron --help
 usage: metatron [-h] {ingest,serve,repo,ui,triage,refine-feedback,candidates} ...
 
 positional arguments:
@@ -163,12 +162,12 @@ approve`/`reject` act on a globally-unique prior id and never need a repo.
 ### `repo` — list repos and choose a default
 
 ```text
-$ uv run metatron repo list
+$ metatron repo list
 github.com/acme/app  (canonical=606, candidates=290)  (default)
 github.com/acme/lib  (canonical=42,  candidates=11)
 
-$ uv run metatron repo set github.com/acme/lib   # persist a default
-$ uv run metatron repo unset                      # clear it
+$ metatron repo set github.com/acme/lib   # persist a default
+$ metatron repo unset                      # clear it
 ```
 
 `repo list` shows each repo id (the same ids `serve` uses) with its canonical and
@@ -181,7 +180,7 @@ Parses git-tracked source files (tree-sitter) and reads commit history, aggregat
 per-area signals, asks the model to infer priors, and stores them as **candidates**.
 
 ```text
-$ uv run metatron ingest /path/to/your/repo
+$ metatron ingest /path/to/your/repo
 Ingested repo 'github.com/acme/app' from /path/to/your/repo: parsed 214 files, read 500 commits across 38 scopes, created 271 candidate priors.
 Review them with: metatron candidates list --repo github.com/acme/app
 Serve them with:  metatron serve --repo github.com/acme/app
@@ -202,16 +201,16 @@ is isolated on retrieval.
 ### `candidates` — review and curate (humans decide what becomes canonical)
 
 ```text
-$ uv run metatron candidates list
+$ metatron candidates list
 1d2ab8e8-e674-4fbd-9875-52bf065e94c1  [high]  (CheckoutSuccessRedirect (paid submit/finish flow))
     After a paid submission completes via CheckoutSuccessRedirect, redirect the user to /my-dashboard/?thanks=1 rather than the public app page.
 d672a984-dd56-4974-8111-5ff730a6ed50  [high]  (src/utils/misc/index.ts (makePrettyUrl and any slug generation))
     Any slug-from-name code (e.g. `makePrettyUrl`) must strip "/" characters so a name like "LangChain / LangSmith" does not produce a link_name with slashes that break routing.
 
-$ uv run metatron candidates approve 1d2ab8e8-e674-4fbd-9875-52bf065e94c1
+$ metatron candidates approve 1d2ab8e8-e674-4fbd-9875-52bf065e94c1
 Prior 1d2ab8e8-e674-4fbd-9875-52bf065e94c1 approved.
 
-$ uv run metatron candidates reject d672a984-dd56-4974-8111-5ff730a6ed50
+$ metatron candidates reject d672a984-dd56-4974-8111-5ff730a6ed50
 Prior d672a984-dd56-4974-8111-5ff730a6ed50 rejected.
 ```
 
@@ -227,7 +226,7 @@ For large candidate queues, a separate LLM pass scores each candidate
 pre-filtered queue. It **does not curate** — a human still approves.
 
 ```text
-$ uv run metatron triage --repo github.com/acme/app
+$ metatron triage --repo github.com/acme/app
 Triaged 271 candidates: approve=88, borderline=96, reject=87
   judge cost: ~$0.42
 Review by recommendation in the UI's Candidates filter.
@@ -238,8 +237,8 @@ Flags: `--repo <id>` (limit to one repo), `--limit N` (max candidates to judge).
 ### `serve` — expose canonical priors to agents over MCP
 
 ```bash
-uv run metatron serve --repo github.com/acme/app    # MCP server over stdio, one repo
-uv run metatron serve                                # same, repo inferred from context
+metatron serve --repo github.com/acme/app    # MCP server over stdio, one repo
+metatron serve                                # same, repo inferred from context
 ```
 
 One served instance serves exactly one repo, so an agent only ever sees that repo's
@@ -252,7 +251,7 @@ MCP-capable agent launches it (see below).
 ### `ui` — local curation web UI
 
 ```text
-$ uv run metatron ui
+$ metatron ui
 Metatron curation UI on http://127.0.0.1:1337  (Ctrl-C to stop)
 ```
 
@@ -278,7 +277,7 @@ free-text gap reports into **structured candidate priors** (defaults to Opus, th
 higher-stakes step). Nothing it produces is canonical — it all goes to curation.
 
 ```text
-$ uv run metatron refine-feedback
+$ metatron refine-feedback
 Refined 3 feedback report(s) into 13 candidate prior(s) for curation.
   refiner cost: ~$0.19
 Review them in the UI Candidates tab (origin: feedback).
