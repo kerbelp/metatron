@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/metatron-logo.png" alt="Metatron" width="180" height="180" />
+</p>
+
 # Metatron
 
 Metatron is a self-hosted system that captures a codebase's real implementation
