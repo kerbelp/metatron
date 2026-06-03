@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/metatron-logo.png" alt="Metatron" width="180" height="180" />
+  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-logo.png" alt="Metatron" width="180" height="180" />
 </p>
 
 # Metatron
@@ -26,7 +26,7 @@ rules.
 
 ## How it works — the loop
 
-![Metatron Loop](assets/metatron-loop.png)
+![Metatron Loop](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-loop.png)
 
 Bootstrap once with `ingest`, curate candidates into the canonical set, then `serve`
 them to your agent over MCP. As the agent works it reports gaps via `submit_feedback`;
