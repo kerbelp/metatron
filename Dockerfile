@@ -18,5 +18,8 @@ COPY . .
 # Install the package locally
 RUN pip install --no-cache-dir .
 
-# Default entrypoint to serve the MCP server over stdio
-ENTRYPOINT ["metatron", "serve"]
+# Entrypoint is the CLI; default command serves the MCP server over stdio (what
+# Glama / an MCP client launches). Override the command to run other subcommands,
+# e.g. `docker run --rm -v ...:/data getmetatron ingest /repo`.
+ENTRYPOINT ["metatron"]
+CMD ["serve"]
