@@ -35,6 +35,11 @@ class FeedbackRefiner:
             "refine_feedback"
         )
 
+    @property
+    def provider(self) -> LLMProvider:
+        """The underlying LLM provider (so callers can read token usage for cost)."""
+        return self._provider
+
     def refine(self, gap_text: str, scope_hint: str = "", task: str = "") -> list[Prior]:
         prompt = render(
             self._template,

@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui import api
-from metatron.webui.jobs import IngestJob, TriageJob
+from metatron.webui.jobs import FeedbackLoopJob, IngestJob, TriageJob
 from metatron.webui.observability import usage_summary
 
 _INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
@@ -79,6 +79,9 @@ def _build_handler(
 ) -> type[BaseHTTPRequestHandler]:
     ingest_job = IngestJob(store, ingest_provider_factory, run_store)
     triage_job = TriageJob(store, ingest_provider_factory)
+    feedback_loop_job = FeedbackLoopJob(
+        store, event_store, refiner_factory, ingest_provider_factory
+    )
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
@@ -125,6 +128,8 @@ def _build_handler(
                 self._send_json(ingest_job.status())
             elif path == "/api/valuate/status":
                 self._send_json(triage_job.status())
+            elif path == "/api/feedback/loop/status":
+                self._send_json(feedback_loop_job.status())
             elif path == "/api/stats":
                 self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":
@@ -146,6 +151,11 @@ def _build_handler(
                 return self._send_json(
                     ingest_job.start(body.get("path"), body.get("repo") or None)
                 )
+            # /api/feedback/loop/start — refine all unhandled feedback, valuate the
+            # resulting candidates, then approve the recommended ones (one-click loop)
+            if segments == ["api", "feedback", "loop", "start"]:
+                body = self._read_json()
+                return self._send_json(feedback_loop_job.start(body.get("repo") or None))
             # /api/valuate/start — run the advisory judge over a repo's candidates,
             # optionally scoped by origin and approving the winners (one-click loop)
             if segments == ["api", "valuate", "start"]:

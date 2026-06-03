@@ -242,3 +242,145 @@ class TriageJob:
         self._status["input_tokens"] = it
         self._status["output_tokens"] = ot
         self._status["est_cost"] = estimate_cost(getattr(provider, "model", ""), it, ot)
+
+
+class FeedbackLoopJob:
+    """The Feedback screen's one-click loop: refine -> valuate -> approve.
+
+    Refines every unhandled feedback report into candidate priors (Opus), values
+    the resulting feedback-born candidates (judge), then promotes the ones it rates
+    ``approve`` to canonical. A human clicks it, so the curation invariant holds.
+    Runs at most one at a time and tracks phased progress + combined cost for the UI.
+    """
+
+    def __init__(
+        self,
+        store,
+        event_store,
+        refiner_factory: Callable[[], object] | None = None,
+        judge_provider_factory: Callable[[], object] | None = None,
+        judge_factory: Callable[[object], object] = _default_judge_factory,
+        chunk: int = 15,
+    ) -> None:
+        self._store = store
+        self._event_store = event_store
+        self._refiner_factory = refiner_factory
+        self._judge_provider_factory = judge_provider_factory
+        self._judge_factory = judge_factory
+        self._chunk = max(1, chunk)
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._status: dict = {"state": "idle"}
+
+    def status(self) -> dict:
+        with self._lock:
+            return dict(self._status)
+
+    def start(self, repo: str | None) -> dict:
+        with self._lock:
+            if self._status.get("state") == "running":
+                return {"ok": False, "error": "The feedback loop is already running."}
+            if self._event_store is None:
+                return {"ok": False, "error": "No event store configured."}
+            if self._refiner_factory is None or self._judge_provider_factory is None:
+                return {
+                    "ok": False,
+                    "error": "The feedback loop needs an LLM provider. Set "
+                             "ANTHROPIC_API_KEY and restart `metatron ui`.",
+                }
+            self._status = {
+                "state": "running", "phase": "refining", "repo": repo,
+                "refine_total": 0, "refine_done": 0, "refined": 0,
+                "valuate_total": 0, "valuate_done": 0,
+                "counts": {"approve": 0, "borderline": 0, "reject": 0},
+                "approved": 0, "est_cost": None, "error": None,
+            }
+            self._thread = threading.Thread(target=self._run, args=(repo,), daemon=True)
+            self._thread.start()
+            return {"ok": True}
+
+    def _run(self, repo: str | None) -> None:
+        from metatron.models import Origin, Status, TriageVerdict
+        from metatron.pipeline import refine_feedback
+        from metatron.webui.api import approve_recommended
+
+        try:
+            refiner = self._refiner_factory()
+            judge_provider = self._judge_provider_factory()
+            judge = self._judge_factory(judge_provider)
+        except Exception as exc:
+            with self._lock:
+                self._status.update(state="error", phase="error", error=str(exc))
+            return
+        refiner_provider = getattr(refiner, "provider", None)
+
+        # Phase 1 — refine every unhandled feedback report into candidates.
+        def on_refine(p: dict) -> None:
+            with self._lock:
+                self._status["refine_total"] = p["events_total"]
+                self._status["refine_done"] = p["events_done"]
+                self._status["refined"] = p["priors_created"]
+                self._cost(refiner_provider, judge_provider)
+
+        try:
+            refine_result = refine_feedback(
+                self._store, self._event_store, refiner, repo=repo, on_progress=on_refine
+            )
+        except Exception as exc:
+            with self._lock:
+                self._status.update(state="error", phase="error", error=str(exc))
+                self._cost(refiner_provider, judge_provider)
+            return
+        with self._lock:
+            self._status["refined"] = refine_result.priors_created
+            self._status["refine_done"] = refine_result.events_processed
+            self._status["phase"] = "valuating"
+
+        # Phase 2 — value the untriaged feedback-born candidates.
+        candidates = self._store.list(
+            repo=repo or None, status=Status.CANDIDATE,
+            triage=TriageVerdict.NONE, origin=Origin.AGENT_FEEDBACK,
+        )
+        with self._lock:
+            self._status["valuate_total"] = len(candidates)
+        try:
+            for i in range(0, len(candidates), self._chunk):
+                batch = candidates[i : i + self._chunk]
+                results = judge.evaluate(batch)
+                for prior_id, (verdict, reason) in results.items():
+                    try:
+                        self._store.set_triage(prior_id, verdict, reason)
+                    except KeyError:
+                        continue
+                with self._lock:
+                    self._status["valuate_done"] += len(batch)
+                    for verdict, _ in results.values():
+                        self._status["counts"][verdict.value] += 1
+                    self._cost(refiner_provider, judge_provider)
+        except Exception as exc:
+            with self._lock:
+                self._status.update(state="error", phase="error", error=str(exc))
+                self._cost(refiner_provider, judge_provider)
+            return
+
+        # Phase 3 — promote the feedback-born candidates the judge recommends.
+        approved = approve_recommended(
+            self._store, repo=repo, origin="agent_feedback"
+        )["approved"]
+        with self._lock:
+            self._status.update(state="done", phase="done", approved=approved)
+            self._cost(refiner_provider, judge_provider)
+
+    def _cost(self, *providers) -> None:
+        total = None
+        for provider in providers:
+            if provider is None:
+                continue
+            c = estimate_cost(
+                getattr(provider, "model", ""),
+                getattr(provider, "input_tokens", 0),
+                getattr(provider, "output_tokens", 0),
+            )
+            if c is not None:
+                total = (total or 0) + c
+        self._status["est_cost"] = total

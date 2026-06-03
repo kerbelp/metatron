@@ -232,3 +232,64 @@ def test_triage_job_approve_after_with_nothing_new_still_approves_prior_winners(
     assert res["ok"] is True and res["total"] == 0 and res["approved"] == 1
     assert job.status()["state"] == "done"
     assert store.get(already.id).status is Status.CANONICAL
+
+
+# ---- FeedbackLoopJob ----------------------------------------------------------
+
+from metatron.events import Event, EventKind  # noqa: E402
+from metatron.storage.sqlite import SQLiteEventStore  # noqa: E402
+from metatron.webui.jobs import FeedbackLoopJob  # noqa: E402
+
+
+class _LoopRefiner:
+    """Turns each gap into one candidate whose pattern echoes the gap text."""
+
+    def __init__(self) -> None:
+        self.provider = FakeProvider()
+
+    def refine(self, gap, scope_hint="", task=""):
+        return [Prior(repo="placeholder", pattern=f"refined:{gap}", scope=scope_hint or "app",
+                      rationale="r", origin=Origin.AGENT_FEEDBACK)]
+
+
+def test_feedback_loop_refines_then_valuates_then_approves():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
+                        missing="approve me", area="src/a"))
+    events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
+                        missing="reject me", area="src/b"))
+    # the judge approves the first refined prior, rejects the second
+    verdicts = {"refined:approve me": TriageVerdict.APPROVE,
+                "refined:reject me": TriageVerdict.REJECT}
+
+    job = FeedbackLoopJob(
+        store, events,
+        refiner_factory=_LoopRefiner,
+        judge_provider_factory=FakeProvider,
+        judge_factory=lambda p: FakeJudge(verdicts),
+    )
+    assert job.start("github.com/acme/app")["ok"] is True
+    s = _wait(job, state="done")
+
+    # both gaps refined into candidates; one promoted, one left as a rejected candidate
+    assert s["refined"] == 2 and s["valuate_total"] == 2 and s["approved"] == 1
+    by_pattern = {p.pattern: p for p in store.list(repo="github.com/acme/app")}
+    assert by_pattern["refined:approve me"].status is Status.CANONICAL
+    assert by_pattern["refined:reject me"].status is Status.CANDIDATE
+    # the feedback events are now handled (idempotent re-runs)
+    assert events.unhandled_feedback(repo="github.com/acme/app") == []
+
+
+def test_feedback_loop_without_provider_is_rejected():
+    job = FeedbackLoopJob(SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:"),
+                          refiner_factory=None, judge_provider_factory=None)
+    res = job.start("github.com/acme/app")
+    assert res["ok"] is False and "provider" in res["error"].lower()
+
+
+def test_feedback_loop_without_event_store_is_rejected():
+    job = FeedbackLoopJob(SQLitePriorStore(":memory:"), None,
+                          refiner_factory=_LoopRefiner, judge_provider_factory=FakeProvider)
+    res = job.start("github.com/acme/app")
+    assert res["ok"] is False and "event store" in res["error"].lower()

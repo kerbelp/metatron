@@ -131,12 +131,30 @@ def test_valuate_start_accepts_origin_and_approve_and_is_graceful(served):
 
 
 def test_valuate_and_approve_controls_present_in_html(served):
-    # Both screens carry a one-click "valuate & approve" button.
+    # Both screens carry a one-click action button.
     _, _, base = served
     _, body = _get(base + "/")
     html = body.decode()
-    for token in ('id="priorsValuateApprove"', 'id="fbValuateApprove"', "valuateAndApprove"):
+    for token in ('id="priorsValuateApprove"', 'id="fbValuateApprove"',
+                  "valuateAndApprove", "runFeedbackLoop"):
         assert token in html, token
+
+
+def test_feedback_loop_status_idle_and_start_requires_provider(served):
+    # The full feedback loop has its own status/start; with no provider it refuses
+    # cleanly (the served fixture configures none).
+    _, _, base = served
+    _, body = _get(base + "/api/feedback/loop/status")
+    assert json.loads(body)["state"] == "idle"
+
+    req = urllib.request.Request(
+        base + "/api/feedback/loop/start",
+        data=b'{"repo": "github.com/acme/app"}',
+        method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        res = json.loads(r.read())
+    assert res["ok"] is False
 
 
 def test_ui_is_repo_exclusive_no_all_option(served):

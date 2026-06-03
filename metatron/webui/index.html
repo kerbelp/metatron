@@ -235,9 +235,9 @@
     <section id="view-feedback" hidden>
       <div class="section-title">Feedback from agents (what was missing)</div>
       <div class="va-bar" id="fbVaBar">
-        <button class="act approve" id="fbValuateApprove">Valuate &amp; approve high-quality feedback priors</button>
+        <button class="act approve" id="fbValuateApprove">Refine, valuate &amp; approve feedback</button>
         <span class="ingest-phase" id="fbVaPhase" style="margin:0"></span>
-        <span class="muted">Judges feedback-born candidates, then promotes the recommended ones — one human action.</span>
+        <span class="muted">Refines all unhandled feedback into candidates, judges them, then promotes the high-quality ones — one human action.</span>
       </div>
       <div class="tabs" id="feedback-filter">
         <button class="tab active" data-fstatus="all">All</button>
@@ -708,13 +708,40 @@
         phaseEl: document.getElementById("priorsVaPhase"),
         onDone: refreshPriors,
       }));
-    document.getElementById("fbValuateApprove").addEventListener("click", () =>
-      valuateAndApprove({
-        origin: "agent_feedback",
-        btn: document.getElementById("fbValuateApprove"),
-        phaseEl: document.getElementById("fbVaPhase"),
-        onDone: loadFeedback,
-      }));
+    // The Feedback screen runs the full loop: refine all unhandled feedback into
+    // candidates, valuate them, then promote the high-quality ones. On finish it
+    // summarises and jumps to the Handled filter so the new priors are front-and-centre.
+    let fbLoopTimer = null;
+    async function runFeedbackLoop() {
+      const repo = state.repo;
+      if (!repo) { alert("No repo selected."); return; }
+      const btn = document.getElementById("fbValuateApprove");
+      const phaseEl = document.getElementById("fbVaPhase");
+      btn.disabled = true; phaseEl.classList.remove("err"); phaseEl.textContent = "Starting…";
+      const res = await (await fetch("/api/feedback/loop/start", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ repo }) })).json();
+      if (!res.ok) { phaseEl.classList.add("err"); phaseEl.textContent = res.error || "Could not start."; btn.disabled = false; return; }
+      clearInterval(fbLoopTimer);
+      fbLoopTimer = setInterval(async () => {
+        const s = await (await fetch("/api/feedback/loop/status")).json();
+        if (s.state === "running") {
+          phaseEl.textContent = s.phase === "valuating"
+            ? `Valuating ${s.valuate_done||0}/${s.valuate_total||0}… (${fmtCost(s.est_cost)})`
+            : `Refining feedback ${s.refine_done||0}/${s.refine_total||0}… (${fmtCost(s.est_cost)})`;
+          return;
+        }
+        clearInterval(fbLoopTimer); fbLoopTimer = null; btn.disabled = false;
+        if (s.state === "error") { phaseEl.classList.add("err"); phaseEl.textContent = "Failed: " + (s.error || ""); return; }
+        phaseEl.textContent = `Refined ${s.refined||0} candidate(s), approved ${s.approved||0} high-quality prior(s) — ${fmtCost(s.est_cost)}.`;
+        setFeedbackFilter("handled");  // jump to where the produced/promoted priors live
+      }, 1000);
+    }
+    function setFeedbackFilter(status) {
+      state.feedbackStatus = status;
+      document.querySelectorAll("#feedback-filter .tab").forEach(t =>
+        t.classList.toggle("active", t.dataset.fstatus === status));
+      loadFeedback();
+    }
+    document.getElementById("fbValuateApprove").addEventListener("click", runFeedbackLoop);
 
     // ---- shared ----
     function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
