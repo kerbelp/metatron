@@ -76,6 +76,22 @@ def test_ingest_status_idle_and_start_requires_provider(served):
     assert res["ok"] is False
 
 
+def test_valuate_status_idle_and_approve_recommended_wired(served):
+    _, _, base = served
+    _, body = _get(base + "/api/valuate/status")
+    assert json.loads(body)["state"] == "idle"
+
+    # nothing is triage=approve in the fixture, so this is a no-op count of 0
+    req = urllib.request.Request(
+        base + "/api/priors/approve-recommended",
+        data=b'{"repo": "github.com/acme/app"}',
+        method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        res = json.loads(r.read())
+    assert res["ok"] is True and res["approved"] == 0
+
+
 def test_ui_is_repo_exclusive_no_all_option(served):
     # Priors are scoped to one repo: the UI must not offer an "all repos" view,
     # and it surfaces the active repo id as a title.

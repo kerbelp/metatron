@@ -108,3 +108,112 @@ class IngestJob:
         self._status["input_tokens"] = it
         self._status["output_tokens"] = ot
         self._status["est_cost"] = estimate_cost(getattr(provider, "model", ""), it, ot)
+
+
+def _default_judge_factory(provider):
+    from metatron.extraction.triage import PriorJudge
+
+    return PriorJudge(provider)
+
+
+class TriageJob:
+    """Runs the advisory judge over a repo's untriaged candidates in the background.
+
+    Advisory only: it sets each candidate's triage verdict + reason; it never
+    changes status. The human still curates (see ``approve_recommended``). Chunked
+    so the UI can show progress and rising cost while it runs.
+    """
+
+    def __init__(
+        self,
+        store,
+        provider_factory: Callable[[], object] | None = None,
+        judge_factory: Callable[[object], object] = _default_judge_factory,
+        chunk: int = 15,
+    ) -> None:
+        self._store = store
+        self._provider_factory = provider_factory
+        self._judge_factory = judge_factory
+        self._chunk = max(1, chunk)
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._status: dict = {"state": "idle"}
+
+    def status(self) -> dict:
+        with self._lock:
+            return dict(self._status)
+
+    def start(self, repo: str | None) -> dict:
+        from metatron.models import Status, TriageVerdict
+
+        with self._lock:
+            if self._status.get("state") == "running":
+                return {"ok": False, "error": "A valuation is already running."}
+            if self._provider_factory is None:
+                return {
+                    "ok": False,
+                    "error": "Valuation needs an LLM provider. Set ANTHROPIC_API_KEY "
+                             "and restart `metatron ui`.",
+                }
+            candidates = self._store.list(
+                repo=repo or None, status=Status.CANDIDATE, triage=TriageVerdict.NONE
+            )
+            if not candidates:
+                self._status = {
+                    "state": "done", "phase": "done", "repo": repo,
+                    "total": 0, "triaged": 0,
+                    "counts": {"approve": 0, "borderline": 0, "reject": 0},
+                    "input_tokens": 0, "output_tokens": 0, "est_cost": None, "error": None,
+                }
+                return {"ok": True, "total": 0}
+            self._status = {
+                "state": "running", "phase": "valuating", "repo": repo,
+                "total": len(candidates), "triaged": 0,
+                "counts": {"approve": 0, "borderline": 0, "reject": 0},
+                "input_tokens": 0, "output_tokens": 0, "est_cost": None, "error": None,
+            }
+            self._thread = threading.Thread(
+                target=self._run, args=(candidates,), daemon=True
+            )
+            self._thread.start()
+            return {"ok": True, "total": len(candidates)}
+
+    def _run(self, candidates) -> None:
+        try:
+            provider = self._provider_factory()
+            judge = self._judge_factory(provider)
+        except Exception as exc:
+            with self._lock:
+                self._status.update(state="error", phase="error", error=str(exc))
+            return
+
+        try:
+            for i in range(0, len(candidates), self._chunk):
+                batch = candidates[i : i + self._chunk]
+                results = judge.evaluate(batch)
+                for prior_id, (verdict, reason) in results.items():
+                    try:
+                        self._store.set_triage(prior_id, verdict, reason)
+                    except KeyError:
+                        continue
+                with self._lock:
+                    self._status["triaged"] += len(batch)
+                    for verdict, _ in results.values():
+                        self._status["counts"][verdict.value] += 1
+                    self._record_cost(provider)
+        except Exception as exc:
+            with self._lock:
+                self._status.update(state="error", phase="error", error=str(exc))
+                self._record_cost(provider)
+            return
+
+        with self._lock:
+            self._status.update(state="done", phase="done")
+            self._record_cost(provider)
+
+    def _record_cost(self, provider) -> None:
+        it = getattr(provider, "input_tokens", 0)
+        ot = getattr(provider, "output_tokens", 0)
+        self._status["input_tokens"] = it
+        self._status["output_tokens"] = ot
+        self._status["est_cost"] = estimate_cost(getattr(provider, "model", ""), it, ot)

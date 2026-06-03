@@ -95,3 +95,79 @@ def test_ingest_error_is_captured_not_raised(tmp_path):
     assert job.start(str(tmp_path))["ok"] is True
     s = _wait(job, state="error")
     assert "kaboom" in s["error"]
+
+
+# ---- TriageJob ----------------------------------------------------------------
+
+from metatron.models import Origin, Prior, Status, TriageVerdict  # noqa: E402
+from metatron.webui.jobs import TriageJob  # noqa: E402
+
+
+def _candidate(store, pattern):
+    return store.add(Prior(repo="github.com/acme/app", pattern=pattern, scope="app",
+                           rationale="r", origin=Origin.BOOTSTRAP))
+
+
+class FakeJudge:
+    def __init__(self, by_pattern):
+        self._by_pattern = by_pattern
+
+    def evaluate(self, batch):
+        return {
+            p.id: (self._by_pattern.get(p.pattern, TriageVerdict.BORDERLINE), "because")
+            for p in batch
+        }
+
+
+def test_triage_job_sets_verdicts_and_counts_without_changing_status():
+    store = SQLitePriorStore(":memory:")
+    a = _candidate(store, "approve me")
+    b = _candidate(store, "reject me")
+    c = _candidate(store, "meh")
+    verdicts = {"approve me": TriageVerdict.APPROVE, "reject me": TriageVerdict.REJECT}
+
+    job = TriageJob(store, provider_factory=FakeProvider,
+                    judge_factory=lambda p: FakeJudge(verdicts))
+    assert job.start("github.com/acme/app")["ok"] is True
+    s = _wait(job, state="done")
+
+    assert s["total"] == 3 and s["triaged"] == 3
+    assert s["counts"] == {"approve": 1, "borderline": 1, "reject": 1}
+    assert store.get(a.id).triage is TriageVerdict.APPROVE
+    assert store.get(b.id).triage is TriageVerdict.REJECT
+    # triage never changes status — all still candidates
+    for p in (a, b, c):
+        assert store.get(p.id).status is Status.CANDIDATE
+
+
+def test_triage_job_without_provider_is_rejected():
+    job = TriageJob(SQLitePriorStore(":memory:"), provider_factory=None)
+    res = job.start("github.com/acme/app")
+    assert res["ok"] is False and "provider" in res["error"].lower()
+
+
+def test_triage_job_with_no_candidates_is_done_immediately():
+    job = TriageJob(SQLitePriorStore(":memory:"), provider_factory=FakeProvider,
+                    judge_factory=lambda p: FakeJudge({}))
+    res = job.start("github.com/acme/app")
+    assert res["ok"] is True and res["total"] == 0
+    assert job.status()["state"] == "done"
+
+
+def test_approve_recommended_promotes_only_approve_picks():
+    from metatron.webui.api import approve_recommended
+
+    store = SQLitePriorStore(":memory:")
+    a = _candidate(store, "approve me")
+    b = _candidate(store, "reject me")
+    c = _candidate(store, "untriaged")
+    store.set_triage(a.id, TriageVerdict.APPROVE, "good")
+    store.set_triage(b.id, TriageVerdict.REJECT, "bad")
+    # c left untriaged
+
+    res = approve_recommended(store, repo="github.com/acme/app")
+
+    assert res == {"ok": True, "approved": 1}
+    assert store.get(a.id).status is Status.CANONICAL
+    assert store.get(b.id).status is Status.CANDIDATE   # not recommended → untouched
+    assert store.get(c.id).status is Status.CANDIDATE

@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui import api
-from metatron.webui.jobs import IngestJob
+from metatron.webui.jobs import IngestJob, TriageJob
 from metatron.webui.observability import usage_summary
 
 _INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
@@ -78,6 +78,7 @@ def _build_handler(
     ingest_provider_factory=None,
 ) -> type[BaseHTTPRequestHandler]:
     ingest_job = IngestJob(store, ingest_provider_factory, run_store)
+    triage_job = TriageJob(store, ingest_provider_factory)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
@@ -122,6 +123,8 @@ def _build_handler(
                     self._send_json({"runs": []})
             elif path == "/api/ingest/status":
                 self._send_json(ingest_job.status())
+            elif path == "/api/valuate/status":
+                self._send_json(triage_job.status())
             elif path == "/api/stats":
                 self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":
@@ -142,6 +145,16 @@ def _build_handler(
                 body = self._read_json()
                 return self._send_json(
                     ingest_job.start(body.get("path"), body.get("repo") or None)
+                )
+            # /api/valuate/start — run the advisory judge over a repo's candidates
+            if segments == ["api", "valuate", "start"]:
+                body = self._read_json()
+                return self._send_json(triage_job.start(body.get("repo") or None))
+            # /api/priors/approve-recommended — one-click bulk approve of "approve" picks
+            if segments == ["api", "priors", "approve-recommended"]:
+                body = self._read_json()
+                return self._send_json(
+                    api.approve_recommended(store, repo=body.get("repo") or None)
                 )
             # /api/priors/<id>/<action>
             if len(segments) == 4 and segments[:2] == ["api", "priors"]:
