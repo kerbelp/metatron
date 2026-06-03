@@ -60,6 +60,22 @@ def test_root_serves_html(served):
     assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
 
 
+def test_ingest_status_idle_and_start_requires_provider(served):
+    # The test server has no ingest provider configured, so status is idle and
+    # starting an ingest is refused with a message — never a 500.
+    _, _, base = served
+    _, body = _get(base + "/api/ingest/status")
+    assert json.loads(body)["state"] == "idle"
+
+    req = urllib.request.Request(
+        base + "/api/ingest/start", data=b'{"path": "/tmp"}',
+        method="POST", headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as r:
+        res = json.loads(r.read())
+    assert res["ok"] is False
+
+
 def test_ui_is_repo_exclusive_no_all_option(served):
     # Priors are scoped to one repo: the UI must not offer an "all repos" view,
     # and it surfaces the active repo id as a title.

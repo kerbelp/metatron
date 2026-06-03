@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from metatron.storage.base import EventStore, PriorStore
 from metatron.webui import api
+from metatron.webui.jobs import IngestJob
 from metatron.webui.observability import usage_summary
 
 _INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
@@ -39,9 +40,11 @@ def make_server(
     event_store: EventStore | None = None,
     run_store=None,
     refiner_factory=None,
+    ingest_provider_factory=None,
 ) -> HTTPServer:
     return HTTPServer(
-        (host, port), _build_handler(store, event_store, run_store, refiner_factory)
+        (host, port),
+        _build_handler(store, event_store, run_store, refiner_factory, ingest_provider_factory),
     )
 
 
@@ -52,9 +55,12 @@ def serve(
     start_port: int = 1337,
     run_store=None,
     refiner_factory=None,
+    ingest_provider_factory=None,
 ) -> None:
     port = find_free_port(start=start_port, host=host)
-    httpd = make_server(store, host, port, event_store, run_store, refiner_factory)
+    httpd = make_server(
+        store, host, port, event_store, run_store, refiner_factory, ingest_provider_factory
+    )
     print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
     try:
         httpd.serve_forever()
@@ -69,7 +75,10 @@ def _build_handler(
     event_store: EventStore | None = None,
     run_store=None,
     refiner_factory=None,
+    ingest_provider_factory=None,
 ) -> type[BaseHTTPRequestHandler]:
+    ingest_job = IngestJob(store, ingest_provider_factory, run_store)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args) -> None:  # keep output quiet
             pass
@@ -111,6 +120,8 @@ def _build_handler(
                     self._send_json(api.ingest_cost(run_store, repo=repo))
                 else:
                     self._send_json({"runs": []})
+            elif path == "/api/ingest/status":
+                self._send_json(ingest_job.status())
             elif path == "/api/stats":
                 self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":
@@ -126,6 +137,12 @@ def _build_handler(
 
         def do_POST(self) -> None:
             segments = urlsplit(self.path).path.strip("/").split("/")
+            # /api/ingest/start — kick off a background ingest of a local repo
+            if segments == ["api", "ingest", "start"]:
+                body = self._read_json()
+                return self._send_json(
+                    ingest_job.start(body.get("path"), body.get("repo") or None)
+                )
             # /api/priors/<id>/<action>
             if len(segments) == 4 and segments[:2] == ["api", "priors"]:
                 prior_id, action = segments[2], segments[3]
@@ -143,6 +160,15 @@ def _build_handler(
                     api.refine_one(store, event_store, refiner_factory, segments[2])
                 )
             self._send_json({"error": "not found"}, status=404)
+
+        def _read_json(self) -> dict:
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length:
+                return {}
+            try:
+                return json.loads(self.rfile.read(length).decode() or "{}")
+            except (ValueError, UnicodeDecodeError):
+                return {}
 
         def _send_json(self, payload: dict, status: int = 200) -> None:
             self._respond(status, "application/json", json.dumps(payload).encode())

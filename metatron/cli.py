@@ -154,6 +154,7 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
     # reports refinement is unavailable rather than the server failing to start. Opus,
     # like the `refine-feedback` CLI, since reshaping feedback is the higher-stakes step.
     refiner_factory = None
+    ingest_provider_factory = None
     if settings.anthropic_api_key:
         def refiner_factory():
             from metatron.extraction.feedback_refiner import FeedbackRefiner
@@ -163,9 +164,16 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
             )
             return FeedbackRefiner(provider, model=REFINE_MODEL)
 
+        def ingest_provider_factory():
+            # Ingest uses the default (bulk-tuned) model, like the CLI.
+            return AnthropicProvider(
+                model=settings.model, api_key=settings.anthropic_api_key
+            )
+
     serve(
         store, event_store, start_port=port, run_store=run_store,
         refiner_factory=refiner_factory,
+        ingest_provider_factory=ingest_provider_factory,
     )
     return 0
 
