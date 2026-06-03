@@ -25,10 +25,11 @@ import tempfile
 REMINDER = (
     "[Metatron] You consulted Metatron (get_priors_for_context) this session but "
     "have not called submit_feedback. If the task is complete, call submit_feedback "
-    "now: pass the query_id from the priors output, mark which served priors were "
-    "helpful vs noise by their [index], and — most valuable — record any convention "
-    "Metatron should have known but didn't in what_was_missing. If the task is NOT "
-    "finished yet, say so briefly and continue."
+    "now: pass the query_id from the priors output, rate each served prior 1-10 by "
+    "its [index] in ratings (10 = exactly right, 1 = misleading) — your ratings tune "
+    "which priors get served first next time — and, most valuable, record any "
+    "convention Metatron should have known but didn't in what_was_missing. If the "
+    "task is NOT finished yet, say so briefly and continue."
 )
 
 
