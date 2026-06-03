@@ -89,6 +89,11 @@
     th { color: var(--muted); font-weight: 500; }
     th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
     .miss { color: var(--red); } .hit { color: var(--green); }
+    /* leaderboard */
+    .lb-score { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .lb-n { color: var(--muted); font-size: 12px; }
+    .eff { font-size: 12px; font-weight: 600; }
+    .eff.up { color: var(--green); } .eff.down { color: var(--red); } .eff.flat { color: var(--muted); }
     .row-scope { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); }
     .row-scope .c { color: var(--muted); font-variant-numeric: tabular-nums; }
     tr.erow { cursor: pointer; }
@@ -147,6 +152,7 @@
       <button data-view="usage">Usage</button>
       <button data-view="quality">Quality</button>
       <button data-view="feedback">Feedback</button>
+      <button data-view="leaderboard">Leaderboard</button>
     </div>
   </header>
   <div class="repo-bar"><span class="lbl">repo</span><span class="repo-id" id="repoTitle">…</span></div>
@@ -254,6 +260,15 @@
       <div id="feedback-stream"></div>
       <div class="section-title">Helpful vs noise (advisory)</div>
       <div id="feedback-summary"></div>
+    </section>
+
+    <section id="view-leaderboard" hidden>
+      <div class="section-title">Prior helpfulness (agent ratings auto-weight serve order)</div>
+      <div class="actionbar clear" id="leaderboardActions"></div>
+      <div class="section-title">Most helpful</div>
+      <div id="lb-helpful"></div>
+      <div class="section-title">Misleading — review queue</div>
+      <div id="lb-misleading"></div>
     </section>
   </main>
   <footer id="footer">metatron · <span id="version">…</span></footer>
@@ -779,12 +794,44 @@
     function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
     function fmtTime(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
+    // ---- Leaderboard view ----
+    // Canonical priors ranked by the agent ratings that auto-weight serve order.
+    // The "misleading" list doubles as a human review queue (reject stays human-gated).
+    const EFFECT = { up: "▲ boosted", down: "▼ demoted", flat: "– neutral" };
+    function renderLbRows(items, withReject) {
+      return items.map(r => `
+        <div class="card">
+          <div class="meta">
+            <span class="lb-score">${r.score.toFixed(1)}</span><span class="lb-n">/10 · ${r.n_ratings} rating${r.n_ratings === 1 ? "" : "s"}</span>
+            <span class="scope">${esc(r.scope || "(global)")}</span>
+            <span class="eff ${r.effect}">${EFFECT[r.effect] || ""}</span>
+            <span class="id">${r.id.slice(0, 8)}</span>
+          </div>
+          <div class="pattern">${esc(r.pattern)}</div>
+          ${withReject ? `<div class="actions"><button class="act reject" onclick="actLb('${r.id}','reject')">Reject</button></div>` : ""}
+        </div>`).join("");
+    }
+    async function loadLeaderboard() {
+      const data = await (await fetch("/api/leaderboard?" + withRepo())).json();
+      document.getElementById("lb-helpful").innerHTML = data.most_helpful.length
+        ? renderLbRows(data.most_helpful, false)
+        : `<div class="empty">No rated priors yet — agents haven't sent helpfulness ratings.</div>`;
+      document.getElementById("lb-misleading").innerHTML = data.misleading.length
+        ? renderLbRows(data.misleading, true)
+        : `<div class="empty">Nothing flagged — no canonical prior rates below neutral with enough ratings.</div>`;
+      setActionbar("leaderboardActions", data.review_count || 0,
+        n => `<span class="count">${n}</span> prior${n === 1 ? "" : "s"} flagged for review`,
+        "No priors flagged — nothing rating poorly.");
+    }
+    async function actLb(id, action) { await fetch(`/api/priors/${id}/${action}`, { method: "POST" }); await loadLeaderboard(); }
+
     const VIEWS = {
       priors: { el: "view-priors", load: refreshPriors },
       ingest: { el: "view-ingest", load: loadIngest },
       usage: { el: "view-usage", load: loadUsage },
       quality: { el: "view-quality", load: loadQuality },
       feedback: { el: "view-feedback", load: loadFeedback },
+      leaderboard: { el: "view-leaderboard", load: loadLeaderboard },
     };
     function showView(name) {
       for (const [n, v] of Object.entries(VIEWS)) {

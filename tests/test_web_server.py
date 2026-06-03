@@ -291,6 +291,20 @@ def test_nav_has_usage_quality_feedback_tabs(served):
         assert view in body
 
 
+def test_leaderboard_view_and_endpoint_are_present(served):
+    _, _, base = served
+    _, body = _get(base + "/")
+    html = body.decode()
+    for token in ('data-view="leaderboard"', 'id="view-leaderboard"',
+                  'id="lb-helpful"', 'id="lb-misleading"', "loadLeaderboard"):
+        assert token in html, token
+
+    _, lb = _get(base + "/api/leaderboard")
+    data = json.loads(lb)
+    assert "most_helpful" in data and "misleading" in data
+    assert isinstance(data["most_helpful"], list)
+
+
 class _FakeRefiner:
     def refine(self, gap, scope_hint="", task=""):
         return [Prior(repo="x", pattern="refined from gap", scope=scope_hint,

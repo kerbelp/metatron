@@ -11,6 +11,7 @@ from metatron.webui.api import (
     approve,
     feedback_events,
     ingest_cost,
+    leaderboard,
     list_priors,
     reject,
     stats,
@@ -223,3 +224,62 @@ def test_stats_counts_by_status(store):
     assert result["canonical"] == 1
     assert result["rejected"] == 0
     assert result["total"] == 3
+
+
+# ---- leaderboard ----
+
+REPO = "github.com/acme/app"
+
+
+def _canonical(store, pattern, scope="app"):
+    return store.add(Prior(repo=REPO, pattern=pattern, scope=scope, rationale="r",
+                           origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
+
+
+def _rate(events, prior_id, *scores):
+    for s in scores:
+        events.record(Event(repo=REPO, kind=EventKind.FEEDBACK, ratings={prior_id: s}))
+
+
+def test_leaderboard_ranks_most_helpful_and_flags_misleading():
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    good = _canonical(store, "the helpful one")
+    bad = _canonical(store, "the misleading one")
+    _canonical(store, "the unrated one")  # never rated → absent from both lists
+    _rate(events, good.id, 9, 10, 8)
+    _rate(events, bad.id, 2, 1)            # two low ratings clears the review threshold
+
+    lb = leaderboard(events, store, repo=REPO)
+
+    assert lb["most_helpful"][0]["id"] == good.id
+    assert lb["most_helpful"][0]["effect"] == "up"
+    assert [r["id"] for r in lb["misleading"]] == [bad.id]
+    assert lb["misleading"][0]["effect"] == "down"
+    assert lb["review_count"] == 1
+    assert lb["rated_total"] == 2  # the unrated canonical prior isn't counted
+
+
+def test_leaderboard_needs_enough_ratings_before_flagging_misleading():
+    # A single low rating is noise, not signal — it must not land in the review queue.
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    lonely = _canonical(store, "rated once, badly")
+    _rate(events, lonely.id, 1)
+
+    lb = leaderboard(events, store, repo=REPO)
+
+    assert lb["misleading"] == []
+    assert lb["review_count"] == 0
+    assert lb["most_helpful"][0]["id"] == lonely.id  # still appears in the full ranking
+
+
+def test_leaderboard_ignores_ratings_for_non_canonical_priors():
+    # A candidate (not yet curated) that somehow has ratings is not served, so it
+    # must not appear on the leaderboard.
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    cand = store.add(Prior(repo=REPO, pattern="not canonical", scope="app",
+                           rationale="r", origin=Origin.BOOTSTRAP))
+    _rate(events, cand.id, 9, 9)
+
+    lb = leaderboard(events, store, repo=REPO)
+
+    assert lb["most_helpful"] == [] and lb["rated_total"] == 0

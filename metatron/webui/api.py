@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections import Counter
 
 from metatron.events import EventKind
+from metatron.feedback_score import NEUTRAL, helpfulness_scores
 from metatron.models import Origin, Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, PriorStore
@@ -228,6 +229,57 @@ def feedback_analytics(
         for origin, (h, n) in by_origin.items()
     ]
     return {"priors": priors, "by_origin": by_origin_out}
+
+
+# A prior needs at least this many ratings before we'll flag it as "misleading":
+# one bad rating is noise, a pattern of them is signal.
+_REVIEW_MIN_RATINGS = 2
+_LEADERBOARD_TOP_N = 10
+
+
+def leaderboard(
+    event_store: EventStore, store: PriorStore, *, repo: str | None = None,
+    top_n: int = _LEADERBOARD_TOP_N,
+) -> dict:
+    """Canonical priors ranked by agent-rated helpfulness.
+
+    Two lists over the repo's *canonical* priors (only those are served, so only
+    those can be reordered): ``most_helpful`` (highest scores, carrying their weight)
+    and ``misleading`` (lowest scores among priors with enough ratings to trust — the
+    human review queue). Read-only: this surfaces what to curate and never mutates a
+    prior. ``effect`` is the serve-ranking direction this score induces (up/down/flat).
+    """
+    repo_filter = repo or None
+    scores = helpfulness_scores(event_store.list_events(repo=repo_filter))
+    canonical = {p.id: p for p in store.list(repo=repo_filter, status=Status.CANONICAL)}
+
+    rated = []
+    for pid, s in scores.items():
+        prior = canonical.get(pid)
+        if prior is None:  # rate only what is currently canonical / served
+            continue
+        rated.append({
+            "id": pid,
+            "pattern": prior.pattern,
+            "scope": prior.scope,
+            "score": round(s.score, 2),
+            "n_ratings": s.n_ratings,
+            "effect": "up" if s.centered > 0 else "down" if s.centered < 0 else "flat",
+        })
+
+    most_helpful = sorted(rated, key=lambda r: (-r["score"], r["id"]))[:top_n]
+    misleading = sorted(
+        (r for r in rated
+         if r["n_ratings"] >= _REVIEW_MIN_RATINGS and r["score"] < NEUTRAL),
+        key=lambda r: (r["score"], r["id"]),
+    )[:top_n]
+    return {
+        "neutral": NEUTRAL,
+        "rated_total": len(rated),
+        "review_count": len(misleading),
+        "most_helpful": most_helpful,
+        "misleading": misleading,
+    }
 
 
 def feedback_events(

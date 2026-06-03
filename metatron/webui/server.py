@@ -108,6 +108,15 @@ def _build_handler(
                     self._send_json(api.feedback_analytics(event_store, store, repo=repo))
                 else:
                     self._send_json({"priors": [], "by_origin": []})
+            elif path == "/api/leaderboard":
+                repo = _first(parse_qs(parts.query), "repo")
+                if event_store is not None:
+                    self._send_json(api.leaderboard(event_store, store, repo=repo))
+                else:
+                    self._send_json({
+                        "neutral": 5.5, "rated_total": 0, "review_count": 0,
+                        "most_helpful": [], "misleading": [],
+                    })
             elif path == "/api/feedback-events":
                 query = parse_qs(parts.query)
                 repo = _first(query, "repo")
