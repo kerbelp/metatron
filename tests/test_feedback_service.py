@@ -107,3 +107,53 @@ def test_ratings_only_feedback_creates_no_candidate():
     submit_feedback(store, events, repo=REPO, query_id=qid, helpful=[1])
 
     assert store.list(repo=REPO) == []
+
+
+# --- submit_feedback: graded 1-10 ratings by index ---
+
+def test_graded_ratings_map_indices_to_prior_ids():
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    qid = _served_query(events, ["p1", "p2", "p3"])
+
+    # string keys (how a model emits JSON object keys) and ints both resolve
+    submit_feedback(store, events, repo=REPO, query_id=qid,
+                    ratings={"1": 9, "2": 2, 3: 7})
+
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert fb.ratings == {"p1": 9, "p2": 2, "p3": 7}
+
+
+def test_graded_ratings_drop_out_of_range_index_and_out_of_band_score():
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    qid = _served_query(events, ["p1", "p2"])
+
+    submit_feedback(store, events, repo=REPO, query_id=qid,
+                    ratings={"1": 8, "99": 5, "2": 0, "x": 4})
+
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert fb.ratings == {"p1": 8}  # bad index/score/key all dropped
+
+
+def test_binary_helpful_unhelpful_derived_from_ratings_when_omitted():
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    qid = _served_query(events, ["p1", "p2", "p3"])
+
+    submit_feedback(store, events, repo=REPO, query_id=qid,
+                    ratings={"1": 9, "2": 5, "3": 2})
+
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert fb.helpful_prior_ids == ["p1"]      # >=7
+    assert fb.unhelpful_prior_ids == ["p3"]    # <=4; the mid score (5) is neither
+
+
+def test_explicit_binary_lists_take_precedence_over_derivation():
+    store, events = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    qid = _served_query(events, ["p1", "p2"])
+
+    submit_feedback(store, events, repo=REPO, query_id=qid,
+                    ratings={"1": 9, "2": 2}, helpful=[2], unhelpful=[1])
+
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert fb.ratings == {"p1": 9, "p2": 2}    # graded scores still recorded
+    assert fb.helpful_prior_ids == ["p2"]      # but explicit lists win
+    assert fb.unhelpful_prior_ids == ["p1"]

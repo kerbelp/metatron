@@ -183,6 +183,7 @@ def submit_feedback(
     query_id: str = "",
     helpful: list[int] | tuple[int, ...] = (),
     unhelpful: list[int] | tuple[int, ...] = (),
+    ratings: dict | None = None,
     what_was_missing: str = "",
     missing_scope: str = "",
 ) -> Event:
@@ -190,20 +191,32 @@ def submit_feedback(
 
     Ratings are given as 1-based indices into the priors the named query served;
     they are mapped to real prior ids locally (bogus indices ignored), so the agent
-    never echoes a UUID. ``what_was_missing`` is recorded as the gap text (with the
-    scope hint in ``area``) for the human-gated Opus refiner to later reshape into
-    *structured* candidate priors — nothing enters the queue here, and ratings never
-    mutate any prior. Returns the recorded FEEDBACK event.
+    never echoes a UUID. ``ratings`` is a graded ``{index: 1..10}`` map; out-of-range
+    indices and out-of-band scores are dropped. When ``ratings`` is given without
+    explicit ``helpful``/``unhelpful``, the binary lists are derived from it (≥7 →
+    helpful, ≤4 → noise) so existing tallies keep working. ``what_was_missing`` is
+    recorded as the gap text (with the scope hint in ``area``) for the human-gated
+    Opus refiner to later reshape into *structured* candidate priors — nothing enters
+    the queue here. The graded scores feed serve-time ranking (see
+    :mod:`metatron.feedback_score`) but never mutate a prior's status. Returns the
+    recorded FEEDBACK event.
     """
     served = _served_prior_ids(event_store, query_id)
+    resolved_ratings = _resolve_ratings(ratings or {}, served)
+    helpful_ids = _resolve_indices(helpful, served)
+    unhelpful_ids = _resolve_indices(unhelpful, served)
+    if resolved_ratings and not helpful_ids and not unhelpful_ids:
+        helpful_ids = [pid for pid, s in resolved_ratings.items() if s >= 7]
+        unhelpful_ids = [pid for pid, s in resolved_ratings.items() if s <= 4]
     return event_store.record(
         Event(
             repo=repo,
             kind=EventKind.FEEDBACK,
             area=missing_scope,  # scope hint for the refiner
             query_ref=query_id,
-            helpful_prior_ids=_resolve_indices(helpful, served),
-            unhelpful_prior_ids=_resolve_indices(unhelpful, served),
+            helpful_prior_ids=helpful_ids,
+            unhelpful_prior_ids=unhelpful_ids,
+            ratings=resolved_ratings,
             missing=what_was_missing.strip(),
         )
     )
@@ -222,6 +235,25 @@ def _resolve_indices(indices, served: list[str]) -> list[str]:
     for i in indices:
         if isinstance(i, int) and 1 <= i <= len(served):
             out.append(served[i - 1])
+    return out
+
+
+def _resolve_ratings(ratings: dict, served: list[str]) -> dict[str, int]:
+    """Map a ``{index: score}`` rating map to ``{prior_id: score}``.
+
+    Keys are 1-based indices into the served priors (ints, or the string ints models
+    emit as JSON object keys). Scores must be integers in 1..10. Out-of-range indices
+    and out-of-band scores are dropped — a bogus rating is simply ignored, never an
+    error, and last write wins if an index repeats.
+    """
+    out: dict[str, int] = {}
+    for key, score in ratings.items():
+        try:
+            i, s = int(key), int(score)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= i <= len(served) and 1 <= s <= 10:
+            out[served[i - 1]] = s
     return out
 
 

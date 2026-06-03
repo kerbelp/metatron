@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS events (
     query_ref          TEXT NOT NULL DEFAULT '',
     helpful_prior_ids   TEXT NOT NULL DEFAULT '[]',
     unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]',
+    ratings            TEXT NOT NULL DEFAULT '{}',
     missing            TEXT NOT NULL DEFAULT '',
     handled            INTEGER NOT NULL DEFAULT 0
 )
@@ -181,12 +182,12 @@ CREATE TABLE IF NOT EXISTS events (
 
 _EVENT_COLUMNS = (
     "id", "timestamp", "repo", "kind", "area", "task", "result_count", "prior_ids",
-    "version", "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "missing",
-    "handled",
+    "version", "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "ratings",
+    "missing", "handled",
 )
 
-# Event columns persisted as JSON-encoded lists.
-_EVENT_JSON_COLUMNS = ("prior_ids", "helpful_prior_ids", "unhelpful_prior_ids")
+# Event columns persisted as JSON (lists, and the ratings prior_id->score map).
+_EVENT_JSON_COLUMNS = ("prior_ids", "helpful_prior_ids", "unhelpful_prior_ids", "ratings")
 
 
 class SQLiteEventStore(EventStore):
@@ -199,6 +200,7 @@ class SQLiteEventStore(EventStore):
         _ensure_column(self._conn, "events", "query_ref", "query_ref TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "helpful_prior_ids", "helpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(self._conn, "events", "unhelpful_prior_ids", "unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(self._conn, "events", "ratings", "ratings TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(self._conn, "events", "missing", "missing TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "handled", "handled INTEGER NOT NULL DEFAULT 0")
         self._conn.commit()

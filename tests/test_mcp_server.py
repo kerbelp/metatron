@@ -2,7 +2,7 @@
 
 import asyncio
 
-from metatron.events import EventKind
+from metatron.events import Event, EventKind
 from metatron.mcp_server.server import build_server
 from metatron.models import Origin, Prior, Status
 from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
@@ -50,6 +50,22 @@ def test_submit_feedback_tool_captures_gap_without_creating_candidate():
     fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK]
     assert len(fb) == 1 and fb[0].handled is False
     assert "order_created" in fb[0].missing
+
+
+def test_submit_feedback_tool_accepts_graded_ratings_by_index():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    # a prior query served two priors, so indices 1 and 2 resolve
+    q = Event(repo=REPO, kind=EventKind.QUERY, prior_ids=["pa", "pb"])
+    events.record(q)
+    server = build_server(store, REPO, events)
+    asyncio.run(server.call_tool("submit_feedback", {
+        "query_id": q.id,
+        "ratings": {"1": 10, "2": 2},
+    }))
+    fb = [e for e in events.list_events() if e.kind is EventKind.FEEDBACK][0]
+    assert fb.ratings == {"pa": 10, "pb": 2}
+    assert fb.helpful_prior_ids == ["pa"] and fb.unhelpful_prior_ids == ["pb"]
 
 
 def test_get_priors_tool_returns_formatted_canonical_priors():

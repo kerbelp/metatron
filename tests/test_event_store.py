@@ -60,3 +60,33 @@ def test_count_events(events):
     events.record(_query(1))
     events.record(_query(2))
     assert events.count_events() == 2
+
+
+def test_graded_ratings_round_trip(events):
+    fb = Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
+               ratings={"p1": 9, "p2": 3})
+    events.record(fb)
+    assert events.get(fb.id).ratings == {"p1": 9, "p2": 3}
+
+
+def test_ratings_column_is_added_to_a_preexisting_db(tmp_path):
+    # An events table created before the `ratings` column existed must migrate and
+    # read back a sane default rather than raising.
+    import sqlite3
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE events (id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, "
+        "repo TEXT, kind TEXT NOT NULL, area TEXT NOT NULL, task TEXT NOT NULL, "
+        "result_count INTEGER NOT NULL, prior_ids TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        ("e1", "2024-01-01T00:00:00+00:00", "r", "feedback", "", "", 0, "[]"),
+    )
+    conn.commit()
+    conn.close()
+
+    store = SQLiteEventStore(str(db))
+    assert store.get("e1").ratings == {}
+    store.close()

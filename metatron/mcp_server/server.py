@@ -58,23 +58,28 @@ def build_server(
         query_id: str = "",
         helpful: list[int] | None = None,
         unhelpful: list[int] | None = None,
+        ratings: dict[str, int] | None = None,
         what_was_missing: str = "",
         missing_scope: str = "",
     ) -> str:
         """Report how helpful the served priors were, and what was missing.
 
         Call this after a task where you used Metatron's priors. Reference the
-        `query_id` from the get_priors_for_context output; mark which priors helped
-        or were noise by their [index]; and — most valuable — state any convention
+        `query_id` from the get_priors_for_context output, then — most useful of all
+        — **rate each served prior 1-10 by its [index]** in `ratings`, where 10 means
+        it was exactly right and 1 means it was misleading. Also state any convention
         Metatron should have known but didn't, in `what_was_missing`.
 
-        A gap report becomes a CANDIDATE prior for human curation; nothing you send
-        here is auto-applied to the canonical set.
+        Your ratings directly tune which priors get served first next time: helpful
+        ones rise, misleading ones sink. A gap report becomes a CANDIDATE prior for
+        human curation. Nothing you send here promotes, demotes, or rejects a prior —
+        crossing the canonical set is always a human's call.
 
         Args:
             query_id: the token from the priors output you are responding to.
-            helpful: 1-based indices of served priors that helped.
-            unhelpful: 1-based indices that were noise.
+            ratings: map of 1-based prior index -> helpfulness 1-10 (e.g. {"1": 9, "2": 3}).
+            helpful: 1-based indices that helped (optional shorthand; derived from ratings).
+            unhelpful: 1-based indices that were noise (optional shorthand).
             what_was_missing: a convention Metatron should have had.
             missing_scope: optional scope (path) for that convention.
         """
@@ -87,6 +92,7 @@ def build_server(
             query_id=query_id,
             helpful=helpful or [],
             unhelpful=unhelpful or [],
+            ratings=ratings or {},
             what_was_missing=what_was_missing,
             missing_scope=missing_scope,
         )

@@ -40,5 +40,10 @@ class Event(BaseModel):
     query_ref: str = ""                  # the QUERY event this feedback responds to
     helpful_prior_ids: list[str] = Field(default_factory=list)
     unhelpful_prior_ids: list[str] = Field(default_factory=list)
+    # Graded helpfulness: prior_id -> score 1..10 (resolved from 1-based indices at
+    # capture). Powers the time-decayed helpfulness score that auto-weights serve
+    # ordering — see metatron/feedback_score.py. binary helpful/unhelpful above are
+    # derived from these when an agent rates but omits the binary lists.
+    ratings: dict[str, int] = Field(default_factory=dict)
     missing: str = ""                    # "what was missing" — refined into priors later
     handled: bool = False                # feedback: refined into candidates yet?
