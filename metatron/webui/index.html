@@ -130,6 +130,11 @@
     .valuate-counts { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: 13px; }
     .va-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 10px; }
     .va-bar .muted { font-size: 12px; }
+    .actionbar { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); font-size: 14px; }
+    .actionbar.todo { border-color: var(--amber); }
+    .actionbar.clear { color: var(--muted); }
+    .actionbar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
+    .actionbar .count { font-weight: 700; color: var(--amber); }
   </style>
 </head>
 <body>
@@ -147,6 +152,7 @@
   <div class="repo-bar"><span class="lbl">repo</span><span class="repo-id" id="repoTitle">…</span></div>
   <main>
     <section id="view-priors">
+      <div class="actionbar clear" id="priorsActions"></div>
       <div class="stats" id="stats"></div>
       <div class="controls">
         <div class="tabs" id="tabs">
@@ -234,6 +240,7 @@
 
     <section id="view-feedback" hidden>
       <div class="section-title">Feedback from agents (what was missing)</div>
+      <div class="actionbar clear" id="feedbackActions"></div>
       <div class="va-bar" id="fbVaBar">
         <button class="act approve" id="fbValuateApprove">Refine, valuate &amp; approve feedback</button>
         <span class="ingest-phase" id="fbVaPhase" style="margin:0"></span>
@@ -285,6 +292,17 @@
         ["Candidates", s.candidate], ["Canonical", s.canonical],
         ["Rejected", s.rejected], ["Total", s.total],
       ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+      // Action items = candidates still awaiting a human approve/reject.
+      setActionbar("priorsActions", s.candidate || 0,
+        n => `<span class="count">${n}</span> candidate${n === 1 ? "" : "s"} awaiting your review`,
+        "No candidates awaiting review — you're all caught up.");
+    }
+    // Render an action-item title: amber + dot when there's work, muted "all caught up" when not.
+    function setActionbar(id, count, todoHtml, clearText) {
+      const bar = document.getElementById(id);
+      if (!bar) return;
+      if (count > 0) { bar.className = "actionbar todo"; bar.innerHTML = `<span class="dot"></span><span>${todoHtml(count)}</span>`; }
+      else { bar.className = "actionbar clear"; bar.textContent = "✓ " + clearText; }
     }
     async function loadPriors() {
       const q = withRepo({ page: state.page, page_size: state.pageSize });
@@ -382,6 +400,15 @@
         ? events.map(renderFeedbackCard).join("")
         : `<div class="empty">No ${state.feedbackStatus === "all" ? "" : state.feedbackStatus + " "}feedback yet. Agents report it via submit_feedback.</div>`;
 
+      // Action items = unhandled reports (to refine) + feedback-born candidates (to review).
+      const unhandled = (await (await fetch("/api/feedback-events?" + withRepo({ status: "unhandled" }))).json()).events.length;
+      const pending = (await (await fetch("/api/priors?" + withRepo({ status: "candidate", origin: "agent_feedback", page_size: 1 }))).json()).total;
+      const bar = document.getElementById("feedbackActions");
+      if (unhandled + pending > 0) {
+        bar.className = "actionbar todo";
+        bar.innerHTML = `<span class="dot"></span><span><span class="count">${unhandled}</span> report${unhandled === 1 ? "" : "s"} to refine · <span class="count">${pending}</span> candidate${pending === 1 ? "" : "s"} awaiting review</span>`;
+      } else { bar.className = "actionbar clear"; bar.textContent = "✓ No feedback action items — you're all caught up."; }
+
       const fb = await (await fetch("/api/feedback?" + withRepo())).json();
       const fEl = document.getElementById("feedback-summary");
       if (!fb.by_origin.length) {
@@ -410,10 +437,15 @@
         ? `<div class="kv">${label}: ${priors.map(p =>
             `<span class="scope ${cls}">${esc(p.pattern)}</span>`).join(", ")}</div>`
         : "";
-      const produced = e.produced.length
+      // Sort produced priors by status — canonical first, then candidates (your
+      // action items), then rejected — so a card reads accepted → pending → discarded.
+      const STATUS_ORDER = { canonical: 0, candidate: 1, rejected: 2, deleted: 3 };
+      const producedSorted = [...e.produced].sort(
+        (a, b) => (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9));
+      const produced = producedSorted.length
         ? `<div class="produced">
-             <div class="muted" style="margin:8px 0 4px">Refined into ${e.produced.length} candidate prior(s):</div>
-             ${e.produced.map(renderProducedPrior).join("")}
+             <div class="muted" style="margin:8px 0 4px">Refined into ${producedSorted.length} candidate prior(s):</div>
+             ${producedSorted.map(renderProducedPrior).join("")}
            </div>`
         : (e.handled ? `<div class="muted" style="margin-top:6px">Handled — ratings only, no priors produced.</div>` : "");
       const handled = e.handled

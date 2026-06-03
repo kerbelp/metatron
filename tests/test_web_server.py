@@ -157,6 +157,15 @@ def test_feedback_loop_status_idle_and_start_requires_provider(served):
     assert res["ok"] is False
 
 
+def test_action_item_titles_present_in_html(served):
+    # Every curation screen shows how many action items the human has.
+    _, _, base = served
+    _, body = _get(base + "/")
+    html = body.decode()
+    for token in ('id="priorsActions"', 'id="feedbackActions"', "setActionbar"):
+        assert token in html, token
+
+
 def test_ui_is_repo_exclusive_no_all_option(served):
     # Priors are scoped to one repo: the UI must not offer an "all repos" view,
     # and it surfaces the active repo id as a title.
