@@ -26,18 +26,7 @@ rules.
 
 ## How it works — the loop
 
-```
-            ┌─────────── ingest ───────────┐
- your repo ─┤  parse (tree-sitter) + git    ├─▶ candidate priors
-            └──────── LLM extraction ───────┘          │
-                                                       ▼
-                                              curate (human)  ◀── triage (advisory)
-                                                       │  approve / reject
-                                                       ▼
- coding agent ◀──── serve (MCP) ──── canonical priors
-       │
-       └── submit_feedback (what was missing) ──▶ refine-feedback ──▶ candidate priors ──▶ curate
-```
+![Metatron Loop](assets/metatron-loop.png)
 
 Bootstrap once with `ingest`, curate candidates into the canonical set, then `serve`
 them to your agent over MCP. As the agent works it reports gaps via `submit_feedback`;
