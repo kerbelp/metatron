@@ -295,7 +295,7 @@ Then reconnect the agent so it loads the hooks and server.
 | Tool | Purpose |
 |------|---------|
 | `get_priors_for_context(file_path_or_area, task_description)` | the relevant **canonical** priors as compact structured context, with a `query_id` to reference in feedback |
-| `submit_feedback(query_id, helpful, unhelpful, what_was_missing, missing_scope)` | rate served priors by `[index]` and report a convention Metatron should have known — captured for `refine-feedback`; never auto-applied |
+| `submit_feedback(query_id, ratings, what_was_missing, missing_scope)` | rate each served prior 1-10 by its `[index]` and report a convention Metatron should have known — ratings auto-weight which priors are served first (within relevance, never crossing the canonical gate); gaps captured for `refine-feedback` |
 | `submit_candidate_learning(pattern, scope, rationale, confidence)` | record a convention the agent learned as a new **candidate** (never auto-promoted) |
 
 A `get_priors_for_context` call returns context like this:
