@@ -17,12 +17,27 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Where the Metatron source lives — defaults to the script's own dir, but can be
+# set explicitly so the script works even when run from a copy elsewhere.
+METATRON_HOME="${METATRON_HOME:-$SCRIPT_DIR}"
+
 TARGET="${1:-.}"
 if [[ ! -d "$TARGET" ]]; then
   echo "error: target directory '$TARGET' does not exist" >&2
   exit 1
 fi
 TARGET="$(cd "$TARGET" && pwd)"
+
+# The script needs the Metatron source (the feedback-hook file and the package)
+# to onboard a repo. A loose copy of just this script won't have them — fail with
+# a clear message rather than a cryptic `cp`/import error later.
+if [[ ! -f "$METATRON_HOME/metatron_feedback_reminder.py" || ! -f "$METATRON_HOME/metatron/repo_identity.py" ]]; then
+  echo "error: can't find the Metatron source at '$METATRON_HOME'." >&2
+  echo "       Run the script from your Metatron checkout, e.g." >&2
+  echo "         bash /path/to/metatron/metatron_setup.sh \"$TARGET\"" >&2
+  echo "       or set METATRON_HOME=/path/to/metatron and re-run." >&2
+  exit 1
+fi
 
 CLAUDE_MD="$TARGET/CLAUDE.md"
 CLAUDE_DIR="$TARGET/.claude"
@@ -52,7 +67,7 @@ echo "  wrote $REMINDER"
 # Nudges the agent to submit_feedback when it finishes a task where it consulted
 # Metatron — CLAUDE.md guidance alone is unreliable.
 FEEDBACK_HOOK="$CLAUDE_DIR/metatron_feedback_reminder.py"
-cp "$SCRIPT_DIR/metatron_feedback_reminder.py" "$FEEDBACK_HOOK"
+cp "$METATRON_HOME/metatron_feedback_reminder.py" "$FEEDBACK_HOOK"
 echo "  wrote $FEEDBACK_HOOK"
 
 # --- 2. CLAUDE.md block (append once, between markers) ----------------------
@@ -149,7 +164,6 @@ PYEOF
 
 # --- 4. MCP server config (.mcp.json, additive) ----------------------------
 MCP_FILE="$TARGET/.mcp.json"
-METATRON_HOME="${METATRON_HOME:-$SCRIPT_DIR}"
 DB_PATH="${METATRON_DB:-$METATRON_HOME/metatron.db}"
 REPO_ID="${METATRON_REPO:-}"
 if [[ -z "$REPO_ID" ]]; then

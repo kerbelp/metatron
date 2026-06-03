@@ -168,6 +168,49 @@ def test_does_not_overwrite_existing_metatron_server(tmp_path):
     assert _mcp(tmp_path)["mcpServers"]["metatron"]["command"] == "SENTINEL"
 
 
+def test_stray_copy_without_source_fails_clearly(tmp_path):
+    # A loose copy of just the script (no Metatron source next to it) must fail
+    # with a helpful message, not a cryptic `cp` error.
+    stray_dir = tmp_path / "stray"
+    stray_dir.mkdir()
+    stray_script = stray_dir / "metatron_setup.sh"
+    stray_script.write_text(SCRIPT.read_text())
+    target = tmp_path / "repo"
+    target.mkdir()
+
+    env = {k: v for k, v in os.environ.items() if k != "METATRON_HOME"}
+    env["METATRON_REPO"] = "github.com/test/repo"
+    result = subprocess.run(
+        ["bash", str(stray_script), str(target)],
+        capture_output=True, text=True, env=env,
+    )
+    assert result.returncode != 0
+    assert "METATRON_HOME" in result.stderr
+    assert not (target / ".claude" / "metatron_feedback_reminder.py").exists()
+
+
+def test_metatron_home_override_runs_from_anywhere(tmp_path):
+    # With METATRON_HOME pointing at the real checkout, a copy run from elsewhere
+    # works and installs the feedback hook from that source.
+    stray_dir = tmp_path / "stray"
+    stray_dir.mkdir()
+    stray_script = stray_dir / "metatron_setup.sh"
+    stray_script.write_text(SCRIPT.read_text())
+    target = tmp_path / "repo"
+    target.mkdir()
+
+    run_setup(target, env={"METATRON_HOME": str(SCRIPT.parent)})  # uses canonical source
+    # re-run via the stray copy with the override to exercise the copy path
+    result = subprocess.run(
+        ["bash", str(stray_script), str(target)],
+        capture_output=True, text=True,
+        env={**os.environ, "METATRON_REPO": "github.com/test/repo",
+             "METATRON_HOME": str(SCRIPT.parent)},
+    )
+    assert result.returncode == 0, result.stderr
+    assert (target / ".claude" / "metatron_feedback_reminder.py").exists()
+
+
 def test_preserves_an_existing_userprompt_hook(tmp_path):
     claude_dir = tmp_path / ".claude"
     claude_dir.mkdir()
