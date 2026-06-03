@@ -89,6 +89,22 @@ def test_refine_feedback_creates_candidates_marks_handled_and_is_idempotent():
     assert (again.events_processed, again.priors_created) == (0, 0)
 
 
+def test_refine_feedback_reports_progress_per_event():
+    s, ev = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
+    ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap one", area="src/a"))
+    ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap two", area="src/b"))
+
+    seen: list[dict] = []
+    refine_feedback(s, ev, FakeRefiner(1), repo=REPO, on_progress=seen.append)
+
+    phases = [p["phase"] for p in seen]
+    assert phases == ["start", "refining", "refining"]
+    assert all(p["events_total"] == 2 for p in seen)
+    # the "refining" reports advance the done index and carry the event's area
+    assert [p["events_done"] for p in seen] == [0, 0, 1]
+    assert [p["area"] for p in seen[1:]] == ["src/a", "src/b"]
+
+
 def test_refine_feedback_event_refines_only_the_named_event():
     s, ev = SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:")
     e1 = Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap one", area="src/a")

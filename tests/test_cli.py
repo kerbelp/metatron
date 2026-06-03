@@ -329,6 +329,27 @@ def test_refine_feedback_creates_structured_candidates_and_marks_handled():
     assert events.unhandled_feedback(repo="github.com/acme/app") == []  # marked handled
 
 
+def test_refine_feedback_prints_live_progress():
+    # Each event is a slow LLM call; the CLI must show it's working, not look hung.
+    from metatron.events import Event, EventKind
+    from metatron.storage.sqlite import SQLiteEventStore
+
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    for area in ("src/api", "src/db"):
+        events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
+                            missing=f"gap in {area}", area=area))
+    out = io.StringIO()
+
+    main(["refine-feedback", "--repo", "github.com/acme/app"],
+         store=store, provider=RefinerProvider(), event_store=events, out=out)
+
+    output = out.getvalue()
+    assert "Refining 2 unhandled feedback report(s)" in output
+    assert "[1/2] src/api" in output
+    assert "[2/2] src/db" in output
+
+
 def test_ingest_path_option_scopes_to_subtree(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
     store = SQLitePriorStore(":memory:")

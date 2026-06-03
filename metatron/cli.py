@@ -264,6 +264,29 @@ def _cmd_triage(args, store, provider, settings, out) -> int:
     return 0
 
 
+def _refine_progress(out):
+    """A progress reporter for refine-feedback: one live line per event.
+
+    Each event is a slow Opus round-trip, so without this the CLI looks hung. We
+    print the count up front, then a line as each event goes in flight (so the
+    next line appearing means the previous one finished).
+    """
+    def report(p: dict) -> None:
+        total = p["events_total"]
+        if p["phase"] == "start":
+            if total:
+                print(
+                    f"Refining {total} unhandled feedback report(s) — "
+                    "one Opus call each, this can take a moment…",
+                    file=out, flush=True,
+                )
+        elif p["phase"] == "refining":
+            area = p.get("area") or "global"
+            print(f"  [{p['events_done'] + 1}/{total}] {area} …", file=out, flush=True)
+
+    return report
+
+
 def _cmd_refine_feedback(args, store, event_store, provider, settings, out) -> int:
     from metatron.extraction.feedback_refiner import FeedbackRefiner
     from metatron.pipeline import refine_feedback
@@ -272,7 +295,8 @@ def _cmd_refine_feedback(args, store, event_store, provider, settings, out) -> i
     repo = _resolve_and_announce(args.repo, store, settings, out)
     refiner = FeedbackRefiner(provider, model=getattr(provider, "model", ""))
     result = refine_feedback(
-        store, event_store, refiner, repo=repo, limit=args.limit
+        store, event_store, refiner, repo=repo, limit=args.limit,
+        on_progress=_refine_progress(out),
     )
     if result.events_processed == 0:
         print("No unhandled feedback to refine.", file=out)

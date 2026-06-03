@@ -45,7 +45,15 @@ class RefineResult(BaseModel):
     priors_created: int
 
 
-def refine_feedback(store, event_store, refiner, *, repo=None, limit=None) -> RefineResult:
+def refine_feedback(
+    store,
+    event_store,
+    refiner,
+    *,
+    repo=None,
+    limit=None,
+    on_progress: Callable[[dict], None] | None = None,
+) -> RefineResult:
     """Reshape unhandled feedback gaps into structured candidate priors.
 
     For each unhandled FEEDBACK event, the ``refiner`` (anything with a
@@ -54,17 +62,32 @@ def refine_feedback(store, event_store, refiner, *, repo=None, limit=None) -> Re
     handled (recording the produced candidate ids) so re-runs are idempotent.
     Ratings-only feedback (no gap text) is marked handled without producing priors.
     Human curation still gates everything — nothing here becomes canonical.
+
+    Each refiner call is a (slow) LLM round-trip, so ``on_progress`` — if given — is
+    invoked with a status dict before the run starts and before each event, letting a
+    caller surface live progress: ``{phase, events_total, events_done, area,
+    priors_created}`` where ``phase`` is ``start`` then ``refining``.
     """
     events = event_store.unhandled_feedback(repo=repo)
     if limit is not None:
         events = events[:limit]
+    total = len(events)
 
+    def report(phase: str, done: int, priors: int, area: str = "") -> None:
+        if on_progress is not None:
+            on_progress({
+                "phase": phase, "events_total": total,
+                "events_done": done, "priors_created": priors, "area": area,
+            })
+
+    report("start", 0, 0)
     priors_created = 0
-    for event in events:
+    for index, event in enumerate(events):
+        report("refining", index, priors_created, event.area)
         produced = _refine_one(store, event_store, refiner, event)
         priors_created += len(produced)
 
-    return RefineResult(events_processed=len(events), priors_created=priors_created)
+    return RefineResult(events_processed=total, priors_created=priors_created)
 
 
 def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineResult:
