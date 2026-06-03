@@ -106,6 +106,28 @@
     .prow:first-child { border-top: none; }
     .prow-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 2px; }
     .prow-actions { margin-left: auto; display: flex; gap: 6px; }
+
+    /* ---- ingest screen + Metatron Cube ---- */
+    .ingest-top { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+    .ingest-cube { width: 200px; height: 200px; flex-shrink: 0; }
+    .ingest-cube svg { width: 100%; height: 100%; overflow: visible; }
+    .ingest-cube.running svg { animation: spinSlow 70s linear infinite; transform-origin: 50% 50%; }
+    .cube-line { stroke: var(--border); stroke-width: 1; fill: none; }
+    .cube-node { fill: var(--bg); stroke: var(--accent); stroke-width: 1.4; }
+    .cube-node-core { fill: var(--accent); transform-box: fill-box; transform-origin: center; }
+    .ingest-cube.running .cube-node-core { animation: nodePulse 2.6s ease-in-out infinite; }
+    .ingest-cube.running .cube-node-core:nth-child(3n) { animation-delay: .5s; }
+    .ingest-cube.running .cube-node-core:nth-child(3n+1) { animation-delay: 1s; }
+    @keyframes spinSlow { to { transform: rotate(360deg); } }
+    @keyframes nodePulse { 0%,100% { opacity:.5; transform:scale(.82); } 50% { opacity:1; transform:scale(1.2); } }
+    .ingest-form { flex: 1; min-width: 260px; }
+    .ingest-form .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ingest-form input { flex: 1; }
+    .ingest-metrics { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .ingest-phase { color: var(--muted); font-size: 13px; margin-top: 10px; }
+    .ingest-phase.err { color: var(--red); }
+    .valuate-box { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+    .valuate-counts { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; color: var(--muted); font-size: 13px; }
   </style>
 </head>
 <body>
@@ -114,6 +136,7 @@
     <select id="repo" class="repo-select" title="Repository"></select>
     <div class="nav" id="nav">
       <button class="active" data-view="priors">Priors</button>
+      <button data-view="ingest">Ingest</button>
       <button data-view="usage">Usage</button>
       <button data-view="quality">Quality</button>
       <button data-view="feedback">Feedback</button>
@@ -148,6 +171,36 @@
       </div>
       <div id="list"></div>
       <div class="pager" id="pager"></div>
+    </section>
+
+    <section id="view-ingest" hidden>
+      <div class="ingest-top">
+        <div class="ingest-cube" id="ingestCube"></div>
+        <div class="ingest-form">
+          <div class="section-title" style="margin-top:0">Ingest a repo</div>
+          <div class="row">
+            <input type="text" id="ingestPath" placeholder="/path/to/a/local/git/repo" />
+            <button class="act approve" id="ingestStart">Start ingest</button>
+          </div>
+          <div class="ingest-phase" id="ingestPhase">Point Metatron at a local repo to bootstrap candidate priors.</div>
+          <div class="ingest-metrics" id="ingestMetrics" hidden></div>
+          <div class="bar" id="ingestBarWrap" hidden><span id="ingestBar"></span></div>
+        </div>
+      </div>
+
+      <div class="valuate-box" id="valuateBox" hidden>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <strong>AI valuation</strong>
+          <button class="act" id="valuateStart">Run valuation</button>
+          <button class="act approve" id="approveRecommended" hidden>Approve recommended</button>
+          <span class="ingest-phase" id="valuatePhase" style="margin:0"></span>
+        </div>
+        <div class="valuate-counts" id="valuateCounts" hidden></div>
+        <div class="muted" style="margin-top:8px">Valuation is advisory. Approving the recommended set is a single human action — nothing self-promotes.</div>
+      </div>
+
+      <div class="section-title">Priors landing</div>
+      <div id="ingestPriors"><div class="empty">No priors yet.</div></div>
     </section>
 
     <section id="view-usage" hidden>
@@ -475,12 +528,148 @@
       row.classList.toggle("open", !el.hidden);
     }
 
+    // ---- Ingest screen (with the Metatron Cube, ported from the marketing site) ----
+    const SVGNS = "http://www.w3.org/2000/svg";
+    function cubeNodes(cx, cy, d) {
+      const pts = [{ x: cx, y: cy, ring: 0 }];
+      for (let i = 0; i < 6; i++) { const a = Math.PI/180*(60*i-90); pts.push({ x: cx+d*Math.cos(a), y: cy+d*Math.sin(a), ring: 1 }); }
+      for (let j = 0; j < 6; j++) { const b = Math.PI/180*(60*j-90); pts.push({ x: cx+2*d*Math.cos(b), y: cy+2*d*Math.sin(b), ring: 2 }); }
+      return pts;
+    }
+    function cubeEdges(pts) { const e = []; for (let i=0;i<pts.length;i++) for (let k=i+1;k<pts.length;k++) e.push([pts[i],pts[k]]); return e; }
+    function buildCube(host) {
+      if (!host || host.dataset.built) return;
+      const size = 200, cx = size/2, cy = size/2, d = size*0.2;
+      const pts = cubeNodes(cx, cy, d), edges = cubeEdges(pts);
+      const svg = document.createElementNS(SVGNS, "svg");
+      svg.setAttribute("viewBox", `0 0 ${size} ${size}`); svg.setAttribute("fill", "none");
+      edges.forEach(e => { const ln = document.createElementNS(SVGNS, "line");
+        ln.setAttribute("x1", e[0].x.toFixed(2)); ln.setAttribute("y1", e[0].y.toFixed(2));
+        ln.setAttribute("x2", e[1].x.toFixed(2)); ln.setAttribute("y2", e[1].y.toFixed(2));
+        ln.setAttribute("class", "cube-line"); svg.appendChild(ln); });
+      pts.forEach(p => { const r = p.ring === 0 ? 6 : p.ring === 1 ? 5 : 4;
+        const c = document.createElementNS(SVGNS, "circle");
+        c.setAttribute("cx", p.x.toFixed(2)); c.setAttribute("cy", p.y.toFixed(2)); c.setAttribute("r", r); c.setAttribute("class", "cube-node"); svg.appendChild(c);
+        const core = document.createElementNS(SVGNS, "circle");
+        core.setAttribute("cx", p.x.toFixed(2)); core.setAttribute("cy", p.y.toFixed(2)); core.setAttribute("r", (r*0.34).toFixed(2)); core.setAttribute("class", "cube-node-core"); svg.appendChild(core); });
+      host.appendChild(svg); host.dataset.built = "1";
+    }
+
+    let lastIngestRepo = null, ingestTimer = null, valuateTimer = null;
+    function fmtCost(c) { return c == null ? "—" : "$" + Number(c).toFixed(2); }
+
+    async function loadIngest() {
+      buildCube(document.getElementById("ingestCube"));
+      const s = await (await fetch("/api/ingest/status")).json();
+      if (s.state && s.state !== "idle") { applyIngestStatus(s); if (s.state === "running") startIngestPolling(); }
+    }
+
+    function applyIngestStatus(s) {
+      document.getElementById("ingestCube").classList.toggle("running", s.state === "running");
+      const phase = document.getElementById("ingestPhase");
+      document.getElementById("ingestStart").disabled = s.state === "running";
+      if (s.state === "error") { phase.classList.add("err"); phase.textContent = "Ingest failed: " + (s.error || "unknown"); }
+      else { phase.classList.remove("err"); phase.textContent = s.state === "done"
+        ? `Done — ${s.priors_created} candidate priors from ${s.repo}.`
+        : `Ingesting ${s.repo || s.path || ""}…`; }
+
+      const metrics = document.getElementById("ingestMetrics");
+      metrics.hidden = false;
+      metrics.innerHTML = [
+        ["Scopes", `${s.scopes_done||0}/${s.scopes_total||0}`],
+        ["Priors", s.priors_created||0],
+        ["Tokens", `${(s.input_tokens||0).toLocaleString()} / ${(s.output_tokens||0).toLocaleString()}`],
+        ["Est. cost", fmtCost(s.est_cost)],
+      ].map(([l,n]) => `<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join("");
+
+      const pctDone = s.scopes_total ? Math.round(100*(s.scopes_done||0)/s.scopes_total) : (s.state === "done" ? 100 : 0);
+      document.getElementById("ingestBarWrap").hidden = false;
+      document.getElementById("ingestBar").style.width = pctDone + "%";
+
+      if (s.repo) { lastIngestRepo = s.repo; loadIngestPriors(s.repo); }
+      if (s.state === "done") document.getElementById("valuateBox").hidden = false;
+    }
+
+    async function loadIngestPriors(repo) {
+      const q = new URLSearchParams({ repo, status: "candidate", page_size: "50" });
+      const data = await (await fetch("/api/priors?" + q)).json();
+      const el = document.getElementById("ingestPriors");
+      el.innerHTML = data.items.length
+        ? data.items.map(p => `<div class="card"><div class="meta">
+            <span class="badge ${p.confidence}">${p.confidence}</span>
+            <span class="scope">${esc(p.scope || "(global)")}</span></div>
+            <div class="pattern">${esc(p.pattern)}</div></div>`).join("")
+        : `<div class="empty">No priors yet.</div>`;
+    }
+
+    function startIngestPolling() {
+      clearInterval(ingestTimer);
+      ingestTimer = setInterval(async () => {
+        const s = await (await fetch("/api/ingest/status")).json();
+        applyIngestStatus(s);
+        if (s.state !== "running") { clearInterval(ingestTimer); ingestTimer = null; if (s.state === "done") loadRepos(); }
+      }, 1000);
+    }
+
+    async function startIngest() {
+      const path = document.getElementById("ingestPath").value.trim();
+      if (!path) { alert("Enter a local repo path."); return; }
+      document.getElementById("valuateBox").hidden = true;
+      const res = await (await fetch("/api/ingest/start", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ path }) })).json();
+      if (!res.ok) { alert(res.error || "Could not start ingest."); return; }
+      startIngestPolling();
+    }
+
+    function applyValuateStatus(s) {
+      const phase = document.getElementById("valuatePhase"), counts = document.getElementById("valuateCounts");
+      document.getElementById("valuateStart").disabled = s.state === "running";
+      if (s.state === "error") { phase.classList.add("err"); phase.textContent = "Valuation failed: " + (s.error || ""); return; }
+      phase.classList.remove("err");
+      phase.textContent = s.state === "running" ? `Valuating ${s.triaged||0}/${s.total||0}… (${fmtCost(s.est_cost)})`
+                        : s.state === "done" ? `Done — ${fmtCost(s.est_cost)}.` : "";
+      if (s.counts) { counts.hidden = false;
+        counts.innerHTML = `<span class="hit">✓ ${s.counts.approve} recommended</span> · <span>~ ${s.counts.borderline} borderline</span> · <span class="miss">✗ ${s.counts.reject} not recommended</span>`; }
+      const btn = document.getElementById("approveRecommended");
+      if (s.state === "done" && s.counts && s.counts.approve > 0) { btn.hidden = false; btn.textContent = `Approve ${s.counts.approve} recommended`; }
+    }
+
+    function startValuatePolling() {
+      clearInterval(valuateTimer);
+      valuateTimer = setInterval(async () => {
+        const s = await (await fetch("/api/valuate/status")).json();
+        applyValuateStatus(s);
+        if (s.state !== "running") { clearInterval(valuateTimer); valuateTimer = null; }
+      }, 1000);
+    }
+
+    async function startValuate() {
+      const repo = lastIngestRepo || state.repo;
+      if (!repo) { alert("Ingest a repo first."); return; }
+      document.getElementById("approveRecommended").hidden = true;
+      const res = await (await fetch("/api/valuate/start", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ repo }) })).json();
+      if (!res.ok) { alert(res.error || "Could not start valuation."); return; }
+      startValuatePolling();
+    }
+
+    async function approveRecommended() {
+      const repo = lastIngestRepo || state.repo;
+      const res = await (await fetch("/api/priors/approve-recommended", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ repo }) })).json();
+      alert(`Approved ${res.approved} recommended prior(s).`);
+      document.getElementById("approveRecommended").hidden = true;
+      loadIngestPriors(repo);
+    }
+
+    document.getElementById("ingestStart").addEventListener("click", startIngest);
+    document.getElementById("valuateStart").addEventListener("click", startValuate);
+    document.getElementById("approveRecommended").addEventListener("click", approveRecommended);
+
     // ---- shared ----
     function esc(s) { const d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML; }
     function fmtTime(iso) { try { return new Date(iso).toLocaleString(); } catch { return iso; } }
 
     const VIEWS = {
       priors: { el: "view-priors", load: refreshPriors },
+      ingest: { el: "view-ingest", load: loadIngest },
       usage: { el: "view-usage", load: loadUsage },
       quality: { el: "view-quality", load: loadQuality },
       feedback: { el: "view-feedback", load: loadFeedback },

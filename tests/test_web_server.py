@@ -76,6 +76,17 @@ def test_ingest_status_idle_and_start_requires_provider(served):
     assert res["ok"] is False
 
 
+def test_ingest_screen_markup_is_served(served):
+    # The ingest view, the cube host, and the start/valuate/approve controls
+    # are present in the page (wiring is exercised via the API tests).
+    _, _, base = served
+    _, body = _get(base + "/")
+    html = body.decode()
+    for token in ('id="view-ingest"', 'id="ingestCube"', 'id="ingestStart"',
+                  'id="valuateStart"', 'id="approveRecommended"', 'cubeNodes'):
+        assert token in html, token
+
+
 def test_valuate_status_idle_and_approve_recommended_wired(served):
     _, _, base = served
     _, body = _get(base + "/api/valuate/status")
