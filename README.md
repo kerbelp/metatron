@@ -44,12 +44,12 @@ them to your agent over MCP. As the agent works it reports gaps via `submit_feed
 `refine-feedback` reshapes those gaps into new candidates — closing the loop on the
 conventions extraction can't see (cross-file/workflow rules).
 
-## Requirements
+## Prerequisites
 
-- [uv](https://docs.astral.sh/uv/) (dependency + environment manager)
-- Python 3.12+
-- An Anthropic API key — only for the LLM steps (`ingest`, `triage`, `refine-feedback`).
-  `serve`, `ui`, and `candidates` are fully local and need no key.
+- **Git** (installed on your system, to analyze repository commit history and parse files)
+- **An Anthropic API key** — only for the LLM extraction steps (`ingest`, `triage`, `refine-feedback`). `serve`, `ui`, and `candidates` are fully local and need no key.
+
+*Note: The installer automatically downloads and manages `uv` and Python 3.12+ in an isolated user directory, so you do not need to pre-install them.*
 
 ## Installation
 
