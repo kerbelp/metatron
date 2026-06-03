@@ -60,6 +60,16 @@ def test_root_serves_html(served):
     assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
 
 
+def test_ui_is_repo_exclusive_no_all_option(served):
+    # Priors are scoped to one repo: the UI must not offer an "all repos" view,
+    # and it surfaces the active repo id as a title.
+    _, _, base = served
+    _, body = _get(base + "/")
+    html = body.decode()
+    assert "All repos" not in html
+    assert 'id="repoTitle"' in html
+
+
 def test_api_priors_returns_json_with_the_prior(served):
     _, prior, base = served
     status, body = _get(base + "/api/priors")

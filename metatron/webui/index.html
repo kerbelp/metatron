@@ -27,6 +27,9 @@
     footer #version { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     header h1 { margin: 0; font-size: 20px; letter-spacing: .3px; }
     .repo-select { margin-left: 8px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius); padding: 7px 10px; font-size: 13px; }
+    .repo-bar { padding: 12px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 10px; }
+    .repo-bar .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+    .repo-bar .repo-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 15px; font-weight: 600; color: var(--accent); }
     .nav { display: flex; gap: 4px; margin-left: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px; }
     .nav button { padding: 6px 16px; border-radius: 7px; cursor: pointer; color: var(--muted); font-size: 13px; border: none; background: none; }
     .nav button.active { background: var(--surface-2); color: var(--text); }
@@ -116,6 +119,7 @@
       <button data-view="feedback">Feedback</button>
     </div>
   </header>
+  <div class="repo-bar"><span class="lbl">repo</span><span class="repo-id" id="repoTitle">…</span></div>
   <main>
     <section id="view-priors">
       <div class="stats" id="stats"></div>
@@ -192,13 +196,21 @@
     }
 
     // ---- repo selector ----
+    // Priors are scoped to a single repo — there is no "all repos" view. The
+    // dropdown switches between repos; the active id is shown as a title.
     async function loadRepos() {
       const { repos } = await (await fetch("/api/repos")).json();
+      const list = repos.filter(r => r);
       const sel = document.getElementById("repo");
-      const opts = ['<option value="">All repos</option>']
-        .concat(repos.filter(r => r).map(r => `<option value="${esc(r)}">${esc(r)}</option>`));
-      sel.innerHTML = opts.join("");
+      sel.innerHTML = list.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join("");
+      if (!state.repo || !list.includes(state.repo)) state.repo = list[0] || "";
       sel.value = state.repo;
+      updateRepoTitle();
+    }
+    function updateRepoTitle() {
+      const el = document.getElementById("repoTitle");
+      if (el) el.textContent = state.repo || "no repos yet — run `metatron ingest <path>`";
+      document.title = state.repo ? `Metatron — ${state.repo}` : "Metatron";
     }
 
     // ---- Priors view ----
@@ -516,6 +528,7 @@
     });
     document.getElementById("repo").addEventListener("change", e => {
       state.repo = e.target.value; state.page = 1;
+      updateRepoTitle();
       showView(state.view);
     });
 
