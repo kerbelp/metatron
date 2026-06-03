@@ -98,16 +98,117 @@ def test_repo_list_empty_is_friendly():
     assert "No repos" in output
 
 
-def test_resolve_repo_precedence(monkeypatch, tmp_path):
+def test_candidates_list_announces_resolved_repo(monkeypatch):
+    # The resolved repo is echoed so the acted-on repo is never a mystery.
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("here rule"))  # only repo: github.com/acme/app
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
+
+    code, output = _run(["candidates", "list"], store)
+
+    assert code == 0
+    assert "Repo: github.com/acme/app" in output
+    assert "here rule" in output
+
+
+def test_candidates_list_ambiguous_repo_exits_with_guidance(monkeypatch):
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("a"))  # github.com/acme/app
+    store.add(Prior(repo="github.com/acme/other", pattern="b", scope="app",
+                    rationale="r", origin=Origin.BOOTSTRAP))
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
+
+    code, output = _run(["candidates", "list"], store)
+
+    assert code == 2
+    assert "github.com/acme/app" in output and "github.com/acme/other" in output
+    assert "repo set" in output
+
+
+def test_repo_set_persists_default_and_list_marks_it(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # so metatron.toml is written/read here, not the repo
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.delenv("METATRON_DB", raising=False)
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("x"))  # github.com/acme/app
+
+    set_code, set_out = _run(["repo", "set", "github.com/acme/app"], store)
+    assert set_code == 0
+    assert "Default repo set to github.com/acme/app" in set_out
+
+    _, list_out = _run(["repo", "list"], store)
+    assert "github.com/acme/app" in list_out and "(default)" in list_out
+
+    unset_code, unset_out = _run(["repo", "unset"], store)
+    assert unset_code == 0 and "cleared" in unset_out
+    _, list_out2 = _run(["repo", "list"], store)
+    assert "(default)" not in list_out2
+
+
+def test_resolve_repo_precedence(monkeypatch):
     from metatron.cli import _resolve_repo
+    from metatron.config import Settings
+
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("x"))  # repo github.com/acme/app
+    settings = Settings(default_repo="github.com/persisted/repo")
+    # cwd id is controlled so the "inside a tracked repo" branch is deterministic.
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/cwd/repo")
 
     monkeypatch.setenv("METATRON_REPO", "github.com/env/repo")
-    assert _resolve_repo("github.com/explicit/repo") == "github.com/explicit/repo"
-    assert _resolve_repo(None) == "github.com/env/repo"
+    # explicit beats env beats persisted default
+    assert _resolve_repo("github.com/explicit/repo", store, settings) == "github.com/explicit/repo"
+    assert _resolve_repo(None, store, settings) == "github.com/env/repo"
 
     monkeypatch.delenv("METATRON_REPO", raising=False)
-    monkeypatch.chdir(tmp_path)
-    assert _resolve_repo(None) == tmp_path.name  # cwd: no origin → directory name
+    # persisted default beats cwd/store inference
+    assert _resolve_repo(None, store, settings) == "github.com/persisted/repo"
+
+
+def test_resolve_repo_uses_cwd_when_it_is_in_the_store(monkeypatch):
+    from metatron.cli import _resolve_repo
+    from metatron.config import Settings
+
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("x"))  # github.com/acme/app
+    store.add(Prior(repo="github.com/acme/other", pattern="y", scope="app",
+                    rationale="r", origin=Origin.BOOTSTRAP))
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/acme/other")
+    # cwd matches a tracked repo, so it wins even though more than one repo exists
+    assert _resolve_repo(None, store, Settings()) == "github.com/acme/other"
+
+
+def test_resolve_repo_auto_picks_the_only_repo(monkeypatch):
+    from metatron.cli import _resolve_repo
+    from metatron.config import Settings
+
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("x"))  # the only repo: github.com/acme/app
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
+    assert _resolve_repo(None, store, Settings()) == "github.com/acme/app"
+
+
+def test_resolve_repo_ambiguous_raises_with_guidance(monkeypatch):
+    import pytest
+
+    from metatron.cli import RepoResolutionError, _resolve_repo
+    from metatron.config import Settings
+
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("x"))  # github.com/acme/app
+    store.add(Prior(repo="github.com/acme/other", pattern="y", scope="app",
+                    rationale="r", origin=Origin.BOOTSTRAP))
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
+    with pytest.raises(RepoResolutionError) as exc:
+        _resolve_repo(None, store, Settings())
+    msg = str(exc.value)
+    assert "github.com/acme/app" in msg and "github.com/acme/other" in msg
+    assert "repo set" in msg
 
 
 def test_candidates_approve_promotes_to_canonical():

@@ -32,20 +32,57 @@ from metatron.storage.sqlite import (
 )
 
 
-def _resolve_repo(explicit: str | None) -> str:
+class RepoResolutionError(Exception):
+    """Raised when the repo to act on is ambiguous and the user must disambiguate."""
+
+
+def _resolve_repo(explicit: str | None, store: PriorStore, settings) -> str:
     """The repo id a command should act on, git-style.
 
-    Precedence: explicit ``--repo`` > ``METATRON_REPO`` env (a session-wide
-    context) > the current directory's identity (its origin remote, falling back
-    to the directory name). So you rarely need to pass ``--repo`` — run commands
-    from inside the repo, or export ``METATRON_REPO`` once.
+    Precedence, highest first:
+
+    1. explicit ``--repo``
+    2. ``METATRON_REPO`` env (a per-shell session context)
+    3. a persisted default (set via ``metatron repo set``)
+    4. the current directory's identity (origin remote, else dir name) *if it is a
+       repo already in the store* — so running inside a tracked repo just works
+    5. the only repo in the store, if there is exactly one
+    6. the current directory's identity, when the store is empty (nothing to act on)
+
+    If none of these resolve and the store holds more than one repo, we refuse to
+    guess and raise :class:`RepoResolutionError` with the choices and how to pick.
     """
     if explicit:
         return explicit
     env = os.environ.get("METATRON_REPO")
     if env:
         return env
-    return repo_id(".")
+    if settings.default_repo:
+        return settings.default_repo
+
+    repos = store.list_repos()
+    here = repo_id(".")
+    if here in repos:
+        return here
+    if len(repos) == 1:
+        return repos[0]
+    if not repos:
+        return here
+
+    listed = "\n".join(f"  - {r}" for r in repos)
+    raise RepoResolutionError(
+        "Multiple repos in the store — can't tell which one you mean:\n"
+        f"{listed}\n\n"
+        "Choose one with `--repo <id>`, export METATRON_REPO=<id> for this shell, "
+        "or set a default with `metatron repo set <id>`."
+    )
+
+
+def _resolve_and_announce(explicit, store, settings, out) -> str:
+    """Resolve the repo and echo it, so the acted-on repo is always visible."""
+    repo = _resolve_repo(explicit, store, settings)
+    print(f"Repo: {repo}", file=out)
+    return repo
 
 
 def main(
@@ -72,46 +109,53 @@ def main(
     if store is None:
         store = SQLitePriorStore(settings.db_path)
 
-    if args.command == "ingest":
-        if provider is None:
-            provider = AnthropicProvider(
-                model=settings.model, api_key=settings.anthropic_api_key
+    try:
+        if args.command == "ingest":
+            if provider is None:
+                provider = AnthropicProvider(
+                    model=settings.model, api_key=settings.anthropic_api_key
+                )
+            return _cmd_ingest(
+                args, store, provider,
+                run_store or SQLiteIngestRunStore(settings.db_path), out,
             )
-        return _cmd_ingest(
-            args, store, provider,
-            run_store or SQLiteIngestRunStore(settings.db_path), out,
-        )
-    if args.command == "serve":
-        return _cmd_serve(
-            store, _resolve_repo(args.repo), event_store or SQLiteEventStore(settings.db_path)
-        )
-    if args.command == "repo":
-        return _cmd_repo(args, store, out)
-    if args.command == "ui":
-        return _cmd_ui(
-            store,
-            event_store or SQLiteEventStore(settings.db_path),
-            SQLiteIngestRunStore(settings.db_path),
-            args.port,
-            settings,
-        )
-    if args.command == "triage":
-        if provider is None:
-            provider = AnthropicProvider(
-                model=settings.model, api_key=settings.anthropic_api_key
+        if args.command == "serve":
+            # MCP speaks over stdout, so resolve silently — no "Repo:" header here.
+            return _cmd_serve(
+                store, _resolve_repo(args.repo, store, settings),
+                event_store or SQLiteEventStore(settings.db_path),
             )
-        return _cmd_triage(args, store, provider, out)
-    if args.command == "refine-feedback":
-        if provider is None:
-            # Reshaping feedback is higher-stakes than extraction — default to Opus.
-            provider = AnthropicProvider(
-                model=args.model or REFINE_MODEL, api_key=settings.anthropic_api_key
+        if args.command == "repo":
+            return _cmd_repo(args, store, settings, out)
+        if args.command == "ui":
+            return _cmd_ui(
+                store,
+                event_store or SQLiteEventStore(settings.db_path),
+                SQLiteIngestRunStore(settings.db_path),
+                args.port,
+                settings,
             )
-        return _cmd_refine_feedback(
-            args, store, event_store or SQLiteEventStore(settings.db_path), provider, out
-        )
-    if args.command == "candidates":
-        return _cmd_candidates(args, store, out)
+        if args.command == "triage":
+            if provider is None:
+                provider = AnthropicProvider(
+                    model=settings.model, api_key=settings.anthropic_api_key
+                )
+            return _cmd_triage(args, store, provider, settings, out)
+        if args.command == "refine-feedback":
+            if provider is None:
+                # Reshaping feedback is higher-stakes than extraction — default to Opus.
+                provider = AnthropicProvider(
+                    model=args.model or REFINE_MODEL, api_key=settings.anthropic_api_key
+                )
+            return _cmd_refine_feedback(
+                args, store, event_store or SQLiteEventStore(settings.db_path),
+                provider, settings, out,
+            )
+        if args.command == "candidates":
+            return _cmd_candidates(args, store, settings, out)
+    except RepoResolutionError as exc:
+        print(exc, file=out)
+        return 2
 
     _build_parser().print_help(out)
     return 1
@@ -178,15 +222,16 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
     return 0
 
 
-def _cmd_triage(args, store, provider, out) -> int:
+def _cmd_triage(args, store, provider, settings, out) -> int:
     from collections import Counter
 
     from metatron.extraction.triage import PriorJudge
     from metatron.models import TriageVerdict
     from metatron.pricing import estimate_cost
 
+    repo = _resolve_and_announce(args.repo, store, settings, out)
     candidates = store.list(
-        repo=_resolve_repo(args.repo),
+        repo=repo,
         status=Status.CANDIDATE,
         triage=TriageVerdict.NONE,
         limit=args.limit,
@@ -219,14 +264,15 @@ def _cmd_triage(args, store, provider, out) -> int:
     return 0
 
 
-def _cmd_refine_feedback(args, store, event_store, provider, out) -> int:
+def _cmd_refine_feedback(args, store, event_store, provider, settings, out) -> int:
     from metatron.extraction.feedback_refiner import FeedbackRefiner
     from metatron.pipeline import refine_feedback
     from metatron.pricing import estimate_cost
 
+    repo = _resolve_and_announce(args.repo, store, settings, out)
     refiner = FeedbackRefiner(provider, model=getattr(provider, "model", ""))
     result = refine_feedback(
-        store, event_store, refiner, repo=_resolve_repo(args.repo), limit=args.limit
+        store, event_store, refiner, repo=repo, limit=args.limit
     )
     if result.events_processed == 0:
         print("No unhandled feedback to refine.", file=out)
@@ -247,13 +293,17 @@ def _cmd_refine_feedback(args, store, event_store, provider, out) -> int:
     return 0
 
 
-def _cmd_repo(args, store, out) -> int:
+def _cmd_repo(args, store, settings, out) -> int:
     if args.repo_command == "list":
-        return _repo_list(store, out)
+        return _repo_list(store, settings, out)
+    if args.repo_command == "set":
+        return _repo_set(args.id, out)
+    if args.repo_command == "unset":
+        return _repo_unset(out)
     return 1
 
 
-def _repo_list(store, out) -> int:
+def _repo_list(store, settings, out) -> int:
     repos = store.list_repos()
     if not repos:
         print("No repos yet. Run `metatron ingest <path>` to bootstrap one.", file=out)
@@ -261,13 +311,32 @@ def _repo_list(store, out) -> int:
     for r in repos:
         canonical = store.count(repo=r, status=Status.CANONICAL)
         candidates = store.count(repo=r, status=Status.CANDIDATE)
-        print(f"{r}  (canonical={canonical}, candidates={candidates})", file=out)
+        marker = "  (default)" if r == settings.default_repo else ""
+        print(f"{r}  (canonical={canonical}, candidates={candidates}){marker}", file=out)
     return 0
 
 
-def _cmd_candidates(args, store, out) -> int:
+def _repo_set(repo: str, out) -> int:
+    from metatron.config import update_settings
+
+    update_settings({"default_repo": repo})
+    print(f"Default repo set to {repo} (saved to metatron.toml).", file=out)
+    print("Commands now act on it unless --repo or METATRON_REPO overrides.", file=out)
+    return 0
+
+
+def _repo_unset(out) -> int:
+    from metatron.config import update_settings
+
+    update_settings({"default_repo": None})
+    print("Default repo cleared.", file=out)
+    return 0
+
+
+def _cmd_candidates(args, store, settings, out) -> int:
     if args.candidates_command == "list":
-        return _candidates_list(store, _resolve_repo(args.repo), args.scope, out)
+        repo = _resolve_and_announce(args.repo, store, settings, out)
+        return _candidates_list(store, repo, args.scope, out)
     if args.candidates_command == "approve":
         return _set_status(store, args.id, Status.CANONICAL, "approved", out)
     if args.candidates_command == "reject":
@@ -322,9 +391,14 @@ def _build_parser() -> argparse.ArgumentParser:
         help="repo id to serve (defaults to METATRON_REPO, else the current dir's id)",
     )
 
-    repo_p = sub.add_parser("repo", help="inspect the repos in the store")
+    repo_p = sub.add_parser("repo", help="inspect and choose the repo commands act on")
     repo_sub = repo_p.add_subparsers(dest="repo_command")
     repo_sub.add_parser("list", help="list repos with their prior counts (the ids serve uses)")
+    repo_set_p = repo_sub.add_parser(
+        "set", help="persist a default repo (saved to metatron.toml)"
+    )
+    repo_set_p.add_argument("id", help="the repo id to use by default")
+    repo_sub.add_parser("unset", help="clear the persisted default repo")
 
     ui_p = sub.add_parser("ui", help="launch the local curation web UI")
     ui_p.add_argument(

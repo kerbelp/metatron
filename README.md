@@ -124,27 +124,37 @@ positional arguments:
 ### Choosing the repo
 
 Repo-scoped commands (`serve`, `candidates list`, `triage`, `refine-feedback`)
-resolve which repo to act on git-style, so you rarely pass `--repo`:
+resolve which repo to act on git-style, so you rarely pass `--repo`. Precedence,
+highest first:
 
 1. an explicit `--repo <id>`, else
-2. the `METATRON_REPO` environment variable (a session-wide context), else
-3. the **current directory's** identity — its normalized `origin` remote (the same
-   id `ingest` computes), falling back to the directory name.
+2. the `METATRON_REPO` environment variable (a per-shell context), else
+3. a **persisted default** set with `metatron repo set <id>` (saved to `metatron.toml`), else
+4. the **current directory's** identity (its normalized `origin` remote, the same id
+   `ingest` computes) **if that repo is already in the store**, else
+5. the **only repo in the store**, if there's exactly one, else
+6. (store empty) the current directory's identity.
 
-So `cd` into the repo and run `metatron serve` / `metatron candidates list` with no
-flag, or `export METATRON_REPO=<id>` once. `candidates approve`/`reject` act on a
-globally-unique prior id and never need a repo.
+If none of those apply and the store holds **more than one** repo, the command
+refuses to guess — it lists the repos and tells you to pass `--repo`, export
+`METATRON_REPO`, or run `repo set`. Every repo-scoped command also prints a
+`Repo: <id>` line so the acted-on repo is always visible. `candidates
+approve`/`reject` act on a globally-unique prior id and never need a repo.
 
-### `repo` — list the repos in the store
+### `repo` — list repos and choose a default
 
 ```text
 $ uv run metatron repo list
-github.com/acme/app  (canonical=606, candidates=290)
+github.com/acme/app  (canonical=606, candidates=290)  (default)
 github.com/acme/lib  (canonical=42,  candidates=11)
+
+$ uv run metatron repo set github.com/acme/lib   # persist a default
+$ uv run metatron repo unset                      # clear it
 ```
 
-Each line is a repo id you can pass to `serve` (or set as `METATRON_REPO`), with its
-canonical and candidate counts. Run this when you're not sure what id to use.
+`repo list` shows each repo id (the same ids `serve` uses) with its canonical and
+candidate counts, marking the persisted default. Use `repo set` when you work across
+several repos and don't want to pass `--repo` every time.
 
 ### `ingest` — bootstrap candidate priors from a repo + its git history
 

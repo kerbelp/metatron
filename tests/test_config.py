@@ -1,6 +1,6 @@
 """Tests for settings loading: defaults, file values, and env overrides."""
 
-from metatron.config import load_settings
+from metatron.config import load_settings, update_settings
 from metatron.extraction.provider import DEFAULT_MODEL
 
 
@@ -38,3 +38,34 @@ def test_env_overrides_file(tmp_path, monkeypatch):
 
     assert settings.db_path == "/from/env.db"
     assert settings.anthropic_api_key == "secret"
+
+
+def test_update_settings_creates_file_and_round_trips(tmp_path, monkeypatch):
+    monkeypatch.delenv("METATRON_DB", raising=False)
+    monkeypatch.delenv("METATRON_MODEL", raising=False)
+    cfg = tmp_path / "metatron.toml"
+
+    update_settings({"default_repo": "github.com/acme/app"}, cfg)
+
+    assert load_settings(cfg).default_repo == "github.com/acme/app"
+
+
+def test_update_settings_preserves_other_keys(tmp_path, monkeypatch):
+    monkeypatch.delenv("METATRON_DB", raising=False)
+    monkeypatch.delenv("METATRON_MODEL", raising=False)
+    cfg = tmp_path / "metatron.toml"
+    cfg.write_text('[metatron]\ndb_path = "/data/priors.db"\nmodel = "claude-y"\n')
+
+    update_settings({"default_repo": "github.com/acme/app"}, cfg)
+
+    settings = load_settings(cfg)
+    assert settings.default_repo == "github.com/acme/app"
+    assert settings.db_path == "/data/priors.db"
+    assert settings.model == "claude-y"
+
+
+def test_update_settings_none_removes_key(tmp_path):
+    cfg = tmp_path / "metatron.toml"
+    update_settings({"default_repo": "github.com/acme/app"}, cfg)
+    update_settings({"default_repo": None}, cfg)
+    assert load_settings(cfg).default_repo is None
