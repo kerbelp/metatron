@@ -144,10 +144,13 @@ def test_running_twice_is_idempotent(tmp_path):
 def test_creates_mcp_json_with_metatron_server(tmp_path):
     run_setup(tmp_path)
     server = _mcp(tmp_path)["mcpServers"]["metatron"]
-    assert server["command"] == "uv"
     assert "serve" in server["args"]
     assert "github.com/test/repo" in server["args"]
-    assert "METATRON_DB" in server["env"]
+    if server["command"] == "metatron":
+        assert "run" not in server["args"]
+    else:
+        assert server["command"] == "uv"
+        assert "METATRON_DB" in server["env"]
 
 
 def test_preserves_existing_mcp_servers(tmp_path):

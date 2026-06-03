@@ -165,22 +165,57 @@ else:
     print(f"  added Stop hook to {path}")
 PYEOF
 
+# Helper to derive repo ID in pure shell
+derive_repo_id() {
+  local target_dir="$1"
+  local origin_url
+  origin_url="$(git -C "$target_dir" remote get-url origin 2>/dev/null || true)"
+  if [[ -n "$origin_url" ]]; then
+    local host path_part url_clean scp_regex
+    scp_regex="^([a-zA-Z0-9._-]+@)?([a-zA-Z0-9._-]+):(.+)$"
+    if [[ "$origin_url" =~ $scp_regex ]]; then
+      host="${BASH_REMATCH[2]}"
+      path_part="${BASH_REMATCH[3]}"
+      path_part="${path_part#/}"
+      path_part="${path_part%.git}"
+      echo "${host}/${path_part}"
+    else
+      url_clean="${origin_url#*://}"
+      url_clean="${url_clean#*@}"
+      url_clean="${url_clean%.git}"
+      echo "${url_clean%/}"
+    fi
+  else
+    basename "$target_dir"
+  fi
+}
+
 # --- 4. MCP server config (.mcp.json, additive) ----------------------------
 MCP_FILE="$TARGET/.mcp.json"
 DB_PATH="${METATRON_DB:-$METATRON_HOME/metatron.db}"
 REPO_ID="${METATRON_REPO:-}"
 if [[ -z "$REPO_ID" ]]; then
-  # Use Metatron's own logic so the id matches what ingest/serve compute.
-  REPO_ID="$(uv run --project "$SCRIPT_DIR" python -c \
-    'import sys; from metatron.repo_identity import repo_id; print(repo_id(sys.argv[1]))' \
-    "$TARGET" 2>/dev/null || true)"
+  # Use shell helper so we don't depend on python/uv sync state at this stage.
+  REPO_ID="$(derive_repo_id "$TARGET" || true)"
 fi
 if [[ -z "$REPO_ID" ]]; then
   echo "  warning: could not derive repo id; skipping .mcp.json" >&2
   echo "           (set METATRON_REPO=<id> or add an origin remote, then re-run)" >&2
 else
-  SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"uv","args":["run","--project",sys.argv[1],"metatron","serve","--repo",sys.argv[2]],"env":{"METATRON_DB":sys.argv[3]}}))' \
-    "$METATRON_HOME" "$REPO_ID" "$DB_PATH")"
+  # If metatron CLI is globally available on PATH, use it directly
+  if command -v metatron >/dev/null 2>&1; then
+    if [[ -n "${METATRON_DB:-}" ]]; then
+      SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"metatron","args":["serve","--repo",sys.argv[1]],"env":{"METATRON_DB":sys.argv[2]}}))' \
+        "$REPO_ID" "$METATRON_DB")"
+    else
+      SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"metatron","args":["serve","--repo",sys.argv[1]]}))' \
+        "$REPO_ID")"
+    fi
+  else
+    # Fallback to running local check-out via uv project environment
+    SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"uv","args":["run","--project",sys.argv[1],"metatron","serve","--repo",sys.argv[2]],"env":{"METATRON_DB":sys.argv[3]}}))' \
+      "$METATRON_HOME" "$REPO_ID" "$DB_PATH")"
+  fi
   python3 - "$MCP_FILE" "$SERVER_JSON" <<'PYEOF'
 import json, os, sys
 
