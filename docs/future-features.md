@@ -12,6 +12,10 @@ any signal and any mutation of priors until quality is proven.
 | **B. Helpfulness feedback** | Human rates each *served query*, recorded | Yes (human-gated) | End-to-end usefulness |
 | **C. Self-improving loop** | System auto-adjusts priors from signals | Yes (automatic) | — |
 
+**C is now partially built (2026-06-03):** a bounded slice auto-weights serve
+*ordering* among canonical priors from helpfulness ratings. Mutation across the
+canonical boundary (promote/demote/reject) is still human-gated. See section C.
+
 ## A. Offline prior-quality evaluation harness
 
 - **What:** internal/dev tooling. Ingest across several real repos, sample the
@@ -54,11 +58,17 @@ any signal and any mutation of priors until quality is proven.
   helpfulness, outcomes) to promote / demote / refine priors over time — RL-flavored,
   closed loop, no human in the loop.
 - **Touches the product?** Yes, automatically and continuously.
-- **Status:** **explicitly deferred** (see CLAUDE.md scope discipline). The risky part
-  is *unsupervised mutation* — amplifying confidently-wrong or stale priors with
-  nobody watching.
-- **Prerequisites:** (A) a trustworthy quality metric, and likely (B)'s human-rated
-  data as ground truth, before this is safe to attempt.
+- **Status:** **partially built (2026-06-03)** — see
+  `designs/2026-06-03-prior-helpfulness-rating.md`. A **bounded** slice is now live:
+  agents rate served priors 1–10, and a time-decayed, shrunk-to-neutral score
+  **auto-reorders which canonical priors are served first**. The risky part of full
+  C — *unsupervised mutation across the canonical boundary* (promote / demote /
+  reject) — is **still not built**: the auto-weighting only reorders *within* a scope
+  tier and can never cross the canonical boundary. Every promotion/demotion/reject
+  stays human-gated, surfaced via the Leaderboard review queue.
+- **Prerequisites for going further:** (A) a trustworthy quality metric, and likely
+  (B)'s human-rated data as ground truth, before any *unsupervised mutation* is
+  attempted. The current slice deliberately stops short of that.
 
 ## Related open problems
 
