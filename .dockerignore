@@ -1,0 +1,35 @@
+# Secrets and local state — must never enter the image
+.env
+.env.*
+*.db
+metatron.db
+
+# Host virtualenv / VCS / build caches
+.venv
+.git
+.gitignore
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+
+# Local one-off exports / scratch
+bulk_approve_*.json
+
+# Dev-only docs (not used at runtime; the wheel ships the `metatron` package, and
+# README + LICENSE are kept because pyproject references them at build time)
+tests/
+docs/
+assets/
+.github/
+AGENTS.md
+CLAUDE.md
+PLAN.md
+Dockerfile
+.dockerignore
