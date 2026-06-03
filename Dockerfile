@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# Unbuffered stdio so the MCP server (stdio transport) streams cleanly
+ENV PYTHONUNBUFFERED=1
+
 # Set the working directory
 WORKDIR /app
 
