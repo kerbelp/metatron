@@ -108,17 +108,43 @@ automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
 
 ```text
 $ uv run metatron --help
-usage: metatron [-h] {ingest,serve,ui,triage,refine-feedback,candidates} ...
+usage: metatron [-h] {ingest,serve,repo,ui,triage,refine-feedback,candidates} ...
 
 positional arguments:
-  {ingest,serve,ui,triage,refine-feedback,candidates}
+  {ingest,serve,repo,ui,triage,refine-feedback,candidates}
     ingest              bootstrap candidate priors from a repo
     serve               serve one repo's priors to agents over MCP
+    repo                inspect the repos in the store
     ui                  launch the local curation web UI
     triage              run the advisory judge over candidate priors (does not auto-curate)
     refine-feedback     reshape captured agent feedback into structured candidate priors (Opus)
     candidates          review and curate candidate priors
 ```
+
+### Choosing the repo
+
+Repo-scoped commands (`serve`, `candidates list`, `triage`, `refine-feedback`)
+resolve which repo to act on git-style, so you rarely pass `--repo`:
+
+1. an explicit `--repo <id>`, else
+2. the `METATRON_REPO` environment variable (a session-wide context), else
+3. the **current directory's** identity — its normalized `origin` remote (the same
+   id `ingest` computes), falling back to the directory name.
+
+So `cd` into the repo and run `metatron serve` / `metatron candidates list` with no
+flag, or `export METATRON_REPO=<id>` once. `candidates approve`/`reject` act on a
+globally-unique prior id and never need a repo.
+
+### `repo` — list the repos in the store
+
+```text
+$ uv run metatron repo list
+github.com/acme/app  (canonical=606, candidates=290)
+github.com/acme/lib  (canonical=42,  candidates=11)
+```
+
+Each line is a repo id you can pass to `serve` (or set as `METATRON_REPO`), with its
+canonical and candidate counts. Run this when you're not sure what id to use.
 
 ### `ingest` — bootstrap candidate priors from a repo + its git history
 
@@ -160,8 +186,10 @@ $ uv run metatron candidates reject d672a984-dd56-4974-8111-5ff730a6ed50
 Prior d672a984-dd56-4974-8111-5ff730a6ed50 rejected.
 ```
 
-`candidates list` accepts `--repo <id>` and `--scope <path>` filters. `approve`
-promotes a candidate to canonical; `reject` discards it.
+`candidates list` shows the [current repo](#choosing-the-repo) — priors are scoped
+to one repo and never listed across repos; pass `--repo <id>` to target another or
+`--scope <path>` to filter. `approve` promotes a candidate to canonical; `reject`
+discards it (both take a globally-unique prior id, so they need no repo).
 
 ### `triage` — advisory judge over the candidate queue (does not auto-curate)
 
@@ -182,10 +210,13 @@ Flags: `--repo <id>` (limit to one repo), `--limit N` (max candidates to judge).
 
 ```bash
 uv run metatron serve --repo github.com/acme/app    # MCP server over stdio, one repo
+uv run metatron serve                                # same, repo inferred from context
 ```
 
-One served instance serves exactly one repo (`--repo`, the id printed by `ingest`),
-so an agent only ever sees that repo's priors. It also records usage events (queries,
+One served instance serves exactly one repo, so an agent only ever sees that repo's
+priors. `--repo` is optional — it [resolves from context](#choosing-the-repo)
+(`METATRON_REPO`, then the current dir) — but the generated `.mcp.json` passes it
+explicitly so the launched server is unambiguous. It also records usage events (queries,
 coverage) to the same DB for the UI. Normally you don't run this by hand — an
 MCP-capable agent launches it (see below).
 

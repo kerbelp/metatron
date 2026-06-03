@@ -9,6 +9,7 @@ are injectable so the dispatch is testable; in normal use they are built from
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from typing import TextIO
 
@@ -16,6 +17,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from metatron.config import load_settings
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
+from metatron.repo_identity import repo_id
 
 # Feedback refinement defaults to Opus (overridable with --model); the global
 # default model (Sonnet) is tuned for bulk extraction, not this higher-stakes step.
@@ -28,6 +30,22 @@ from metatron.storage.sqlite import (
     SQLiteIngestRunStore,
     SQLitePriorStore,
 )
+
+
+def _resolve_repo(explicit: str | None) -> str:
+    """The repo id a command should act on, git-style.
+
+    Precedence: explicit ``--repo`` > ``METATRON_REPO`` env (a session-wide
+    context) > the current directory's identity (its origin remote, falling back
+    to the directory name). So you rarely need to pass ``--repo`` — run commands
+    from inside the repo, or export ``METATRON_REPO`` once.
+    """
+    if explicit:
+        return explicit
+    env = os.environ.get("METATRON_REPO")
+    if env:
+        return env
+    return repo_id(".")
 
 
 def main(
@@ -65,8 +83,10 @@ def main(
         )
     if args.command == "serve":
         return _cmd_serve(
-            store, args.repo, event_store or SQLiteEventStore(settings.db_path)
+            store, _resolve_repo(args.repo), event_store or SQLiteEventStore(settings.db_path)
         )
+    if args.command == "repo":
+        return _cmd_repo(args, store, out)
     if args.command == "ui":
         return _cmd_ui(
             store,
@@ -158,7 +178,7 @@ def _cmd_triage(args, store, provider, out) -> int:
     from metatron.pricing import estimate_cost
 
     candidates = store.list(
-        repo=args.repo,
+        repo=_resolve_repo(args.repo),
         status=Status.CANDIDATE,
         triage=TriageVerdict.NONE,
         limit=args.limit,
@@ -198,7 +218,7 @@ def _cmd_refine_feedback(args, store, event_store, provider, out) -> int:
 
     refiner = FeedbackRefiner(provider, model=getattr(provider, "model", ""))
     result = refine_feedback(
-        store, event_store, refiner, repo=args.repo, limit=args.limit
+        store, event_store, refiner, repo=_resolve_repo(args.repo), limit=args.limit
     )
     if result.events_processed == 0:
         print("No unhandled feedback to refine.", file=out)
@@ -219,9 +239,27 @@ def _cmd_refine_feedback(args, store, event_store, provider, out) -> int:
     return 0
 
 
+def _cmd_repo(args, store, out) -> int:
+    if args.repo_command == "list":
+        return _repo_list(store, out)
+    return 1
+
+
+def _repo_list(store, out) -> int:
+    repos = store.list_repos()
+    if not repos:
+        print("No repos yet. Run `metatron ingest <path>` to bootstrap one.", file=out)
+        return 0
+    for r in repos:
+        canonical = store.count(repo=r, status=Status.CANONICAL)
+        candidates = store.count(repo=r, status=Status.CANDIDATE)
+        print(f"{r}  (canonical={canonical}, candidates={candidates})", file=out)
+    return 0
+
+
 def _cmd_candidates(args, store, out) -> int:
     if args.candidates_command == "list":
-        return _candidates_list(store, args.repo, args.scope, out)
+        return _candidates_list(store, _resolve_repo(args.repo), args.scope, out)
     if args.candidates_command == "approve":
         return _set_status(store, args.id, Status.CANONICAL, "approved", out)
     if args.candidates_command == "reject":
@@ -271,8 +309,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     serve_p = sub.add_parser("serve", help="serve one repo's priors to agents over MCP")
     serve_p.add_argument(
-        "--repo", required=True, help="repo id to serve (the normalized origin remote)"
+        "--repo",
+        default=None,
+        help="repo id to serve (defaults to METATRON_REPO, else the current dir's id)",
     )
+
+    repo_p = sub.add_parser("repo", help="inspect the repos in the store")
+    repo_sub = repo_p.add_subparsers(dest="repo_command")
+    repo_sub.add_parser("list", help="list repos with their prior counts (the ids serve uses)")
 
     ui_p = sub.add_parser("ui", help="launch the local curation web UI")
     ui_p.add_argument(
@@ -282,14 +326,20 @@ def _build_parser() -> argparse.ArgumentParser:
     triage_p = sub.add_parser(
         "triage", help="run the advisory judge over candidate priors (does not auto-curate)"
     )
-    triage_p.add_argument("--repo", default=None, help="limit to one repo")
+    triage_p.add_argument(
+        "--repo", default=None,
+        help="repo id (defaults to METATRON_REPO, else the current dir's id)",
+    )
     triage_p.add_argument("--limit", type=int, default=None, help="max candidates to judge")
 
     refine_p = sub.add_parser(
         "refine-feedback",
         help="reshape captured agent feedback into structured candidate priors (Opus)",
     )
-    refine_p.add_argument("--repo", default=None, help="limit to one repo")
+    refine_p.add_argument(
+        "--repo", default=None,
+        help="repo id (defaults to METATRON_REPO, else the current dir's id)",
+    )
     refine_p.add_argument("--limit", type=int, default=None, help="max feedback reports to refine")
     refine_p.add_argument(
         "--model", default=None, help=f"override the refiner model (default {REFINE_MODEL})"
@@ -299,7 +349,11 @@ def _build_parser() -> argparse.ArgumentParser:
     cand_sub = cand.add_subparsers(dest="candidates_command")
     list_p = cand_sub.add_parser("list", help="list candidate priors")
     list_p.add_argument("--scope", default=None)
-    list_p.add_argument("--repo", default=None, help="filter to one repo")
+    list_p.add_argument(
+        "--repo",
+        default=None,
+        help="repo id (defaults to METATRON_REPO, else the current dir's id)",
+    )
     approve_p = cand_sub.add_parser("approve", help="promote a candidate to canonical")
     approve_p.add_argument("id")
     reject_p = cand_sub.add_parser("reject", help="reject a candidate")

@@ -37,7 +37,7 @@ def test_candidates_list_shows_candidates_only():
     store.add(canon)
     store.set_status(canon.id, Status.CANONICAL)
 
-    code, output = _run(["candidates", "list"], store)
+    code, output = _run(["candidates", "list", "--repo", "github.com/acme/app"], store)
 
     assert code == 0
     assert "a candidate" in output
@@ -49,10 +49,65 @@ def test_candidates_list_filters_by_scope():
     store.add(_candidate("app rule", scope="app"))
     store.add(_candidate("lib rule", scope="lib"))
 
-    _, output = _run(["candidates", "list", "--scope", "lib"], store)
+    _, output = _run(
+        ["candidates", "list", "--scope", "lib", "--repo", "github.com/acme/app"], store
+    )
 
     assert "lib rule" in output
     assert "app rule" not in output
+
+
+def test_candidates_list_is_exclusive_to_the_current_repo(monkeypatch):
+    # Priors are scoped to a repo — listing never bleeds across repos.
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("here rule"))  # repo github.com/acme/app
+    store.add(
+        Prior(repo="github.com/acme/other", pattern="other rule", scope="app",
+              rationale="r", origin=Origin.BOOTSTRAP)
+    )
+    monkeypatch.setenv("METATRON_REPO", "github.com/acme/app")
+
+    _, scoped = _run(["candidates", "list"], store)
+    assert "here rule" in scoped
+    assert "other rule" not in scoped
+
+
+def test_repo_list_shows_repos_with_counts():
+    store = SQLitePriorStore(":memory:")
+    store.add(_candidate("a"))  # acme/app candidate
+    canon = _candidate("b")
+    store.add(canon)
+    store.set_status(canon.id, Status.CANONICAL)  # acme/app canonical
+    store.add(
+        Prior(repo="github.com/acme/other", pattern="c", scope="app",
+              rationale="r", origin=Origin.BOOTSTRAP)
+    )
+
+    code, output = _run(["repo", "list"], store)
+
+    assert code == 0
+    assert "github.com/acme/app" in output
+    assert "github.com/acme/other" in output
+    assert "canonical=1" in output
+    assert "candidates=1" in output
+
+
+def test_repo_list_empty_is_friendly():
+    code, output = _run(["repo", "list"], SQLitePriorStore(":memory:"))
+    assert code == 0
+    assert "No repos" in output
+
+
+def test_resolve_repo_precedence(monkeypatch, tmp_path):
+    from metatron.cli import _resolve_repo
+
+    monkeypatch.setenv("METATRON_REPO", "github.com/env/repo")
+    assert _resolve_repo("github.com/explicit/repo") == "github.com/explicit/repo"
+    assert _resolve_repo(None) == "github.com/env/repo"
+
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.chdir(tmp_path)
+    assert _resolve_repo(None) == tmp_path.name  # cwd: no origin → directory name
 
 
 def test_candidates_approve_promotes_to_canonical():
