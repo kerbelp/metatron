@@ -7,7 +7,10 @@ this module only declares the tools and wires them to a store.
 
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from metatron.events import Event, EventKind
 from metatron.feedback_score import helpfulness_scores
@@ -36,12 +39,34 @@ def build_server(
         return {pid: s.centered for pid, s in scores.items()}
 
     @server.tool()
-    def get_priors_for_context(file_path_or_area: str, task_description: str) -> str:
-        """Return the canonical priors relevant to an area and task.
+    def get_priors_for_context(
+        file_path_or_area: Annotated[
+            str,
+            Field(description=(
+                "The file path, directory, or architectural area you are about to work in "
+                '(e.g. "src/routes/api/users.py" or "billing").'
+            )),
+        ],
+        task_description: Annotated[
+            str,
+            Field(description=(
+                "A short description of what you are about to do there "
+                '(e.g. "add error handling to the billing webhook").'
+            )),
+        ],
+    ) -> str:
+        """Fetch the team's canonical engineering priors for a file/area and task.
 
-        Args:
-            file_path_or_area: a file path or directory/area in the codebase.
-            task_description: what the agent is about to do there.
+        Call this FIRST, before writing or editing code in an area — and again when you
+        move to a new file or module. It surfaces the conventions, preferred patterns,
+        rejected approaches, and known gotchas the team has already curated for that part
+        of the codebase, so you write code that matches their standards on the first try
+        instead of rediscovering them. Read the returned priors and comply with them.
+
+        Returns a text block of the matching priors — each with its pattern, scope, and
+        rationale — prefixed with a `query_id` token. Keep that token: pass it to
+        `submit_feedback` after the task to rate how useful the priors were. If nothing
+        is registered for the area, it says so; proceed normally.
         """
         priors = service.get_priors_for_context(
             store, repo, file_path_or_area, task_description,
@@ -66,12 +91,30 @@ def build_server(
 
     @server.tool()
     def submit_feedback(
-        query_id: str = "",
-        helpful: list[int] | None = None,
-        unhelpful: list[int] | None = None,
-        ratings: dict[str, int] | None = None,
-        what_was_missing: str = "",
-        missing_scope: str = "",
+        query_id: Annotated[
+            str,
+            Field(description="The `query_id` token from the get_priors_for_context output you are responding to."),
+        ] = "",
+        helpful: Annotated[
+            list[int] | None,
+            Field(description="Optional shorthand: 1-based indices of priors that helped. Usually derived from `ratings`, so prefer `ratings`."),
+        ] = None,
+        unhelpful: Annotated[
+            list[int] | None,
+            Field(description="Optional shorthand: 1-based indices of priors that were noise or misleading."),
+        ] = None,
+        ratings: Annotated[
+            dict[str, int] | None,
+            Field(description='The main signal: map of 1-based prior index (as a string) to a helpfulness score 1-10, where 10 = exactly right and 1 = misleading (e.g. {"1": 9, "2": 3}).'),
+        ] = None,
+        what_was_missing: Annotated[
+            str,
+            Field(description="A convention Metatron should have known for this task but didn't. Captured as a candidate for human curation."),
+        ] = "",
+        missing_scope: Annotated[
+            str,
+            Field(description="Optional file path or area the missing convention applies to."),
+        ] = "",
     ) -> str:
         """Report how helpful the served priors were, and what was missing.
 
@@ -86,13 +129,7 @@ def build_server(
         human curation. Nothing you send here promotes, demotes, or rejects a prior —
         crossing the canonical set is always a human's call.
 
-        Args:
-            query_id: the token from the priors output you are responding to.
-            ratings: map of 1-based prior index -> helpfulness 1-10 (e.g. {"1": 9, "2": 3}).
-            helpful: 1-based indices that helped (optional shorthand; derived from ratings).
-            unhelpful: 1-based indices that were noise (optional shorthand).
-            what_was_missing: a convention Metatron should have had.
-            missing_scope: optional scope (path) for that convention.
+        Returns a short confirmation that the feedback was recorded.
         """
         if event_store is None:
             return "Feedback unavailable: this server has no event store."
@@ -114,21 +151,41 @@ def build_server(
 
     @server.tool()
     def submit_candidate_learning(
-        pattern: str,
-        scope: str,
-        rationale: str,
-        confidence: str = "medium",
+        pattern: Annotated[
+            str,
+            Field(description=(
+                'The concrete rule or guideline, stated imperatively '
+                '(e.g. "Use internal.http for outbound calls, not the requests library").'
+            )),
+        ],
+        scope: Annotated[
+            str,
+            Field(description=(
+                'Where the rule applies: a file path, directory/glob, or architectural layer '
+                '(e.g. "src/services/**"), or "global".'
+            )),
+        ],
+        rationale: Annotated[
+            str,
+            Field(description=(
+                "Why the convention exists — the problem or bug it prevents "
+                '(e.g. "flaky network caused phantom 5xx errors; the internal client retries").'
+            )),
+        ],
+        confidence: Annotated[
+            Literal["low", "medium", "high"],
+            Field(description="How strongly the team holds this convention."),
+        ] = "medium",
     ) -> str:
-        """Submit a candidate prior learned in practice.
+        """Record a new engineering convention you discovered while working — for human review.
 
-        Stored as an uncurated candidate; it does NOT enter the canonical set.
-        Returns the new prior's id.
+        Call this when you find an undocumented convention, a tricky gotcha, or a preferred
+        pattern that Metatron did not already know but future agents should. It is stored as
+        an uncurated CANDIDATE: a human maintainer must approve it in the Metatron UI or CLI
+        before it becomes canonical and is served to other agents. Nothing you submit here is
+        auto-promoted.
 
-        Args:
-            pattern: the specific pattern or guideline learned (e.g. "Do X instead of Y").
-            scope: the file path, directory, or global scope this prior applies to.
-            rationale: why this convention exists and what problem it solves.
-            confidence: confidence level of the learning ("high", "medium", or "low").
+        Returns the new candidate prior's id.
         """
         prior = service.submit_candidate_learning(
             store,
