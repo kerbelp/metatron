@@ -4,6 +4,14 @@
 
 # Metatron
 
+<p align="center">
+  <a href="https://pypi.org/project/getmetatron/"><img src="https://img.shields.io/pypi/v/getmetatron.svg?color=2b7de9" alt="PyPI version" /></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+" />
+  <a href="https://github.com/kerbelp/metatron/actions/workflows/ci.yml"><img src="https://github.com/kerbelp/metatron/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://glama.ai/mcp/servers/kerbelp/metatron"><img src="https://glama.ai/mcp/servers/kerbelp/metatron/badges/score.svg" alt="Metatron MCP server" /></a>
+</p>
+
 Metatron is a self-hosted system that captures a codebase's real implementation
 decisions — preferred patterns, rejected approaches, edge cases, internal
 conventions — as structured **priors**, and serves them to coding agents over
@@ -419,3 +427,8 @@ uv run pytest          # run the test suite
 Python 3.12+, the official MCP Python SDK, tree-sitter for parsing, SQLite (behind a
 storage interface, portable to Postgres later), pytest, and uv. These are decided —
 see [CLAUDE.md](CLAUDE.md).
+
+## License
+
+Free and open source under the [MIT License](LICENSE). Read every line, run it on your
+own hardware, fork it, and send a PR.
