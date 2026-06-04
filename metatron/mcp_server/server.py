@@ -63,10 +63,22 @@ def build_server(
         of the codebase, so you write code that matches their standards on the first try
         instead of rediscovering them. Read the returned priors and comply with them.
 
-        Returns a text block of the matching priors — each with its pattern, scope, and
-        rationale — prefixed with a `query_id` token. Keep that token: pass it to
-        `submit_feedback` after the task to rate how useful the priors were. If nothing
-        is registered for the area, it says so; proceed normally.
+        Behavior: only human-approved (canonical) priors are returned, ranked by how
+        well their scope matches `file_path_or_area` and by how helpful past agents
+        rated them. Each call also records a usage event so your later `submit_feedback`
+        can be tied back to this exact result set.
+
+        Returns a plain-text block. The first line is a header carrying the query token
+        and server revision; then each prior is numbered for rating by index, e.g.:
+
+            metatron:query 7f3a... · rev 0.2.1 (reference the query id in submit_feedback)
+            [1] [high] Use internal.http for outbound calls, not the requests library
+              scope: src/services/**
+              why: flaky network caused phantom 5xx errors; the internal client retries
+
+        Keep the query token: pass it to `submit_feedback` after the task to rate the
+        priors by their `[index]`. If nothing is registered for the area, the body is
+        exactly "No matching priors." — proceed normally.
         """
         priors = service.get_priors_for_context(
             store, repo, file_path_or_area, task_description,
@@ -124,12 +136,17 @@ def build_server(
         it was exactly right and 1 means it was misleading. Also state any convention
         Metatron should have known but didn't, in `what_was_missing`.
 
-        Your ratings directly tune which priors get served first next time: helpful
-        ones rise, misleading ones sink. A gap report becomes a CANDIDATE prior for
-        human curation. Nothing you send here promotes, demotes, or rejects a prior —
-        crossing the canonical set is always a human's call.
+        Behavior: ratings are 1-based indices into the priors the named query served
+        (they map to real prior ids locally, so you never echo a UUID; unknown indices
+        and out-of-range scores are dropped). The graded scores feed a time-decayed,
+        shrunk helpfulness signal that reorders which priors get served first next
+        time — helpful ones rise, misleading ones sink. A `what_was_missing` report is
+        stored as a gap for a human-gated refiner to later reshape into a CANDIDATE
+        prior. Nothing you send here promotes, demotes, or rejects a prior, or changes
+        its wording — crossing the canonical set is always a human's call.
 
-        Returns a short confirmation that the feedback was recorded.
+        Returns a short text confirmation that the feedback was recorded (and notes
+        when a gap was captured for curation).
         """
         if event_store is None:
             return "Feedback unavailable: this server has no event store."
