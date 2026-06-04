@@ -112,6 +112,18 @@ def test_get_priors_tool_returns_formatted_canonical_priors():
     assert "serve only canonical priors" in out
 
 
+def test_get_priors_on_empty_store_serves_gracefully():
+    # A freshly built image serves before anything is ingested. The server must
+    # boot and answer queries (empty result), never error — this is what lets the
+    # container pass an MCP client's introspection checks on first run.
+    server = build_server(SQLitePriorStore(":memory:"), REPO, SQLiteEventStore(":memory:"))
+    out = _result(asyncio.run(server.call_tool(
+        "get_priors_for_context",
+        {"file_path_or_area": "src/anything", "task_description": "do a thing"},
+    )))
+    assert "No matching priors" in out
+
+
 def test_submit_tool_persists_a_candidate_and_returns_its_id():
     store = SQLitePriorStore(":memory:")
     server = build_server(store, REPO)

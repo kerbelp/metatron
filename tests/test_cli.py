@@ -192,6 +192,19 @@ def test_resolve_repo_auto_picks_the_only_repo(monkeypatch):
     assert _resolve_repo(None, store, Settings()) == "github.com/acme/app"
 
 
+def test_resolve_repo_falls_back_to_cwd_on_empty_store(monkeypatch):
+    # A fresh image (e.g. Glama builds the container and runs `metatron serve`
+    # before anything is ingested) has an empty store. Serving must still boot,
+    # so resolution falls back to the cwd's identity rather than raising.
+    from metatron.cli import _resolve_repo
+    from metatron.config import Settings
+
+    store = SQLitePriorStore(":memory:")  # empty: no repos
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/fresh/clone")
+    assert _resolve_repo(None, store, Settings()) == "github.com/fresh/clone"
+
+
 def test_resolve_repo_ambiguous_raises_with_guidance(monkeypatch):
     import pytest
 
