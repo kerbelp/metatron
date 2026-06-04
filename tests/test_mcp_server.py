@@ -25,6 +25,20 @@ def test_server_exposes_the_expected_tools():
     }
 
 
+def test_every_tool_parameter_carries_a_schema_description():
+    # MCP clients (and quality scorers like Glama) read parameter docs from the
+    # JSON inputSchema, not from the Python docstring's Args section. Each param
+    # must therefore declare a Field(description=...) so it reaches the schema.
+    server = build_server(SQLitePriorStore(":memory:"), REPO)
+    for tool in asyncio.run(server.list_tools()):
+        props = tool.inputSchema["properties"]
+        assert props, f"{tool.name} exposes no parameters"
+        for name, schema in props.items():
+            assert schema.get("description", "").strip(), (
+                f"{tool.name}.{name} is missing a schema description"
+            )
+
+
 def test_get_priors_output_carries_query_token_and_revision():
     store = SQLitePriorStore(":memory:")
     store.add(Prior(repo=REPO, pattern="a canonical rule", scope="app",
