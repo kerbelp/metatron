@@ -123,6 +123,12 @@ def build_server(
 
         Stored as an uncurated candidate; it does NOT enter the canonical set.
         Returns the new prior's id.
+
+        Args:
+            pattern: the specific pattern or guideline learned (e.g. "Do X instead of Y").
+            scope: the file path, directory, or global scope this prior applies to.
+            rationale: why this convention exists and what problem it solves.
+            confidence: confidence level of the learning ("high", "medium", or "low").
         """
         prior = service.submit_candidate_learning(
             store,
