@@ -98,6 +98,13 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   }, [onClose]);
   if (!decision) return null;
+  // Opaque sticky footer so action buttons don't overlap content scrolling behind.
+  const footer = {
+    position: "sticky", bottom: 0, marginLeft: -28, marginRight: -28, marginTop: 10,
+    padding: "18px 28px",
+    background: "linear-gradient(180deg, rgba(6,15,13,0), #070f0d 26%)",
+    borderTop: "1px solid var(--line)",
+  };
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(2,6,8,.6)", backdropFilter: "blur(3px)", animation: "fadeup .3s" }} />
@@ -150,14 +157,14 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
           </div>
 
           {decision.status === "candidate" && (onApprove || onReject) && (
-            <div style={{ display: "flex", gap: 12, position: "sticky", bottom: 0 }}>
+            <div style={{ ...footer, display: "flex", gap: 12 }}>
               <button className="btn primary lg" style={{ flex: 1 }} disabled={busy} onClick={() => onApprove(decision)}><Icon name="check" size={16} />Approve → Canonical</button>
               <button className="btn danger lg" disabled={busy} onClick={() => onReject(decision)}><Icon name="x" size={16} />Reject</button>
             </div>
           )}
 
           {decision.status === "canonical" && onReject && (
-            <div style={{ position: "sticky", bottom: 0 }}>
+            <div style={footer}>
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 11, lineHeight: 1.55 }}>
                 Knowledge changes. <b style={{ color: "var(--text-2)" }}>Retiring</b> removes this from the canonical set, so agents are no longer served it. You can restore it later from the <b style={{ color: "var(--text-2)" }}>rejected</b> filter.
               </div>
@@ -166,7 +173,7 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
           )}
 
           {decision.status === "rejected" && onApprove && (
-            <div style={{ position: "sticky", bottom: 0 }}>
+            <div style={footer}>
               <div className="muted" style={{ fontSize: 12.5, marginBottom: 11, lineHeight: 1.55 }}>This decision is retired and not served to agents.</div>
               <button className="btn primary lg" style={{ width: "100%" }} disabled={busy} onClick={() => onApprove(decision)}><Icon name="check" size={16} />Restore → Canonical</button>
             </div>
