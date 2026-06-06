@@ -25,11 +25,14 @@ REFINE_MODEL = "claude-opus-4-8"
 from metatron.models import Status
 from metatron.pipeline import ingest
 from metatron.storage.base import PriorStore
-from metatron.storage.sqlite import (
-    SQLiteEventStore,
-    SQLiteIngestRunStore,
-    SQLitePriorStore,
+from metatron.storage.catalog import (
+    Catalog,
+    CatalogEventStore,
+    CatalogIngestRunStore,
+    CatalogPriorStore,
 )
+from metatron.storage.migrate import migrate_legacy_db
+from metatron.storage.sqlite import SQLiteEventStore, SQLiteIngestRunStore
 
 
 class RepoResolutionError(Exception):
@@ -106,8 +109,19 @@ def main(
     args = _build_parser().parse_args(argv)
 
     settings = load_settings()
+    if args.db:
+        settings = settings.model_copy(update={"db_path": args.db})
+
+    # The catalog is the source of truth: one self-contained DB file per repo under
+    # settings.db_path (a directory), or a single handed-off file in single-file mode.
+    catalog = Catalog(settings.db_path)
+    # One-time split of a legacy cwd metatron.db into the catalog (no-op afterwards).
+    migrate_legacy_db("metatron.db", catalog)
+
     if store is None:
-        store = SQLitePriorStore(settings.db_path)
+        store = CatalogPriorStore(catalog)
+    event_store = event_store or CatalogEventStore(catalog)
+    run_store = run_store or CatalogIngestRunStore(catalog)
 
     try:
         if args.command == "ingest":
@@ -115,26 +129,16 @@ def main(
                 provider = AnthropicProvider(
                     model=settings.model, api_key=settings.anthropic_api_key
                 )
-            return _cmd_ingest(
-                args, store, provider,
-                run_store or SQLiteIngestRunStore(settings.db_path), out,
-            )
+            return _cmd_ingest(args, store, provider, run_store, out)
         if args.command == "serve":
             # MCP speaks over stdout, so resolve silently — no "Repo:" header here.
             return _cmd_serve(
-                store, _resolve_repo(args.repo, store, settings),
-                event_store or SQLiteEventStore(settings.db_path),
+                store, _resolve_repo(args.repo, store, settings), event_store,
             )
         if args.command == "repo":
             return _cmd_repo(args, store, settings, out)
         if args.command == "ui":
-            return _cmd_ui(
-                store,
-                event_store or SQLiteEventStore(settings.db_path),
-                SQLiteIngestRunStore(settings.db_path),
-                args.port,
-                settings,
-            )
+            return _cmd_ui(store, event_store, run_store, args.port, settings)
         if args.command == "triage":
             if provider is None:
                 provider = AnthropicProvider(
@@ -148,8 +152,7 @@ def main(
                     model=args.model or REFINE_MODEL, api_key=settings.anthropic_api_key
                 )
             return _cmd_refine_feedback(
-                args, store, event_store or SQLiteEventStore(settings.db_path),
-                provider, settings, out,
+                args, store, event_store, provider, settings, out,
             )
         if args.command == "candidates":
             return _cmd_candidates(args, store, settings, out)
@@ -441,6 +444,12 @@ def _set_status(store, prior_id, status, verb, out) -> int:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="metatron")
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="catalog directory, or a single repo's .db file (single-file mode); "
+        "overrides METATRON_DB / metatron.toml for this run",
+    )
     sub = parser.add_subparsers(dest="command")
 
     ingest_p = sub.add_parser("ingest", help="bootstrap candidate priors from a repo")

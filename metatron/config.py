@@ -15,7 +15,11 @@ from pydantic import BaseModel
 
 from metatron.extraction.provider import DEFAULT_MODEL
 
-DEFAULT_DB_PATH = "metatron.db"
+# The catalog data directory (one self-contained DB file per repo lives here). A
+# single shared location so sibling repos aggregate, rather than fragmenting per cwd.
+# Overridable via METATRON_DB / metatron.toml; pointing it at a single *file* selects
+# single-file mode (the recipient of a handed-off DB).
+DEFAULT_DB_PATH = str(Path.home() / ".metatron")
 
 
 class Settings(BaseModel):
