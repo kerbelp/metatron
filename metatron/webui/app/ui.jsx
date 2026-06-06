@@ -83,7 +83,13 @@ function DecisionRow({ decision, onOpen, style, children, columns = "1fr auto" }
       </div>
       {children || (
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <StatusBadge status={decision.status} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+            <StatusBadge status={decision.status} />
+            {decision.created_at && (
+              <span className="mono dim" style={{ fontSize: 10 }}
+                title={new Date(decision.created_at).toLocaleString()}>{timeAgo(decision.created_at)}</span>
+            )}
+          </div>
           <span className="dim"><Icon name="arrow" size={16} /></span>
         </div>
       )}
