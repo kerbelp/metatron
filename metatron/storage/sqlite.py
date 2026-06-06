@@ -86,14 +86,34 @@ def _rename_legacy_column(conn, table: str, old: str, new: str) -> None:
         conn.execute(f"ALTER TABLE {table} RENAME COLUMN {old} TO {new}")
 
 
+def connect(path: str) -> sqlite3.Connection:
+    """Open a connection configured for safe concurrent, multi-process access.
+
+    Several processes share each per-repo file at once: every running
+    ``metatron serve`` plus ``metatron ui`` and CLI commands. Two pragmas make
+    that safe:
+
+    * ``journal_mode=WAL`` — readers and writers no longer block each other, so a
+      live ``get_decisions_for_context`` read can't stall a ``submit_*`` write.
+    * ``busy_timeout`` — a writer that still hits a contended lock waits instead
+      of failing immediately with "database is locked" / "attempt to write a
+      readonly database".
+
+    ``check_same_thread=False`` lets the web server (which runs in its own thread)
+    share a store created elsewhere; the UI server is single-threaded, so access
+    stays serialized. (WAL is a no-op for ``:memory:`` databases, which is fine.)
+    """
+    conn = sqlite3.connect(path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
 class SQLiteDecisionStore(DecisionStore):
     def __init__(self, path: str = "metatron.db") -> None:
-        # check_same_thread=False lets the web server (which runs in its own
-        # thread) share a store created elsewhere; the UI server is
-        # single-threaded, so access stays serialized.
         self.path = path
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect(path)
         # Migrate the legacy 'priors' table name (the priors->decisions rename).
         _rename_legacy_table(self._conn, "priors", "decisions")
         self._conn.execute(_SCHEMA)
@@ -226,8 +246,7 @@ _EVENT_JSON_COLUMNS = ("decision_ids", "helpful_decision_ids", "unhelpful_decisi
 class SQLiteEventStore(EventStore):
     def __init__(self, path: str = "metatron.db") -> None:
         self.path = path
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect(path)
         self._conn.execute(_EVENTS_SCHEMA)
         self._conn.execute(_REPO_META_SCHEMA)
         # Migrate legacy *_prior_ids columns (the priors->decisions rename).
@@ -341,8 +360,7 @@ _RUN_COLUMNS = (
 class SQLiteIngestRunStore:
     def __init__(self, path: str = "metatron.db") -> None:
         self.path = path
-        self._conn = sqlite3.connect(path, check_same_thread=False)
-        self._conn.row_factory = sqlite3.Row
+        self._conn = connect(path)
         self._conn.execute(_RUNS_SCHEMA)
         self._conn.execute(_REPO_META_SCHEMA)
         self._conn.commit()
