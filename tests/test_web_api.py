@@ -150,6 +150,22 @@ def test_usage_splits_kinds_and_resolves_returned_priors():
     json.dumps(result)  # must be serializable
 
 
+def test_actor_is_exposed_in_usage_and_feedback_streams():
+    # Attribution must reach the UI: who produced each query / feedback event.
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo="r", kind=EventKind.QUERY, area="app", result_count=0,
+                        actor_id="a1", actor_email="dev@corp.com", actor_name="Dev"))
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK, missing="gap",
+                        actor_id="a1", actor_email="dev@corp.com", actor_name="Dev"))
+
+    q = usage(events, store)["recent_queries"][0]
+    assert q["actor_id"] == "a1" and q["actor_email"] == "dev@corp.com" and q["actor_name"] == "Dev"
+
+    fb = feedback_events(events, store)["events"][0]
+    assert fb["actor_id"] == "a1" and fb["actor_email"] == "dev@corp.com" and fb["actor_name"] == "Dev"
+
+
 def test_feedback_events_filters_by_handled_status():
     store = SQLitePriorStore(":memory:")
     events = SQLiteEventStore(":memory:")
