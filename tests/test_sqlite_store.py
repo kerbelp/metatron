@@ -1,6 +1,6 @@
 """Tests for the storage interface and its SQLite implementation.
 
-These exercise the behaviour through the ``PriorStore`` interface so the same
+These exercise the behaviour through the ``DecisionStore`` interface so the same
 suite would apply to a future Postgres implementation.
 """
 
@@ -9,23 +9,23 @@ import pytest
 from metatron.models import (
     Confidence,
     Origin,
-    Prior,
+    Decision,
     SourceRef,
     SourceRefKind,
     Status,
 )
-from metatron.storage.base import PriorStore
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.base import DecisionStore
+from metatron.storage.sqlite import SQLiteDecisionStore
 
 
 @pytest.fixture
-def store() -> SQLitePriorStore:
-    s = SQLitePriorStore(":memory:")
+def store() -> SQLiteDecisionStore:
+    s = SQLiteDecisionStore(":memory:")
     yield s
     s.close()
 
 
-def _prior(**overrides) -> Prior:
+def _decision(**overrides) -> Decision:
     fields = dict(
         repo="github.com/acme/app",
         pattern="Use the repository pattern for DB access",
@@ -34,17 +34,17 @@ def _prior(**overrides) -> Prior:
         origin=Origin.BOOTSTRAP,
     )
     fields.update(overrides)
-    return Prior(**fields)
+    return Decision(**fields)
 
 
-def test_sqlite_store_is_a_prior_store(store):
-    assert isinstance(store, PriorStore)
+def test_sqlite_store_is_a_decision_store(store):
+    assert isinstance(store, DecisionStore)
 
 
 def test_search_matches_pattern_and_rationale_case_insensitively(store):
-    store.add(_prior(pattern="Keep review output positive: emit Highlights only",
+    store.add(_decision(pattern="Keep review output positive: emit Highlights only",
                      rationale="avoid disparaging listed apps", scope="src/review"))
-    store.add(_prior(pattern="Gate dashboard access via Clerk",
+    store.add(_decision(pattern="Gate dashboard access via Clerk",
                      rationale="auth", scope="src/dashboard"))
 
     by_pattern = store.list(search="highlights")
@@ -58,20 +58,20 @@ def test_search_matches_pattern_and_rationale_case_insensitively(store):
 
 
 def test_search_combines_with_other_filters(store):
-    store.add(_prior(pattern="positive review highlights", scope="a", status=Status.CANONICAL))
-    store.add(_prior(pattern="positive review highlights", scope="b", status=Status.CANDIDATE))
+    store.add(_decision(pattern="positive review highlights", scope="a", status=Status.CANONICAL))
+    store.add(_decision(pattern="positive review highlights", scope="b", status=Status.CANDIDATE))
 
     results = store.list(search="highlights", status=Status.CANONICAL)
     assert [p.scope for p in results] == ["a"]
 
 
-def test_prior_store_is_abstract():
+def test_decision_store_is_abstract():
     with pytest.raises(TypeError):
-        PriorStore()  # type: ignore[abstract]
+        DecisionStore()  # type: ignore[abstract]
 
 
 def test_add_then_get_round_trips_all_fields(store):
-    prior = _prior(
+    decision = _decision(
         confidence=Confidence.HIGH,
         status=Status.CANONICAL,
         source_refs=[
@@ -79,10 +79,10 @@ def test_add_then_get_round_trips_all_fields(store):
             SourceRef(kind=SourceRefKind.COMMIT, ref="abc123", detail="introduced"),
         ],
     )
-    store.add(prior)
+    store.add(decision)
 
-    loaded = store.get(prior.id)
-    assert loaded == prior
+    loaded = store.get(decision.id)
+    assert loaded == decision
 
 
 def test_get_missing_returns_none(store):
@@ -90,7 +90,7 @@ def test_get_missing_returns_none(store):
 
 
 def test_list_returns_all_added(store):
-    a, b = _prior(), _prior()
+    a, b = _decision(), _decision()
     store.add(a)
     store.add(b)
     ids = {p.id for p in store.list()}
@@ -98,8 +98,8 @@ def test_list_returns_all_added(store):
 
 
 def test_list_filters_by_status(store):
-    candidate = _prior(status=Status.CANDIDATE)
-    canonical = _prior(status=Status.CANONICAL)
+    candidate = _decision(status=Status.CANDIDATE)
+    canonical = _decision(status=Status.CANONICAL)
     store.add(candidate)
     store.add(canonical)
 
@@ -108,8 +108,8 @@ def test_list_filters_by_status(store):
 
 
 def test_list_filters_by_scope(store):
-    storage = _prior(scope="metatron/storage")
-    parsing = _prior(scope="metatron/parsing")
+    storage = _decision(scope="metatron/storage")
+    parsing = _decision(scope="metatron/parsing")
     store.add(storage)
     store.add(parsing)
 
@@ -118,15 +118,15 @@ def test_list_filters_by_scope(store):
 
 
 def test_set_status_updates_status_and_touches_updated_at(store):
-    prior = _prior(status=Status.CANDIDATE)
-    store.add(prior)
+    decision = _decision(status=Status.CANDIDATE)
+    store.add(decision)
 
-    updated = store.set_status(prior.id, Status.CANONICAL)
+    updated = store.set_status(decision.id, Status.CANONICAL)
 
     assert updated.status is Status.CANONICAL
-    assert updated.updated_at >= prior.updated_at
+    assert updated.updated_at >= decision.updated_at
     # Persisted, not just returned.
-    assert store.get(prior.id).status is Status.CANONICAL
+    assert store.get(decision.id).status is Status.CANONICAL
 
 
 def test_set_status_on_missing_id_raises(store):

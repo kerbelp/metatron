@@ -51,14 +51,14 @@ mkdir -p "$CLAUDE_DIR"
 # --- 1. reminder text (managed by Metatron) --------------------------------
 cat > "$REMINDER" <<'EOF'
 [Metatron] Before exploring (Read/Grep/Glob) or editing code for this task,
-FIRST call the metatron MCP tool `get_priors_for_context(file_path_or_area,
-task_description)` for the area you'll touch, and follow the priors it returns.
+FIRST call the metatron MCP tool `get_decisions_for_context(file_path_or_area,
+task_description)` for the area you'll touch, and follow the decisions it returns.
 Do not rediscover conventions manually until you've consulted Metatron. If you
-learn a durable new convention, record it via `submit_candidate_learning(...)`.
+learn a durable new convention, record it via `submit_candidate_decision(...)`.
 When the task is done, call `submit_feedback(query_id, ratings, what_was_missing)`:
-pass the query id from the priors output, rate each served prior 1-10 by its
+pass the query id from the decisions output, rate each served decision 1-10 by its
 [index] in `ratings` (10 = exactly right, 1 = misleading) — ratings tune which
-priors get served first next time — and, most important, report any convention
+decisions get served first next time — and, most important, report any convention
 Metatron should have known but didn't. Gap reports become candidates for human
 review; nothing you send is auto-applied to the canonical set.
 EOF
@@ -80,26 +80,26 @@ else
 <!-- METATRON:START (managed by metatron_setup.sh — safe to edit inside) -->
 ## Codebase conventions via Metatron (MCP) — query FIRST
 
-This repo's conventions ("priors") are served by the **metatron** MCP server.
+This repo's conventions ("decisions") are served by the **metatron** MCP server.
 
 **Before you Read, Grep, Glob, or Edit code in any area — and before proposing an
-implementation — you MUST first call `get_priors_for_context(file_path_or_area,
+implementation — you MUST first call `get_decisions_for_context(file_path_or_area,
 task_description)` for that area and follow what it returns.** Do not explore the
 codebase to rediscover conventions until you have consulted Metatron; state that
 you did.
 
 When you find a durable convention not already covered, call
-`submit_candidate_learning(pattern, scope, rationale, confidence)`. It is stored
+`submit_candidate_decision(pattern, scope, rationale, confidence)`. It is stored
 as an uncurated candidate for human review and is never treated as canonical
 automatically.
 
 **After completing the task, give feedback** via `submit_feedback(query_id,
 ratings, what_was_missing, missing_scope)`: reference the `query_id` Metatron
-returned with the priors, **rate each served prior 1-10 by its `[index]`** in
+returned with the decisions, **rate each served decision 1-10 by its `[index]`** in
 `ratings` (10 = exactly right, 1 = misleading) — your ratings automatically tune
-which priors get served first next time — and, most valuably, record any convention
+which decisions get served first next time — and, most valuably, record any convention
 Metatron should have known but didn't. Ratings reorder what's served; they never
-promote, demote, or reject a prior — crossing the canonical set is always a human's
+promote, demote, or reject a decision — crossing the canonical set is always a human's
 call.
 <!-- METATRON:END -->
 EOF

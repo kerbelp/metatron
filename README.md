@@ -14,7 +14,7 @@
 
 Metatron is a self-hosted system that captures a codebase's real implementation
 decisions — preferred patterns, rejected approaches, edge cases, internal
-conventions — as structured **priors**, and serves them to coding agents over
+conventions — as structured **decisions**, and serves them to coding agents over
 MCP (Model Context Protocol). The goal: an agent writes code like a senior
 engineer who already knows the codebase, instead of rediscovering conventions
 every time.
@@ -24,10 +24,10 @@ on-prem deployment. (Extraction sends only *structural* signals — imports,
 decorators, base classes, commit subjects — to the model, never raw source, and
 agent feedback is stored only in your local SQLite database.)
 
-- **Priors are structured records**, not prose: `pattern`, `scope`, `rationale`,
+- **Decisions are structured records**, not prose: `pattern`, `scope`, `rationale`,
   `confidence`, `source_refs`.
 - **Nothing becomes canonical without a human.** Bootstrapped, agent-submitted, and
-  feedback-refined priors all start as **candidates** for curation; none self-promote.
+  feedback-refined decisions all start as **candidates** for curation; none self-promote.
 
 See [PLAN.md](PLAN.md) for the design and [CLAUDE.md](CLAUDE.md) for working ground
 rules.
@@ -96,7 +96,7 @@ the MCP server over stdio, so `docker run` with no arguments starts the server.
 docker build -t getmetatron .
 ```
 
-Priors live in a SQLite database, so mount a volume to persist it across runs.
+Decisions live in a SQLite database, so mount a volume to persist it across runs.
 Ingest a repo (mount it read-only and pass your API key), curate, then serve:
 
 ```bash
@@ -107,7 +107,7 @@ docker run --rm \
   -v /path/to/your/repo:/repo:ro \
   getmetatron ingest /repo
 
-# 2. serve the curated priors over stdio (no API key needed)
+# 2. serve the curated decisions over stdio (no API key needed)
 docker run -i --rm \
   -v metatron-data:/data -e METATRON_DB=/data/metatron.db \
   getmetatron serve --repo <id>
@@ -115,7 +115,7 @@ docker run -i --rm \
 
 `ingest` prints the `<id>` to pass to `serve`. Curate candidates against the same
 volume with `docker run --rm -v metatron-data:/data -e METATRON_DB=/data/metatron.db
-getmetatron candidates list` (then `… candidates approve <prior-id>`). The `-i` flag
+getmetatron candidates list` (then `… candidates approve <decision-id>`). The `-i` flag
 on `serve` is required — stdio needs an open stdin. To point a coding agent at the
 container, use it as the MCP command:
 
@@ -135,7 +135,7 @@ container, use it as the MCP command:
 
 ## Metatron vs. Code Graphs & RAG
 
-| Dimension | Code RAG (e.g., Cursor, Copilot) | Code Graphs (e.g., Graphify) | Metatron (Priors) |
+| Dimension | Code RAG (e.g., Cursor, Copilot) | Code Graphs (e.g., Graphify) | Metatron (Decisions) |
 | :--- | :--- | :--- | :--- |
 | **Primary Focus** | Text similarity search | Code architecture & call chains | Intent, gotchas & conventions |
 | **Primary Data Source** | Raw source files | Abstract Syntax Trees (AST) | Git logs + Developer feedback |
@@ -165,8 +165,8 @@ db_path = "~/.metatron"        # catalog dir: one self-contained .db file per re
 model   = "claude-sonnet-4-6"  # default extraction model
 ```
 
-Each repo gets its own SQLite file under the catalog directory, so a repo's priors
-are a single, shippable artifact (see [`export`](#export--share-a-repos-priors-no-mcp-setup)).
+Each repo gets its own SQLite file under the catalog directory, so a repo's decisions
+are a single, shippable artifact (see [`export`](#export--share-a-repos-decisions-no-mcp-setup)).
 Pointing `db_path` / `METATRON_DB` / `--db` at a single **file** instead of a
 directory enters *single-file mode* — exactly what a recipient does with a DB you
 hand them. An existing single `metatron.db` from an older version is automatically
@@ -178,7 +178,7 @@ split into the per-repo catalog on first run and the original is archived.
 metatron ingest /path/to/your/repo      # 1. bootstrap candidates (needs API key)
 metatron candidates list                # 2. review …
 metatron candidates approve <id>        #    … and curate
-metatron serve --repo <id>              # 3. serve canonical priors over MCP
+metatron serve --repo <id>              # 3. serve canonical decisions over MCP
 ```
 
 `ingest` prints the `<id>` to use for `serve`. To wire it into a coding agent
@@ -192,13 +192,13 @@ usage: metatron [-h] {ingest,serve,repo,ui,triage,refine-feedback,candidates} ..
 
 positional arguments:
   {ingest,serve,repo,ui,triage,refine-feedback,candidates}
-    ingest              bootstrap candidate priors from a repo
-    serve               serve one repo's priors to agents over MCP
+    ingest              bootstrap candidate decisions from a repo
+    serve               serve one repo's decisions to agents over MCP
     repo                inspect the repos in the store
     ui                  launch the local curation web UI
-    triage              run the advisory judge over candidate priors (does not auto-curate)
-    refine-feedback     reshape captured agent feedback into structured candidate priors (Opus)
-    candidates          review and curate candidate priors
+    triage              run the advisory judge over candidate decisions (does not auto-curate)
+    refine-feedback     reshape captured agent feedback into structured candidate decisions (Opus)
+    candidates          review and curate candidate decisions
 ```
 
 ### Choosing the repo
@@ -219,7 +219,7 @@ If none of those apply and the store holds **more than one** repo, the command
 refuses to guess — it lists the repos and tells you to pass `--repo`, export
 `METATRON_REPO`, or run `repo set`. Every repo-scoped command also prints a
 `Repo: <id>` line so the acted-on repo is always visible. `candidates
-approve`/`reject` act on a globally-unique prior id and never need a repo.
+approve`/`reject` act on a globally-unique decision id and never need a repo.
 
 ### `repo` — list repos and choose a default
 
@@ -236,14 +236,14 @@ $ metatron repo unset                      # clear it
 candidate counts, marking the persisted default. Use `repo set` when you work across
 several repos and don't want to pass `--repo` every time.
 
-### `ingest` — bootstrap candidate priors from a repo + its git history
+### `ingest` — bootstrap candidate decisions from a repo + its git history
 
 Parses git-tracked source files (tree-sitter) and reads commit history, aggregates
-per-area signals, asks the model to infer priors, and stores them as **candidates**.
+per-area signals, asks the model to infer decisions, and stores them as **candidates**.
 
 ```text
 $ metatron ingest /path/to/your/repo
-Ingested repo 'github.com/acme/app' from /path/to/your/repo: parsed 214 files, read 500 commits across 38 scopes, created 271 candidate priors.
+Ingested repo 'github.com/acme/app' from /path/to/your/repo: parsed 214 files, read 500 commits across 38 scopes, created 271 candidate decisions.
 Review them with: metatron candidates list --repo github.com/acme/app
 Serve them with:  metatron serve --repo github.com/acme/app
 ```
@@ -255,7 +255,7 @@ Serve them with:  metatron serve --repo github.com/acme/app
 | `--path SUBTREE` | — | limit ingest to a subtree, e.g. `src/components` |
 | `--repo ID` | origin remote | override the repo identity |
 
-Priors and usage are keyed by a **repo identity** derived from the repo's `origin`
+Decisions and usage are keyed by a **repo identity** derived from the repo's `origin`
 remote (constant across developers; a checkout path isn't), with a `--repo` override
 and a directory-name fallback when there's no remote. One DB holds many repos; each
 is isolated on retrieval.
@@ -270,16 +270,16 @@ d672a984-dd56-4974-8111-5ff730a6ed50  [high]  (src/utils/misc/index.ts (makePret
     Any slug-from-name code (e.g. `makePrettyUrl`) must strip "/" characters so a name like "LangChain / LangSmith" does not produce a link_name with slashes that break routing.
 
 $ metatron candidates approve 1d2ab8e8-e674-4fbd-9875-52bf065e94c1
-Prior 1d2ab8e8-e674-4fbd-9875-52bf065e94c1 approved.
+Decision 1d2ab8e8-e674-4fbd-9875-52bf065e94c1 approved.
 
 $ metatron candidates reject d672a984-dd56-4974-8111-5ff730a6ed50
-Prior d672a984-dd56-4974-8111-5ff730a6ed50 rejected.
+Decision d672a984-dd56-4974-8111-5ff730a6ed50 rejected.
 ```
 
-`candidates list` shows the [current repo](#choosing-the-repo) — priors are scoped
+`candidates list` shows the [current repo](#choosing-the-repo) — decisions are scoped
 to one repo and never listed across repos; pass `--repo <id>` to target another or
 `--scope <path>` to filter. `approve` promotes a candidate to canonical; `reject`
-discards it (both take a globally-unique prior id, so they need no repo).
+discards it (both take a globally-unique decision id, so they need no repo).
 
 ### `triage` — advisory judge over the candidate queue (does not auto-curate)
 
@@ -296,7 +296,7 @@ Review by recommendation in the UI's Candidates filter.
 
 Flags: `--repo <id>` (limit to one repo), `--limit N` (max candidates to judge).
 
-### `serve` — expose canonical priors to agents over MCP
+### `serve` — expose canonical decisions to agents over MCP
 
 ```bash
 metatron serve --repo github.com/acme/app    # MCP server over stdio, one repo
@@ -304,7 +304,7 @@ metatron serve                                # same, repo inferred from context
 ```
 
 One served instance serves exactly one repo, so an agent only ever sees that repo's
-priors. `--repo` is optional — it [resolves from context](#choosing-the-repo)
+decisions. `--repo` is optional — it [resolves from context](#choosing-the-repo)
 (`METATRON_REPO`, then the current dir) — but the generated `.mcp.json` passes it
 explicitly so the launched server is unambiguous. It also records usage events (queries,
 coverage) to the same DB for the UI. Normally you don't run this by hand — an
@@ -324,7 +324,7 @@ email, and display name. It's local metadata (no login/auth): stored in
 use. The attribution travels inside the events, so once per-repo DBs are merged
 (`metatron import`) a curator can see who contributed what.
 
-### `export` — share a repo's priors (no MCP setup)
+### `export` — share a repo's decisions (no MCP setup)
 
 ```bash
 metatron export --repo github.com/acme/app --out app.db
@@ -336,7 +336,7 @@ compact). `--repo` is optional — it [resolves from context](#choosing-the-repo
 to wire up MCP — they just point Metatron at it:
 
 ```bash
-metatron --db app.db ui      # browse the priors locally, or
+metatron --db app.db ui      # browse the decisions locally, or
 metatron --db app.db serve   # serve them to their own agent
 ```
 
@@ -364,27 +364,27 @@ Metatron curation UI on http://127.0.0.1:1337  (Ctrl-C to stop)
 Binds to `localhost` (bumping to the next free port if taken) and reads/writes the
 same store as the CLI. Tabs:
 
-- **Priors** — browse paginated; filter by status / scope / triage recommendation /
+- **Decisions** — browse paginated; filter by status / scope / triage recommendation /
   origin; full-text search; approve/reject with a click.
 - **Usage** — how often agents query, coverage (share of queries that returned a
-  prior), most-queried scopes, recent queries.
-- **Quality** — prior quality by origin (ingest vs feedback) and one-time ingest cost.
+  decision), most-queried scopes, recent queries.
+- **Quality** — decision quality by origin (ingest vs feedback) and one-time ingest cost.
 - **Feedback** — the agent feedback stream, filterable **All / Unhandled / Handled**.
-  Handled reports expand to show the candidate priors they were refined into, each
+  Handled reports expand to show the candidate decisions they were refined into, each
   with its curation status and usefulness (served / 👍 / 👎). Unhandled reports get a
-  **Refine into priors** button to run the refiner on that one report on the spot.
+  **Refine into decisions** button to run the refiner on that one report on the spot.
 
 Flag: `--port N` (starting port, default `1337`).
 
 ### `refine-feedback` — reshape captured agent feedback into candidates
 
 When an agent reports a missing convention via `submit_feedback`, this reshapes those
-free-text gap reports into **structured candidate priors** (defaults to Opus, the
+free-text gap reports into **structured candidate decisions** (defaults to Opus, the
 higher-stakes step). Nothing it produces is canonical — it all goes to curation.
 
 ```text
 $ metatron refine-feedback
-Refined 3 feedback report(s) into 13 candidate prior(s) for curation.
+Refined 3 feedback report(s) into 13 candidate decision(s) for curation.
   refiner cost: ~$0.19
 Review them in the UI Candidates tab (origin: feedback).
 ```
@@ -394,7 +394,7 @@ Flags: `--repo <id>`, `--limit N` (max reports to refine), `--model <name>`
 
 ## Connecting a coding agent (MCP)
 
-So a coding agent reliably *consults* the priors (rather than rediscovering
+So a coding agent reliably *consults* the decisions (rather than rediscovering
 conventions), run the onboarding script from inside the target repo:
 
 ```bash
@@ -418,11 +418,11 @@ Then reconnect the agent so it loads the hooks and server.
 
 | Tool | Purpose |
 |------|---------|
-| `get_priors_for_context(file_path_or_area, task_description)` | the relevant **canonical** priors as compact structured context, with a `query_id` to reference in feedback |
-| `submit_feedback(query_id, ratings, what_was_missing, missing_scope)` | rate each served prior 1-10 by its `[index]` and report a convention Metatron should have known — ratings auto-weight which priors are served first (within relevance, never crossing the canonical gate); gaps captured for `refine-feedback` |
-| `submit_candidate_learning(pattern, scope, rationale, confidence)` | record a convention the agent learned as a new **candidate** (never auto-promoted) |
+| `get_decisions_for_context(file_path_or_area, task_description)` | the relevant **canonical** decisions as compact structured context, with a `query_id` to reference in feedback |
+| `submit_feedback(query_id, ratings, what_was_missing, missing_scope)` | rate each served decision 1-10 by its `[index]` and report a convention Metatron should have known — ratings auto-weight which decisions are served first (within relevance, never crossing the canonical gate); gaps captured for `refine-feedback` |
+| `submit_candidate_decision(pattern, scope, rationale, confidence)` | record a convention the agent learned as a new **candidate** (never auto-promoted) |
 
-A `get_priors_for_context` call returns context like this:
+A `get_decisions_for_context` call returns context like this:
 
 ```text
 metatron:query b1f2… · rev 1101886 (reference the query id in submit_feedback)

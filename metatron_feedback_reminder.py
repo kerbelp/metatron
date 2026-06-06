@@ -4,7 +4,7 @@
 Installed into a target repo's ``.claude/`` by ``metatron_setup.sh`` and registered
 as a ``Stop`` hook. CLAUDE.md guidance alone is unreliable; agents finish a task and
 forget to report back. This fires when the agent stops, and *only* if it actually
-consulted Metatron this session (called ``get_priors_for_context``) but never called
+consulted Metatron this session (called ``get_decisions_for_context``) but never called
 ``submit_feedback`` — so non-code turns and turns that never touched Metatron are
 never interrupted.
 
@@ -23,11 +23,11 @@ import sys
 import tempfile
 
 REMINDER = (
-    "[Metatron] You consulted Metatron (get_priors_for_context) this session but "
+    "[Metatron] You consulted Metatron (get_decisions_for_context) this session but "
     "have not called submit_feedback. If the task is complete, call submit_feedback "
-    "now: pass the query_id from the priors output, rate each served prior 1-10 by "
+    "now: pass the query_id from the decisions output, rate each served decision 1-10 by "
     "its [index] in ratings (10 = exactly right, 1 = misleading) — your ratings tune "
-    "which priors get served first next time — and, most valuable, record any "
+    "which decisions get served first next time — and, most valuable, record any "
     "convention Metatron should have known but didn't in what_was_missing. If the "
     "task is NOT finished yet, say so briefly and continue."
 )
@@ -57,7 +57,7 @@ def _used_tools(transcript_path: str) -> tuple[bool, bool]:
                 for block in content:
                     if isinstance(block, dict) and block.get("type") == "tool_use":
                         name = block.get("name", "")
-                        if "get_priors_for_context" in name:
+                        if "get_decisions_for_context" in name:
                             queried = True
                         if "submit_feedback" in name:
                             fed = True

@@ -1,7 +1,7 @@
 """Copying repo rows between Metatron stores: the primitive behind migrate + import.
 
 Both the one-time legacy split (:mod:`metatron.storage.migrate`) and the curator's
-``metatron import`` move a repo's priors/events/ingest-runs into a catalog file,
+``metatron import`` move a repo's decisions/events/ingest-runs into a catalog file,
 skipping rows already present (dedupe by id). That dedupe is what makes both
 operations idempotent and crash-safe, so it lives here once.
 """
@@ -12,12 +12,12 @@ from metatron.storage.catalog import Catalog, RepoStores
 from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
-    SQLitePriorStore,
+    SQLiteDecisionStore,
 )
 
 
 def copy_repo_rows(
-    src_priors: SQLitePriorStore,
+    src_decisions: SQLiteDecisionStore,
     src_events: SQLiteEventStore,
     src_runs: SQLiteIngestRunStore,
     dst: RepoStores,
@@ -29,11 +29,11 @@ def copy_repo_rows(
     inserts only rows not already in ``dst`` (so an interrupted run converges and a
     repeat import is a no-op).
     """
-    counts = {"priors": 0, "events": 0, "runs": 0}
-    for p in src_priors.list(repo=repo):
-        if dst.priors.get(p.id) is None:
-            dst.priors.add(p)
-            counts["priors"] += 1
+    counts = {"decisions": 0, "events": 0, "runs": 0}
+    for p in src_decisions.list(repo=repo):
+        if dst.decisions.get(p.id) is None:
+            dst.decisions.add(p)
+            counts["decisions"] += 1
     for e in src_events.list_events(repo=repo):
         if dst.events.get(e.id) is None:
             dst.events.record(e)
@@ -56,5 +56,5 @@ def import_catalog(src: Catalog, dst: Catalog) -> dict[str, dict[str, int]]:
     result: dict[str, dict[str, int]] = {}
     for repo in src.list_repos():
         s = src.open(repo)
-        result[repo] = copy_repo_rows(s.priors, s.events, s.runs, dst.open(repo), repo)
+        result[repo] = copy_repo_rows(s.decisions, s.events, s.runs, dst.open(repo), repo)
     return result

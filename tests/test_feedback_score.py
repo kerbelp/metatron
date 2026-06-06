@@ -1,4 +1,4 @@
-"""Tests for the per-prior helpfulness aggregate (time decay + shrinkage)."""
+"""Tests for the per-decision helpfulness aggregate (time decay + shrinkage)."""
 
 from datetime import datetime, timedelta, timezone
 
@@ -26,7 +26,7 @@ def test_no_events_yields_no_scores():
 
 def test_non_feedback_and_unrated_events_are_ignored():
     events = [
-        Event(repo="r", kind=EventKind.QUERY, prior_ids=["p1"], timestamp=NOW),
+        Event(repo="r", kind=EventKind.QUERY, decision_ids=["p1"], timestamp=NOW),
         _fb({}),  # feedback but no ratings
     ]
     assert helpfulness_scores(events, now=NOW) == {}
@@ -50,7 +50,7 @@ def test_more_consistent_ratings_move_the_score_closer_to_the_signal():
     assert many < 10    # but never reaches the raw ceiling
 
 
-def test_a_lone_low_rating_cannot_bury_a_prior():
+def test_a_lone_low_rating_cannot_bury_a_decision():
     # a single 1 stays well above the floor thanks to shrinkage.
     s = helpfulness_scores([_fb({"p1": 1})], now=NOW)["p1"].score
     assert s < NEUTRAL
@@ -76,6 +76,6 @@ def test_centered_signal_is_bounded_and_signed():
     assert HelpfulnessScore(score=NEUTRAL, n_ratings=0).centered == 0.0
 
 
-def test_scores_are_independent_per_prior():
+def test_scores_are_independent_per_decision():
     scores = helpfulness_scores([_fb({"p1": 9, "p2": 2})], now=NOW)
     assert scores["p1"].score > NEUTRAL > scores["p2"].score

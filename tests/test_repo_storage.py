@@ -4,24 +4,24 @@ import sqlite3
 
 import pytest
 
-from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.models import Origin, Decision, Status
+from metatron.storage.sqlite import SQLiteDecisionStore
 
 
-def _prior(repo, scope="app") -> Prior:
-    return Prior(repo=repo, pattern="p", scope=scope, rationale="r", origin=Origin.BOOTSTRAP)
+def _decision(repo, scope="app") -> Decision:
+    return Decision(repo=repo, pattern="p", scope=scope, rationale="r", origin=Origin.BOOTSTRAP)
 
 
 @pytest.fixture
-def store() -> SQLitePriorStore:
-    s = SQLitePriorStore(":memory:")
+def store() -> SQLiteDecisionStore:
+    s = SQLiteDecisionStore(":memory:")
     yield s
     s.close()
 
 
 def test_list_filters_by_repo(store):
-    mine = _prior("github.com/me/a")
-    theirs = _prior("github.com/them/b")
+    mine = _decision("github.com/me/a")
+    theirs = _decision("github.com/them/b")
     store.add(mine)
     store.add(theirs)
 
@@ -30,22 +30,22 @@ def test_list_filters_by_repo(store):
 
 
 def test_count_filters_by_repo(store):
-    store.add(_prior("github.com/me/a"))
-    store.add(_prior("github.com/me/a"))
-    store.add(_prior("github.com/them/b"))
+    store.add(_decision("github.com/me/a"))
+    store.add(_decision("github.com/me/a"))
+    store.add(_decision("github.com/them/b"))
     assert store.count(repo="github.com/me/a") == 2
 
 
 def test_list_repos_returns_distinct_repos(store):
-    store.add(_prior("github.com/me/a"))
-    store.add(_prior("github.com/me/a"))
-    store.add(_prior("github.com/them/b"))
+    store.add(_decision("github.com/me/a"))
+    store.add(_decision("github.com/me/a"))
+    store.add(_decision("github.com/them/b"))
     assert store.list_repos() == ["github.com/me/a", "github.com/them/b"]
 
 
 def test_list_and_count_filter_by_model(store):
-    opus = Prior(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="opus")
-    sonnet = Prior(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="sonnet")
+    opus = Decision(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="opus")
+    sonnet = Decision(repo="r", pattern="p", scope="app", rationale="r", origin=Origin.BOOTSTRAP, model="sonnet")
     store.add(opus)
     store.add(sonnet)
     assert [p.id for p in store.list(model="opus")] == [opus.id]
@@ -57,20 +57,20 @@ def test_opening_a_pre_repo_database_migrates_and_reads(tmp_path):
     db = str(tmp_path / "legacy.db")
     conn = sqlite3.connect(db)
     conn.execute(
-        """CREATE TABLE priors (
+        """CREATE TABLE decisions (
             id TEXT PRIMARY KEY, pattern TEXT, scope TEXT, rationale TEXT,
             origin TEXT, confidence TEXT, source_refs TEXT, status TEXT,
             created_at TEXT, updated_at TEXT)"""
     )
     conn.execute(
-        "INSERT INTO priors VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO decisions VALUES (?,?,?,?,?,?,?,?,?,?)",
         ("old1", "legacy pattern", "app", "r", "bootstrap", "medium", "[]",
          "candidate", "2024-01-01T00:00:00+00:00", "2024-01-01T00:00:00+00:00"),
     )
     conn.commit()
     conn.close()
 
-    store = SQLitePriorStore(db)  # must migrate without error
+    store = SQLiteDecisionStore(db)  # must migrate without error
     loaded = store.list()
 
     assert len(loaded) == 1

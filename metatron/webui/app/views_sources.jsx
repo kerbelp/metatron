@@ -21,7 +21,7 @@ function OriginsView({ repo }) {
 
       {/* contribution bar */}
       <div className="panel pad enter" style={{ marginBottom: 18 }}>
-        <div className="panel-head"><h3>Canonical knowledge by origin</h3><div className="spacer" /><span className="sub">{totalCanon} canonical priors</span></div>
+        <div className="panel-head"><h3>Canonical knowledge by origin</h3><div className="spacer" /><span className="sub">{totalCanon} canonical decisions</span></div>
         <div style={{ display: "flex", height: 26, borderRadius: 8, overflow: "hidden", border: "1px solid var(--line)", marginBottom: 14 }}>
           {origins.map((o, i) => { const dot = { bootstrap: "var(--teal)", agent_submitted: "var(--violet)", agent_feedback: "var(--cyan)" }[o.origin]; return (
             <div key={o.origin} title={`${o.origin}: ${o.canonical}`} style={{ width: `${(o.canonical / totalCanon) * 100}%`, background: dot, opacity: .85, display: "grid", placeItems: "center", borderRight: i < origins.length - 1 ? "1px solid #04080a" : "none", animation: "growx 1s cubic-bezier(.3,.8,.3,1)", transformOrigin: "left" }}>
@@ -84,7 +84,7 @@ function IngestView({ repo }) {
   if (!runs.length) return <Empty title="No ingest runs yet" detail="Run the bootstrap miner to import knowledge from this repo." icon="layers" />;
   const latest = runs[0];
   const totalCost = runs.reduce((a, r) => a + r.estimated_cost, 0);
-  const totalPriors = runs.reduce((a, r) => a + r.priors_created, 0);
+  const totalDecisions = runs.reduce((a, r) => a + r.decisions_created, 0);
   const fmt = (n) => n >= 1e6 ? (n / 1e6).toFixed(2) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "k" : n;
 
   return (
@@ -92,7 +92,7 @@ function IngestView({ repo }) {
       <SectionTitle eyebrow="Knowledge import" title="Ingest telemetry"
         right={<div style={{ display: "flex", gap: 24 }}>
           <div className="metric" style={{ textAlign: "right" }}><div className="big" style={{ fontSize: 22, color: "var(--emerald)" }}><CountUp value={totalCost} decimals={2} prefix="$" /></div><div className="lab">total spent</div></div>
-          <div className="metric" style={{ textAlign: "right" }}><div className="big" style={{ fontSize: 22, color: "var(--teal)" }}><CountUp value={totalPriors} /></div><div className="lab">priors mined</div></div>
+          <div className="metric" style={{ textAlign: "right" }}><div className="big" style={{ fontSize: 22, color: "var(--teal)" }}><CountUp value={totalDecisions} /></div><div className="lab">decisions mined</div></div>
         </div>} />
 
       {/* latest run hero */}
@@ -103,7 +103,7 @@ function IngestView({ repo }) {
           <RunStat label="Files parsed" value={latest.files_parsed} />
           <RunStat label="Commits read" value={latest.commits_read} />
           <RunStat label="Scopes found" value={latest.scopes} />
-          <RunStat label="Priors created" value={latest.priors_created} accent />
+          <RunStat label="Decisions created" value={latest.decisions_created} accent />
           <div style={{ paddingLeft: 24, borderLeft: "1px solid var(--line)" }}>
             <div className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".18em", marginBottom: 12 }}>ESTIMATED COST</div>
             <div className="mono tnum" style={{ fontSize: 38, fontWeight: 600, color: "var(--emerald)", lineHeight: 1 }}><CountUp value={latest.estimated_cost} decimals={2} prefix="$" /></div>
@@ -127,7 +127,7 @@ function IngestView({ repo }) {
       <div className="panel pad enter enter-2">
         <div className="panel-head"><h3>Run history</h3><div className="spacer" /><span className="sub">{runs.length} runs</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(5, 1fr) 0.9fr", gap: 12, padding: "0 6px 12px", borderBottom: "1px solid var(--line)" }}>
-          {["MODEL", "FILES", "COMMITS", "SCOPES", "PRIORS", "TOKENS", "COST"].map((h) => <span key={h} className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".14em" }}>{h}</span>)}
+          {["MODEL", "FILES", "COMMITS", "SCOPES", "DECISIONS", "TOKENS", "COST"].map((h) => <span key={h} className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".14em" }}>{h}</span>)}
         </div>
         {runs.map((r, i) => (
           <div key={i} className="enter" style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(5, 1fr) 0.9fr", gap: 12, padding: "14px 6px", borderBottom: i < runs.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", animationDelay: i * 0.05 + "s" }}>
@@ -135,7 +135,7 @@ function IngestView({ repo }) {
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.files_parsed.toLocaleString()}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.commits_read.toLocaleString()}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.scopes}</span>
-            <span className="mono tnum" style={{ fontSize: 13, color: "var(--teal)" }}>{r.priors_created}</span>
+            <span className="mono tnum" style={{ fontSize: 13, color: "var(--teal)" }}>{r.decisions_created}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{fmt(r.input_tokens + r.output_tokens)}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--emerald)" }}>${r.estimated_cost.toFixed(2)}</span>
           </div>

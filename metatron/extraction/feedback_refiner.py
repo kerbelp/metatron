@@ -1,9 +1,9 @@
-"""Reshape raw agent feedback ("what was missing") into structured candidate priors.
+"""Reshape raw agent feedback ("what was missing") into structured candidate decisions.
 
 This is the LLM half of feedback refinement — the counterpart to the bootstrap
 extractor, but sourced from human/agent feedback rather than code signals. A single
 gap report often bundles several conventions, so the model is asked to split them.
-Every prior produced is a ``candidate`` of ``agent_feedback`` origin — refinement
+Every decision produced is a ``candidate`` of ``agent_feedback`` origin — refinement
 never promotes anything to canonical; a human still curates.
 """
 
@@ -13,11 +13,11 @@ import json
 
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
-from metatron.models import Confidence, Origin, Prior
+from metatron.models import Confidence, Origin, Decision
 
 
 class RefineError(Exception):
-    """Raised when a refiner response cannot be parsed into priors."""
+    """Raised when a refiner response cannot be parsed into decisions."""
 
 
 class FeedbackRefiner:
@@ -40,7 +40,7 @@ class FeedbackRefiner:
         """The underlying LLM provider (so callers can read token usage for cost)."""
         return self._provider
 
-    def refine(self, gap_text: str, scope_hint: str = "", task: str = "") -> list[Prior]:
+    def refine(self, gap_text: str, scope_hint: str = "", task: str = "") -> list[Decision]:
         prompt = render(
             self._template,
             gap=gap_text,
@@ -48,13 +48,13 @@ class FeedbackRefiner:
             task=task or "(unspecified)",
         )
         raw = self._provider.complete(prompt)
-        priors: list[Prior] = []
+        decisions: list[Decision] = []
         for item in _parse_json_array(raw):
             pattern = (item.get("pattern") or "").strip()
             if not pattern:
                 continue  # skip empties rather than fabricate
-            priors.append(
-                Prior(
+            decisions.append(
+                Decision(
                     repo=self._repo,
                     pattern=pattern,
                     scope=(item.get("scope") or scope_hint or "").strip(),
@@ -64,7 +64,7 @@ class FeedbackRefiner:
                     origin=Origin.AGENT_FEEDBACK,
                 )
             )
-        return priors
+        return decisions
 
 
 def _parse_confidence(value: object) -> Confidence:

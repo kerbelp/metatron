@@ -20,7 +20,7 @@ def test_open_creates_self_describing_file(tmp_path):
     assert path.exists()
     row = sqlite3.connect(path).execute("SELECT repo_id FROM repo_meta").fetchone()
     assert row[0] == "github.com/acme/app"
-    stores.priors.close()
+    stores.decisions.close()
     stores.events.close()
     stores.runs.close()
 

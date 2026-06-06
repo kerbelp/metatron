@@ -1,13 +1,13 @@
 /* ============================================================
    Agent constellation — Metatron at the center, agents orbiting,
-   knowledge flowing OUT (priors) and feedback flowing BACK IN.
+   knowledge flowing OUT (decisions) and feedback flowing BACK IN.
    Groups overflow agents past a threshold into a +N cluster.
    ============================================================ */
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 const AGENT_MAX_NODES = 8;          // beyond this, overflow collapses into a group
 const AGENT_STATUS = {
-  serving:  { c: "var(--emerald)", label: "receiving priors" },
+  serving:  { c: "var(--emerald)", label: "receiving decisions" },
   feedback: { c: "var(--cyan)",    label: "sending feedback" },
   idle:     { c: "var(--muted)",   label: "idle" },
 };
@@ -20,7 +20,7 @@ function buildNodes(agents) {
   const rest = agents.slice(AGENT_MAX_NODES - 1);
   shown.push({
     kind: "group", key: "group", members: rest, status: "idle",
-    received: rest.reduce((s, a) => s + a.priors_received, 0),
+    received: rest.reduce((s, a) => s + a.decisions_received, 0),
     feedback: rest.reduce((s, a) => s + a.feedback_sent, 0),
   });
   return shown;
@@ -72,7 +72,7 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
           return (
             <g key={p.key}>
               <path id={pid} d={d} fill="none" stroke={focused ? sc : "url(#agcCore)"} strokeOpacity={focused ? 0.55 : 0.18} strokeWidth={focused ? 1.6 : 1} />
-              {/* outbound: priors served (Metatron → agent) */}
+              {/* outbound: decisions served (Metatron → agent) */}
               {!paused && (
                 <circle r={focused ? 3.6 : 2.6} fill="var(--emerald)" filter="url(#agcGlow)" opacity="0.95">
                   <animateMotion dur={`${2.4 + (i % 4) * 0.35}s`} repeatCount="indefinite" path={d} begin={`${i * 0.3}s`} />
@@ -148,7 +148,7 @@ function AgentDetailPanel({ node }) {
           <span className="badge ghost mono" style={{ marginLeft: "auto" }}>+{node.members.length}</span>
         </div>
         <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>
-          {node.members.length} agents with lower activity in this window. Together they received <b style={{ color: "var(--emerald)" }}>{node.received}</b> priors and sent <b style={{ color: "var(--cyan)" }}>{node.feedback}</b> feedback signals.
+          {node.members.length} agents with lower activity in this window. Together they received <b style={{ color: "var(--emerald)" }}>{node.received}</b> decisions and sent <b style={{ color: "var(--cyan)" }}>{node.feedback}</b> feedback signals.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 220, overflowY: "auto", paddingRight: 4 }}>
           {node.members.map((a) => (
@@ -159,7 +159,7 @@ function AgentDetailPanel({ node }) {
                 <div className="mono" style={{ fontSize: 9.5, color: "var(--dim)" }}>{a.id}</div>
               </div>
               <div style={{ marginLeft: "auto", display: "flex", gap: 12 }}>
-                <span className="mono" style={{ fontSize: 11, color: "var(--emerald)" }}>↓{a.priors_received}</span>
+                <span className="mono" style={{ fontSize: 11, color: "var(--emerald)" }}>↓{a.decisions_received}</span>
                 <span className="mono" style={{ fontSize: 11, color: "var(--cyan)" }}>↑{a.feedback_sent}</span>
               </div>
             </div>
@@ -187,8 +187,8 @@ function AgentDetailPanel({ node }) {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
         <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(52,211,153,.2)", background: "rgba(52,211,153,.05)" }}>
-          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--emerald)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="down" size={13} />PRIORS RECEIVED</div>
-          <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color: "var(--emerald)" }}>{a.priors_received}</div>
+          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--emerald)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="down" size={13} />DECISIONS RECEIVED</div>
+          <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color: "var(--emerald)" }}>{a.decisions_received}</div>
         </div>
         <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(34,211,238,.2)", background: "rgba(34,211,238,.05)" }}>
           <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--cyan)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="up" size={13} />FEEDBACK SENT</div>
@@ -196,15 +196,15 @@ function AgentDetailPanel({ node }) {
         </div>
       </div>
 
-      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>PRIORS METATRON SERVED IT</div>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>DECISIONS METATRON SERVED IT</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 150, overflowY: "auto", paddingRight: 4 }}>
         {a.served.slice(0, 5).map((p, i) => (
-          <div key={p.id} className="prior-flit" style={{ animationDelay: (0.08 + i * 0.07) + "s", display: "flex", gap: 9, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+          <div key={p.id} className="decision-flit" style={{ animationDelay: (0.08 + i * 0.07) + "s", display: "flex", gap: 9, alignItems: "flex-start", padding: "8px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
             <span style={{ color: "var(--teal)", marginTop: 1 }}><Icon name="spark" size={13} /></span>
             <span style={{ fontSize: 12, lineHeight: 1.4, color: "var(--text-2)" }}>{p.pattern}</span>
           </div>
         ))}
-        {a.priors_received > 5 && <div className="mono dim" style={{ fontSize: 11, paddingLeft: 10 }}>+ {a.priors_received - 5} more delivered…</div>}
+        {a.decisions_received > 5 && <div className="mono dim" style={{ fontSize: 11, paddingLeft: 10 }}>+ {a.decisions_received - 5} more delivered…</div>}
       </div>
       <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: ".06em", marginTop: 14 }}>last active {timeAgo(a.last_active)}</div>
     </div>

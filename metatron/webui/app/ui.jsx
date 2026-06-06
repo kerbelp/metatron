@@ -1,5 +1,5 @@
 /* ============================================================
-   Shared UI primitives — badges, prior rows, detail drawer.
+   Shared UI primitives — badges, decision rows, detail drawer.
    ============================================================ */
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
@@ -69,21 +69,21 @@ function ScoreRing({ score, size = 46 }) {
   );
 }
 
-/* ---------- prior row (browse / curation) ---------- */
-function PriorRow({ prior, onOpen, style, children, columns = "1fr auto" }) {
+/* ---------- decision row (browse / curation) ---------- */
+function DecisionRow({ decision, onOpen, style, children, columns = "1fr auto" }) {
   return (
-    <div className="row enter" style={{ gridTemplateColumns: columns, cursor: onOpen ? "pointer" : "default", ...style }} onClick={onOpen ? () => onOpen(prior) : undefined}>
+    <div className="row enter" style={{ gridTemplateColumns: columns, cursor: onOpen ? "pointer" : "default", ...style }} onClick={onOpen ? () => onOpen(decision) : undefined}>
       <div style={{ minWidth: 0 }}>
-        <div className="pattern" style={{ marginBottom: 9 }}>{prior.pattern}</div>
+        <div className="pattern" style={{ marginBottom: 9 }}>{decision.pattern}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <ScopeTag scope={prior.scope} />
-          <OriginTag origin={prior.origin} />
-          <Confidence level={prior.confidence} showLabel />
+          <ScopeTag scope={decision.scope} />
+          <OriginTag origin={decision.origin} />
+          <Confidence level={decision.confidence} showLabel />
         </div>
       </div>
       {children || (
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <StatusBadge status={prior.status} />
+          <StatusBadge status={decision.status} />
           <span className="dim"><Icon name="arrow" size={16} /></span>
         </div>
       )}
@@ -91,52 +91,52 @@ function PriorRow({ prior, onOpen, style, children, columns = "1fr auto" }) {
   );
 }
 
-/* ---------- prior detail drawer ---------- */
-function PriorDrawer({ prior, onClose, onApprove, onReject, busy }) {
+/* ---------- decision detail drawer ---------- */
+function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
   useEffect(() => {
     const k = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
   }, [onClose]);
-  if (!prior) return null;
+  if (!decision) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(2,6,8,.6)", backdropFilter: "blur(3px)", animation: "fadeup .3s" }} />
       <aside style={{ position: "relative", width: "min(560px, 92vw)", height: "100%", background: "linear-gradient(180deg,#081512,#060f0d)", borderLeft: "1px solid var(--line-2)", boxShadow: "var(--shadow-deep)", overflowY: "auto", animation: "slidein .36s cubic-bezier(.2,.8,.3,1)" }}>
         <style>{`@keyframes slidein{from{transform:translateX(40px);opacity:.4}}`}</style>
         <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "20px 26px", background: "linear-gradient(180deg,#081512,rgba(8,21,18,.7))", backdropFilter: "blur(8px)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 12 }}>
-          <StatusBadge status={prior.status} />
-          {prior.triage && prior.triage !== "none" && prior.status === "candidate" && <TriageTag triage={prior.triage} />}
+          <StatusBadge status={decision.status} />
+          {decision.triage && decision.triage !== "none" && decision.status === "candidate" && <TriageTag triage={decision.triage} />}
           <div className="spacer" style={{ flex: 1 }} />
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
         <div style={{ padding: "26px 28px 40px" }}>
           <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".24em", marginBottom: 10 }}>THE RULE</div>
-          <div style={{ fontSize: 20, lineHeight: 1.4, fontWeight: 400, color: "#eafff8", textWrap: "pretty" }}>{prior.pattern}</div>
+          <div style={{ fontSize: 20, lineHeight: 1.4, fontWeight: 400, color: "#eafff8", textWrap: "pretty" }}>{decision.pattern}</div>
 
           <div style={{ display: "flex", gap: 26, margin: "26px 0", flexWrap: "wrap" }}>
-            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>SCOPE</div><ScopeTag scope={prior.scope} /></div>
-            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>CONFIDENCE</div><Confidence level={prior.confidence} showLabel /></div>
-            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>ORIGIN</div><OriginTag origin={prior.origin} /></div>
+            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>SCOPE</div><ScopeTag scope={decision.scope} /></div>
+            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>CONFIDENCE</div><Confidence level={decision.confidence} showLabel /></div>
+            <div><div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>ORIGIN</div><OriginTag origin={decision.origin} /></div>
           </div>
 
           <div className="panel pad" style={{ background: "rgba(45,212,191,.04)", borderColor: "rgba(45,212,191,.14)", marginBottom: 18 }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: ".2em", color: "var(--teal)", marginBottom: 9 }}>RATIONALE — WHY IT EXISTS</div>
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-2)", textWrap: "pretty" }}>{prior.rationale}</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-2)", textWrap: "pretty" }}>{decision.rationale}</div>
           </div>
 
           <div style={{ marginBottom: 8 }} className="mono dim"><span style={{ fontSize: 10, letterSpacing: ".2em" }}>ORIGIN NOTE</span></div>
-          <div className="muted" style={{ fontSize: 12.5, marginBottom: 22 }}>{ORIGIN_DESC[prior.origin]}</div>
+          <div className="muted" style={{ fontSize: 12.5, marginBottom: 22 }}>{ORIGIN_DESC[decision.origin]}</div>
 
-          {prior.triage && prior.triage !== "none" && (
+          {decision.triage && decision.triage !== "none" && (
             <div className="panel pad" style={{ marginBottom: 22 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}><TriageTag triage={prior.triage} /><span className="mono dim" style={{ fontSize: 10, letterSpacing: ".14em" }}>ADVISORY ONLY · A HUMAN DECIDES</span></div>
-              <div className="muted" style={{ fontSize: 13, lineHeight: 1.55 }}>{prior.triage_reason}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 9 }}><TriageTag triage={decision.triage} /><span className="mono dim" style={{ fontSize: 10, letterSpacing: ".14em" }}>ADVISORY ONLY · A HUMAN DECIDES</span></div>
+              <div className="muted" style={{ fontSize: 13, lineHeight: 1.55 }}>{decision.triage_reason}</div>
             </div>
           )}
 
           <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 12 }}>SOURCE REFS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 30 }}>
-            {prior.source_refs && prior.source_refs.length ? prior.source_refs.map((r, i) => (
+            {decision.source_refs && decision.source_refs.length ? decision.source_refs.map((r, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "rgba(8,18,16,.5)" }}>
                 <span style={{ color: r.type === "commit" ? "var(--amber)" : "var(--cyan)" }}><Icon name={r.type === "commit" ? "commit" : "file"} size={16} /></span>
                 <span className="mono" style={{ fontSize: 12.5, color: "var(--text-2)" }}>{r.ref}</span>
@@ -146,13 +146,13 @@ function PriorDrawer({ prior, onClose, onApprove, onReject, busy }) {
           </div>
 
           <div className="mono dim" style={{ fontSize: 10.5, letterSpacing: ".12em", marginBottom: 18 }}>
-            created {timeAgo(prior.created_at)} · updated {timeAgo(prior.updated_at)} · <span style={{ color: "var(--dim)" }}>{prior.id}</span>
+            created {timeAgo(decision.created_at)} · updated {timeAgo(decision.updated_at)} · <span style={{ color: "var(--dim)" }}>{decision.id}</span>
           </div>
 
-          {prior.status === "candidate" && (onApprove || onReject) && (
+          {decision.status === "candidate" && (onApprove || onReject) && (
             <div style={{ display: "flex", gap: 12, position: "sticky", bottom: 0 }}>
-              <button className="btn primary lg" style={{ flex: 1 }} disabled={busy} onClick={() => onApprove(prior)}><Icon name="check" size={16} />Approve → Canonical</button>
-              <button className="btn danger lg" disabled={busy} onClick={() => onReject(prior)}><Icon name="x" size={16} />Reject</button>
+              <button className="btn primary lg" style={{ flex: 1 }} disabled={busy} onClick={() => onApprove(decision)}><Icon name="check" size={16} />Approve → Canonical</button>
+              <button className="btn danger lg" disabled={busy} onClick={() => onReject(decision)}><Icon name="x" size={16} />Reject</button>
             </div>
           )}
         </div>
@@ -202,5 +202,5 @@ const useToast = () => React.useContext(ToastCtx);
 
 Object.assign(window, {
   StatusBadge, Confidence, ScopeTag, OriginTag, OriginLabel: ORIGIN_LABEL, OriginDesc: ORIGIN_DESC,
-  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, PriorRow, PriorDrawer, SectionTitle, ToastHost, useToast,
+  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, DecisionRow, DecisionDrawer, SectionTitle, ToastHost, useToast,
 });

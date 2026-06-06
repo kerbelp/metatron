@@ -1,7 +1,7 @@
 """A small stdlib HTTP server for the curation UI.
 
 No web framework — `http.server` serves the static front-end (in ``app/``) plus JSON
-endpoints backed by the same `PriorStore` the CLI uses. The request handler is a thin
+endpoints backed by the same `DecisionStore` the CLI uses. The request handler is a thin
 adapter over the pure functions in :mod:`metatron.webui.api`.
 """
 
@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from metatron.storage.base import EventStore, PriorStore
+from metatron.storage.base import EventStore, DecisionStore
 from metatron.webui import api
 from metatron.webui.jobs import FeedbackLoopJob, IngestJob, TriageJob
 from metatron.webui.observability import usage_summary
@@ -48,7 +48,7 @@ def find_free_port(start: int = 1337, host: str = "127.0.0.1", attempts: int = 2
 
 
 def make_server(
-    store: PriorStore,
+    store: DecisionStore,
     host: str,
     port: int,
     event_store: EventStore | None = None,
@@ -63,7 +63,7 @@ def make_server(
 
 
 def serve(
-    store: PriorStore,
+    store: DecisionStore,
     event_store: EventStore | None = None,
     host: str = "127.0.0.1",
     start_port: int = 1337,
@@ -85,7 +85,7 @@ def serve(
 
 
 def _build_handler(
-    store: PriorStore,
+    store: DecisionStore,
     event_store: EventStore | None = None,
     run_store=None,
     refiner_factory=None,
@@ -106,7 +106,7 @@ def _build_handler(
             path = parts.path
             if path in ("/", "/index.html"):
                 self._send_file("index.html")
-            elif path == "/api/priors":
+            elif path == "/api/decisions":
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/repos":
                 self._send_json(api.repos(store))
@@ -121,7 +121,7 @@ def _build_handler(
                 if event_store is not None:
                     self._send_json(api.feedback_analytics(event_store, store, repo=repo))
                 else:
-                    self._send_json({"priors": [], "by_origin": []})
+                    self._send_json({"decisions": [], "by_origin": []})
             elif path == "/api/leaderboard":
                 repo = _first(parse_qs(parts.query), "repo")
                 if event_store is not None:
@@ -200,19 +200,19 @@ def _build_handler(
                     origin=body.get("origin") or None,
                     approve_after=bool(body.get("approve")),
                 ))
-            # /api/priors/approve-recommended — one-click bulk approve of "approve" picks
-            if segments == ["api", "priors", "approve-recommended"]:
+            # /api/decisions/approve-recommended — one-click bulk approve of "approve" picks
+            if segments == ["api", "decisions", "approve-recommended"]:
                 body = self._read_json()
                 return self._send_json(api.approve_recommended(
                     store, repo=body.get("repo") or None, origin=body.get("origin") or None
                 ))
-            # /api/priors/<id>/<action>
-            if len(segments) == 4 and segments[:2] == ["api", "priors"]:
-                prior_id, action = segments[2], segments[3]
+            # /api/decisions/<id>/<action>
+            if len(segments) == 4 and segments[:2] == ["api", "decisions"]:
+                decision_id, action = segments[2], segments[3]
                 if action == "approve":
-                    return self._send_json(api.approve(store, prior_id))
+                    return self._send_json(api.approve(store, decision_id))
                 if action == "reject":
-                    return self._send_json(api.reject(store, prior_id))
+                    return self._send_json(api.reject(store, decision_id))
             # /api/feedback/<id>/refine — run the LLM refiner on one feedback event
             if (
                 len(segments) == 4
@@ -262,8 +262,8 @@ def _first(query: dict[str, list[str]], key: str, default: str | None = None) ->
     return value or None
 
 
-def _list(store: PriorStore, query: dict[str, list[str]]) -> dict:
-    return api.list_priors(
+def _list(store: DecisionStore, query: dict[str, list[str]]) -> dict:
+    return api.list_decisions(
         store,
         repo=_first(query, "repo"),
         status=_first(query, "status"),

@@ -1,6 +1,6 @@
 """The repo catalog: one self-contained SQLite file per repo.
 
-A repo's data (priors, events, ingest runs) lives in its own ``<slug>.db`` inside a
+A repo's data (decisions, events, ingest runs) lives in its own ``<slug>.db`` inside a
 data directory (default ``~/.metatron``). Each file carries a one-row ``repo_meta``
 table so it is self-describing — a handed-off file announces its repo id regardless
 of filename. The :class:`Catalog` is the only thing that knows files exist; callers
@@ -16,12 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from metatron.events import Event
-from metatron.models import IngestRun, Prior, Status, TriageVerdict
-from metatron.storage.base import EventStore, PriorStore
+from metatron.models import IngestRun, Decision, Status, TriageVerdict
+from metatron.storage.base import EventStore, DecisionStore
 from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
-    SQLitePriorStore,
+    SQLiteDecisionStore,
 )
 
 _META_SCHEMA = "CREATE TABLE IF NOT EXISTS repo_meta (repo_id TEXT NOT NULL)"
@@ -63,7 +63,7 @@ def _ensure_repo_meta(path: Path, repo_id: str) -> None:
 
 @dataclass
 class RepoStores:
-    priors: SQLitePriorStore
+    decisions: SQLiteDecisionStore
     events: SQLiteEventStore
     runs: SQLiteIngestRunStore
 
@@ -108,7 +108,7 @@ class Catalog:
         path = self.path_for(repo_id)
         _ensure_repo_meta(path, repo_id)
         stores = RepoStores(
-            SQLitePriorStore(str(path)),
+            SQLiteDecisionStore(str(path)),
             SQLiteEventStore(str(path)),
             SQLiteIngestRunStore(str(path)),
         )
@@ -117,29 +117,29 @@ class Catalog:
 
     def close(self) -> None:
         for s in self._open.values():
-            s.priors.close()
+            s.decisions.close()
             s.events.close()
             s.runs.close()
         self._open.clear()
 
 
-class CatalogPriorStore(PriorStore):
-    """A :class:`PriorStore` over the catalog: route by repo, fan out when repo is None.
+class CatalogDecisionStore(DecisionStore):
+    """A :class:`DecisionStore` over the catalog: route by repo, fan out when repo is None.
 
     Repo-scoped calls hit exactly one file. ``repo=None`` listings merge across all
     repos and re-sort newest-first. Id-only operations (``get``/``set_status``/
     ``set_triage``) search files — fine at local single-user scale; the hot
-    ``get_priors_for_context`` path is always repo-scoped and stays single-file.
+    ``get_decisions_for_context`` path is always repo-scoped and stays single-file.
     """
 
     def __init__(self, catalog: Catalog) -> None:
         self._cat = catalog
 
-    def _p(self, repo_id: str) -> SQLitePriorStore:
-        return self._cat.open(repo_id).priors
+    def _p(self, repo_id: str) -> SQLiteDecisionStore:
+        return self._cat.open(repo_id).decisions
 
-    def add(self, prior: Prior) -> Prior:
-        return self._p(prior.repo).add(prior)
+    def add(self, decision: Decision) -> Decision:
+        return self._p(decision.repo).add(decision)
 
     def list(self, *, repo=None, status=None, scope=None, model=None,
              triage=None, origin=None, search=None, limit=None, offset=0):
@@ -147,7 +147,7 @@ class CatalogPriorStore(PriorStore):
                   origin=origin, search=search)
         if repo is not None:
             return self._p(repo).list(repo=repo, limit=limit, offset=offset, **kw)
-        merged: list[Prior] = []
+        merged: list[Decision] = []
         for rid in self._cat.list_repos():
             merged.extend(self._p(rid).list(repo=rid, **kw))
         # Match the per-file SQL order (created_at DESC, id ASC) via a stable two-pass
@@ -166,24 +166,24 @@ class CatalogPriorStore(PriorStore):
             return self._p(repo).count(repo=repo, **kw)
         return sum(self._p(rid).count(repo=rid, **kw) for rid in self._cat.list_repos())
 
-    def get(self, prior_id: str) -> Prior | None:
+    def get(self, decision_id: str) -> Decision | None:
         for rid in self._cat.list_repos():
-            hit = self._p(rid).get(prior_id)
+            hit = self._p(rid).get(decision_id)
             if hit is not None:
                 return hit
         return None
 
-    def _owner(self, prior_id: str) -> str:
+    def _owner(self, decision_id: str) -> str:
         for rid in self._cat.list_repos():
-            if self._p(rid).get(prior_id) is not None:
+            if self._p(rid).get(decision_id) is not None:
                 return rid
-        raise KeyError(prior_id)
+        raise KeyError(decision_id)
 
-    def set_status(self, prior_id: str, status: Status) -> Prior:
-        return self._p(self._owner(prior_id)).set_status(prior_id, status)
+    def set_status(self, decision_id: str, status: Status) -> Decision:
+        return self._p(self._owner(decision_id)).set_status(decision_id, status)
 
-    def set_triage(self, prior_id: str, verdict: TriageVerdict, reason: str) -> Prior:
-        return self._p(self._owner(prior_id)).set_triage(prior_id, verdict, reason)
+    def set_triage(self, decision_id: str, verdict: TriageVerdict, reason: str) -> Decision:
+        return self._p(self._owner(decision_id)).set_triage(decision_id, verdict, reason)
 
     def list_repos(self) -> list[str]:
         return self._cat.list_repos()

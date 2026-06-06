@@ -22,7 +22,7 @@ def _run(repo, model, day=1, **kw) -> IngestRun:
         files_parsed=kw.get("files_parsed", 10),
         commits_read=kw.get("commits_read", 50),
         scopes=kw.get("scopes", 5),
-        priors_created=kw.get("priors_created", 20),
+        decisions_created=kw.get("decisions_created", 20),
         input_tokens=kw.get("input_tokens", 1000),
         output_tokens=kw.get("output_tokens", 500),
         timestamp=datetime(2024, 1, day, tzinfo=timezone.utc),

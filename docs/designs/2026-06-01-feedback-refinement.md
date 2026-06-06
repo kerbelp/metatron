@@ -1,4 +1,4 @@
-# Design: feedback → structured priors (Opus refinement, human-gated)
+# Design: feedback → structured decisions (Opus refinement, human-gated)
 
 - **Date:** 2026-06-01
 - **Status:** approved (capture-only confirmed)
@@ -8,7 +8,7 @@
 ## Why
 
 Raw `what_was_missing` feedback is high-signal but arrives as a prose blob (one gap
-often bundles several conventions). Priors must be **structured records, not prose**.
+often bundles several conventions). Decisions must be **structured records, not prose**.
 So instead of `submit_feedback` dumping the blob into the queue, an LLM pass reshapes
 each gap into clean, split, structured candidates — periodically, idempotently, with
 the human curation gate intact.
@@ -34,7 +34,7 @@ metatron refine-feedback (run periodically)
   `unhandled_feedback(repo=None)` and `mark_handled(event_id, produced_ids)` (sets
   `handled=True` and records the produced candidate ids on the event for provenance).
 - **`FeedbackRefiner`** + editable prompt `prompts/refine_feedback.txt` (same shape as
-  the extractor/triage): given gap text + scope hint, returns structured priors. Tasked
+  the extractor/triage): given gap text + scope hint, returns structured decisions. Tasked
   to split distinct conventions and keep each pattern prescriptive (not prose).
 - **CLI `metatron refine-feedback [--repo] [--limit] [--model]`** — fetch unhandled
   feedback → refine → add candidates → mark handled → print summary + cost. **Defaults
@@ -47,7 +47,7 @@ metatron refine-feedback (run periodically)
 
 Opus creates **candidates only**; nothing it produces is canonical. This is the same
 gate extraction already uses — so it stays on the safe side of the deferred auto-loop
-(C). Ratings still never mutate priors.
+(C). Ratings still never mutate decisions.
 
 ## Migration of existing data
 
@@ -61,7 +61,7 @@ reprocess the 2 (still `handled=False`) feedback events into structured candidat
   creates **no** candidate.
 - `EventStore.unhandled_feedback` returns only unhandled FEEDBACK events; `mark_handled`
   flips the flag and records produced ids; handled events are excluded next time.
-- `FeedbackRefiner` parses an LLM response into ≥1 structured priors (origin=agent_feedback,
+- `FeedbackRefiner` parses an LLM response into ≥1 structured decisions (origin=agent_feedback,
   status=candidate); splits multiple; tolerates fenced/garbled JSON.
 - `refine_feedback` end-to-end (fake provider): unhandled gaps → N candidates, events
   marked handled, re-run is a no-op.

@@ -21,11 +21,11 @@ def test_reads_values_from_toml(tmp_path, monkeypatch):
     monkeypatch.delenv("METATRON_DB", raising=False)
     monkeypatch.delenv("METATRON_MODEL", raising=False)
     cfg = tmp_path / "metatron.toml"
-    cfg.write_text('[metatron]\ndb_path = "/data/priors.db"\nmodel = "claude-y"\n')
+    cfg.write_text('[metatron]\ndb_path = "/data/decisions.db"\nmodel = "claude-y"\n')
 
     settings = load_settings(cfg)
 
-    assert settings.db_path == "/data/priors.db"
+    assert settings.db_path == "/data/decisions.db"
     assert settings.model == "claude-y"
 
 
@@ -55,13 +55,13 @@ def test_update_settings_preserves_other_keys(tmp_path, monkeypatch):
     monkeypatch.delenv("METATRON_DB", raising=False)
     monkeypatch.delenv("METATRON_MODEL", raising=False)
     cfg = tmp_path / "metatron.toml"
-    cfg.write_text('[metatron]\ndb_path = "/data/priors.db"\nmodel = "claude-y"\n')
+    cfg.write_text('[metatron]\ndb_path = "/data/decisions.db"\nmodel = "claude-y"\n')
 
     update_settings({"default_repo": "github.com/acme/app"}, cfg)
 
     settings = load_settings(cfg)
     assert settings.default_repo == "github.com/acme/app"
-    assert settings.db_path == "/data/priors.db"
+    assert settings.db_path == "/data/decisions.db"
     assert settings.model == "claude-y"
 
 

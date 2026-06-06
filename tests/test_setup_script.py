@@ -50,7 +50,7 @@ def test_fresh_repo_gets_claude_md_block_and_hook(tmp_path):
 
     claude_md = (tmp_path / "CLAUDE.md").read_text()
     assert "METATRON:START" in claude_md
-    assert "get_priors_for_context" in claude_md
+    assert "get_decisions_for_context" in claude_md
 
     assert (tmp_path / ".claude" / "metatron_reminder.txt").exists()
     cmds = _userprompt_hook_commands(_settings(tmp_path))

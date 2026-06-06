@@ -1,5 +1,5 @@
 /* ============================================================
-   KNOWLEDGE cluster — Overview · Priors · Curation
+   KNOWLEDGE cluster — Overview · Decisions · Curation
    ============================================================ */
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
@@ -7,7 +7,7 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 /* ============================================================
    OVERVIEW — health of the knowledge base
    ============================================================ */
-function OverviewView({ repo, openPrior, goto }) {
+function OverviewView({ repo, openDecision, goto }) {
   const stats = useApi(() => MetatronAPI.getStats(repo), [repo]);
   const usage = useApi(() => MetatronAPI.getUsage(repo), [repo]);
   const origins = useApi(() => MetatronAPI.getOrigins(repo), [repo]);
@@ -33,7 +33,7 @@ function OverviewView({ repo, openPrior, goto }) {
           <Donut segments={segs} size={186} thickness={16}>
             <div style={{ textAlign: "center" }}>
               <div className="mono tnum" style={{ fontSize: 40, fontWeight: 600, color: "#eafff8", lineHeight: 1 }}><CountUp value={s.total} /></div>
-              <div className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".2em", marginTop: 5 }}>TOTAL PRIORS</div>
+              <div className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".2em", marginTop: 5 }}>TOTAL DECISIONS</div>
             </div>
           </Donut>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, position: "relative" }}>
@@ -54,14 +54,14 @@ function OverviewView({ repo, openPrior, goto }) {
           <div className="panel pad enter enter-2" style={{ display: "flex", alignItems: "center", gap: 22 }}>
             <div style={{ flex: 1 }}>
               <div className="mono" style={{ fontSize: 10, letterSpacing: ".2em", color: "var(--teal)", marginBottom: 8 }}>SERVED TO AGENTS</div>
-              <div style={{ fontSize: 14.5, lineHeight: 1.5, color: "var(--text-2)", maxWidth: 430 }}>Only the <b style={{ color: "var(--teal)" }}>{s.canonical} canonical</b> priors reach agents. Nothing is served until a human approves it.</div>
+              <div style={{ fontSize: 14.5, lineHeight: 1.5, color: "var(--text-2)", maxWidth: 430 }}>Only the <b style={{ color: "var(--teal)" }}>{s.canonical} canonical</b> decisions reach agents. Nothing is served until a human approves it.</div>
             </div>
             <Donut segments={[{ value: cov, color: "var(--emerald)" }, { value: 1 - cov, color: "transparent" }]} size={104} thickness={10}>
               <div style={{ textAlign: "center" }}><div className="mono tnum" style={{ fontSize: 22, fontWeight: 600, color: "var(--emerald)" }}><CountUp value={cov * 100} decimals={0} suffix="%" /></div><div className="mono dim" style={{ fontSize: 8, letterSpacing: ".18em", marginTop: 2 }}>COVERAGE</div></div>
             </Donut>
           </div>
           <div className="panel pad enter enter-3" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
-            <div className="panel-head"><h3>Knowledge growth</h3><span className="sub">canonical priors over time</span></div>
+            <div className="panel-head"><h3>Knowledge growth</h3><span className="sub">canonical decisions over time</span></div>
             <Spark data={[6, 9, 12, 18, 21, 27, 33, 38, 41, 44, s.canonical]} w={560} h={78} color="var(--teal)" strokeW={2.4} />
           </div>
         </div>
@@ -99,25 +99,25 @@ function OverviewView({ repo, openPrior, goto }) {
 }
 
 /* ============================================================
-   PRIORS — browse with search + filters
+   DECISIONS — browse with search + filters
    ============================================================ */
 const STATUS_OPTS = ["", "canonical", "candidate", "rejected"];
 const ORIGIN_OPTS = ["", "bootstrap", "agent_submitted", "agent_feedback"];
 const CONF_OPTS = ["", "high", "medium", "low"];
 
-function PriorsView({ repo, openPrior }) {
+function DecisionsView({ repo, openDecision }) {
   const [f, setF] = useState({ status: "", origin: "", confidence: "", search: "", page: 1 });
   const [searchInput, setSearchInput] = useState("");
   useEffect(() => { const t = setTimeout(() => setF((s) => ({ ...s, search: searchInput, page: 1 })), 280); return () => clearTimeout(t); }, [searchInput]);
   useEffect(() => { setF({ status: "", origin: "", confidence: "", search: "", page: 1 }); setSearchInput(""); }, [repo]);
 
-  const res = useApi(() => MetatronAPI.getPriors(repo, { ...f, page_size: 7 }), [repo, f.status, f.origin, f.confidence, f.search, f.page]);
+  const res = useApi(() => MetatronAPI.getDecisions(repo, { ...f, page_size: 7 }), [repo, f.status, f.origin, f.confidence, f.search, f.page]);
   const set = (k, v) => setF((s) => ({ ...s, [k]: s[k] === v ? "" : v, page: 1 }));
   const hasFilter = f.status || f.origin || f.confidence || f.search;
 
   return (
     <div className="view">
-      <SectionTitle eyebrow="Knowledge base" title="Browse priors"
+      <SectionTitle eyebrow="Knowledge base" title="Browse decisions"
         right={<div className="search"><Icon name="search" size={16} className="dim" /><input placeholder="search patterns, scopes, rationale…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} /></div>} />
 
       {/* filter rail */}
@@ -132,14 +132,14 @@ function PriorsView({ repo, openPrior }) {
 
       {res.loading ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{[0, 1, 2, 3].map((i) => <div key={i} className="skeleton" style={{ height: 74 }} />)}</div>
         : res.error ? <ErrorState onRetry={res.reload} />
-          : res.data.items.length === 0 ? <Empty title="No priors match" detail="Try clearing a filter or broadening your search." icon="search" />
+          : res.data.items.length === 0 ? <Empty title="No decisions match" detail="Try clearing a filter or broadening your search." icon="search" />
             : (
               <>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <span className="mono dim" style={{ fontSize: 11 }}>{res.data.total} prior{res.data.total === 1 ? "" : "s"}{hasFilter ? " matched" : ""}</span>
+                  <span className="mono dim" style={{ fontSize: 11 }}>{res.data.total} decision{res.data.total === 1 ? "" : "s"}{hasFilter ? " matched" : ""}</span>
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {res.data.items.map((p) => <PriorRow key={p.id} prior={p} onOpen={openPrior} />)}
+                  {res.data.items.map((p) => <DecisionRow key={p.id} decision={p} onOpen={openDecision} />)}
                 </div>
                 {res.data.pages > 1 && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginTop: 24 }}>
@@ -168,8 +168,8 @@ function FilterGroup({ label, opts, value, onPick, render }) {
 /* ============================================================
    CURATION — candidate review queue. Approving feels great.
    ============================================================ */
-function CurationView({ repo, openPrior, refresh }) {
-  const res = useApi(() => MetatronAPI.getPriors(repo, { status: "candidate", page_size: 50 }), [repo]);
+function CurationView({ repo, openDecision, refresh }) {
+  const res = useApi(() => MetatronAPI.getDecisions(repo, { status: "candidate", page_size: 50 }), [repo]);
   const toast = useToast();
   const [busy, setBusy] = useState(null);
   const [leaving, setLeaving] = useState({});
@@ -183,14 +183,14 @@ function CurationView({ repo, openPrior, refresh }) {
   const approve = async (p, e) => {
     setBusy(p.id);
     if (e) setBurst({ x: e.clientX, y: e.clientY, id: Math.random() });
-    await MetatronAPI.approvePrior(p.id);
+    await MetatronAPI.approveDecision(p.id);
     await animateOut(p.id);
     toast("Canonized — now served to every agent");
     setBusy(null); res.reload(); refresh && refresh();
   };
   const reject = async (p) => {
     setBusy(p.id);
-    await MetatronAPI.rejectPrior(p.id);
+    await MetatronAPI.rejectDecision(p.id);
     await animateOut(p.id);
     toast("Candidate rejected");
     setBusy(null); res.reload(); refresh && refresh();
@@ -202,7 +202,7 @@ function CurationView({ repo, openPrior, refresh }) {
     await MetatronAPI.approveRecommended(repo);
     for (const id of ids) setLeaving((l) => ({ ...l, [id]: true }));
     await new Promise((r) => setTimeout(r, 560));
-    toast(`${ids.length} recommended priors canonized at once`);
+    toast(`${ids.length} recommended decisions canonized at once`);
     setApprovingAll(false); res.reload(); refresh && refresh();
   };
 
@@ -232,7 +232,7 @@ function CurationView({ repo, openPrior, refresh }) {
         : res.error ? <ErrorState onRetry={res.reload} />
           : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openPrior(p)} />)}
+              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)} />)}
             </div>}
     </div>
   );
@@ -272,7 +272,7 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen })
   );
 }
 
-/* celebratory particle burst when a prior is canonized */
+/* celebratory particle burst when a decision is canonized */
 function ApproveBurst({ x, y, big, onDone }) {
   const parts = useMemo(() => Array.from({ length: big ? 36 : 18 }, (_, i) => {
     const a = (i / (big ? 36 : 18)) * Math.PI * 2 + Math.random(); const v = (big ? 120 : 70) + Math.random() * 60;
@@ -287,4 +287,4 @@ function ApproveBurst({ x, y, big, onDone }) {
   );
 }
 
-Object.assign(window, { OverviewView, PriorsView, CurationView });
+Object.assign(window, { OverviewView, DecisionsView, CurationView });

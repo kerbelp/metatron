@@ -1,9 +1,9 @@
-"""End-to-end ingest: a local git repo -> candidate priors in the store.
+"""End-to-end ingest: a local git repo -> candidate decisions in the store.
 
 Wires the deterministic and LLM halves together:
     tracked files -> parse -> structural facts
     git history   -> commits
-    (facts + commits) -> per-scope signals -> LLM extraction -> candidate priors
+    (facts + commits) -> per-scope signals -> LLM extraction -> candidate decisions
 
 Dependencies (store, provider) are injected so the pipeline is testable with an
 in-memory store and a fake provider, and so the provider/storage stay swappable.
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from metatron.extraction.extractor import PriorExtractor
+from metatron.extraction.extractor import DecisionExtractor
 from metatron.extraction.provider import LLMProvider
 from metatron.events import EventKind
 from metatron.extraction.signals import collect_signals
@@ -28,7 +28,7 @@ from metatron.models import IngestRun
 from metatron.parsing.base import ParsedFile
 from metatron.parsing.registry import get_parser_for_path
 from metatron.repo_identity import repo_id
-from metatron.storage.base import PriorStore
+from metatron.storage.base import DecisionStore
 
 
 class IngestResult(BaseModel):
@@ -37,12 +37,12 @@ class IngestResult(BaseModel):
     files_parsed: int
     commits_read: int
     scopes: int
-    priors_created: int
+    decisions_created: int
 
 
 class RefineResult(BaseModel):
     events_processed: int
-    priors_created: int
+    decisions_created: int
 
 
 def refine_feedback(
@@ -54,40 +54,40 @@ def refine_feedback(
     limit=None,
     on_progress: Callable[[dict], None] | None = None,
 ) -> RefineResult:
-    """Reshape unhandled feedback gaps into structured candidate priors.
+    """Reshape unhandled feedback gaps into structured candidate decisions.
 
     For each unhandled FEEDBACK event, the ``refiner`` (anything with a
-    ``refine(gap, scope_hint, task)`` method) produces structured priors; they are
+    ``refine(gap, scope_hint, task)`` method) produces structured decisions; they are
     stamped with the event's repo and stored as candidates, and the event is marked
     handled (recording the produced candidate ids) so re-runs are idempotent.
-    Ratings-only feedback (no gap text) is marked handled without producing priors.
+    Ratings-only feedback (no gap text) is marked handled without producing decisions.
     Human curation still gates everything — nothing here becomes canonical.
 
     Each refiner call is a (slow) LLM round-trip, so ``on_progress`` — if given — is
     invoked with a status dict before the run starts and before each event, letting a
     caller surface live progress: ``{phase, events_total, events_done, area,
-    priors_created}`` where ``phase`` is ``start`` then ``refining``.
+    decisions_created}`` where ``phase`` is ``start`` then ``refining``.
     """
     events = event_store.unhandled_feedback(repo=repo)
     if limit is not None:
         events = events[:limit]
     total = len(events)
 
-    def report(phase: str, done: int, priors: int, area: str = "") -> None:
+    def report(phase: str, done: int, decisions: int, area: str = "") -> None:
         if on_progress is not None:
             on_progress({
                 "phase": phase, "events_total": total,
-                "events_done": done, "priors_created": priors, "area": area,
+                "events_done": done, "decisions_created": decisions, "area": area,
             })
 
     report("start", 0, 0)
-    priors_created = 0
+    decisions_created = 0
     for index, event in enumerate(events):
-        report("refining", index, priors_created, event.area)
+        report("refining", index, decisions_created, event.area)
         produced = _refine_one(store, event_store, refiner, event)
-        priors_created += len(produced)
+        decisions_created += len(produced)
 
-    return RefineResult(events_processed=total, priors_created=priors_created)
+    return RefineResult(events_processed=total, decisions_created=decisions_created)
 
 
 def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineResult:
@@ -98,17 +98,17 @@ def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineR
     """
     event = event_store.get(event_id)
     if event is None or event.kind is not EventKind.FEEDBACK or event.handled:
-        return RefineResult(events_processed=0, priors_created=0)
+        return RefineResult(events_processed=0, decisions_created=0)
     produced = _refine_one(store, event_store, refiner, event)
-    return RefineResult(events_processed=1, priors_created=len(produced))
+    return RefineResult(events_processed=1, decisions_created=len(produced))
 
 
 def _refine_one(store, event_store, refiner, event) -> list[str]:
     """Refine one feedback event into candidates and mark it handled; return their ids."""
     produced: list[str] = []
     if event.missing.strip():
-        for prior in refiner.refine(event.missing, event.area, event.task):
-            stored = store.add(prior.model_copy(update={"repo": event.repo}))
+        for decision in refiner.refine(event.missing, event.area, event.task):
+            stored = store.add(decision.model_copy(update={"repo": event.repo}))
             produced.append(stored.id)
     event_store.mark_handled(event.id, produced)
     return produced
@@ -116,7 +116,7 @@ def _refine_one(store, event_store, refiner, event) -> list[str]:
 
 def ingest(
     repo_path: str | Path,
-    store: PriorStore,
+    store: DecisionStore,
     provider: LLMProvider,
     *,
     repo: str | None = None,
@@ -137,11 +137,11 @@ def ingest(
     signals = collect_signals(parsed_files, commits)
 
     model = getattr(provider, "model", "")
-    extractor = PriorExtractor(provider, repo, model)
+    extractor = DecisionExtractor(provider, repo, model)
     scopes_total = len(signals.scopes)
 
-    def report(scopes_done: int, priors_created: int) -> None:
-        # Per-scope progress so a caller (e.g. the UI) can show priors landing and
+    def report(scopes_done: int, decisions_created: int) -> None:
+        # Per-scope progress so a caller (e.g. the UI) can show decisions landing and
         # cost rising live. The provider's token counts are read by the caller.
         if on_progress is not None:
             on_progress({
@@ -150,16 +150,16 @@ def ingest(
                 "commits_read": len(commits),
                 "scopes_total": scopes_total,
                 "scopes_done": scopes_done,
-                "priors_created": priors_created,
+                "decisions_created": decisions_created,
             })
 
     report(0, 0)
-    priors_created = 0
+    decisions_created = 0
     for i, scope_signals in enumerate(signals.scopes, start=1):
-        for prior in extractor.extract(scope_signals):
-            store.add(prior)
-            priors_created += 1
-        report(i, priors_created)
+        for decision in extractor.extract(scope_signals):
+            store.add(decision)
+            decisions_created += 1
+        report(i, decisions_created)
 
     result = IngestResult(
         repo=repo,
@@ -167,7 +167,7 @@ def ingest(
         files_parsed=len(parsed_files),
         commits_read=len(commits),
         scopes=len(signals.scopes),
-        priors_created=priors_created,
+        decisions_created=decisions_created,
     )
     if run_store is not None:
         run_store.record(
@@ -177,7 +177,7 @@ def ingest(
                 files_parsed=result.files_parsed,
                 commits_read=result.commits_read,
                 scopes=result.scopes,
-                priors_created=result.priors_created,
+                decisions_created=result.decisions_created,
                 input_tokens=getattr(provider, "input_tokens", 0),
                 output_tokens=getattr(provider, "output_tokens", 0),
             )

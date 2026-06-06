@@ -1,4 +1,4 @@
-"""Command-line entrypoint: ingest, serve, and curate priors.
+"""Command-line entrypoint: ingest, serve, and curate decisions.
 
 Curation is human-in-the-loop by design — candidates only become canonical when
 someone runs ``candidates approve``. Side-effecting dependencies (store, provider)
@@ -27,12 +27,12 @@ from metatron.repo_identity import repo_id
 REFINE_MODEL = "claude-opus-4-8"
 from metatron.models import Status
 from metatron.pipeline import ingest
-from metatron.storage.base import PriorStore
+from metatron.storage.base import DecisionStore
 from metatron.storage.catalog import (
     Catalog,
     CatalogEventStore,
     CatalogIngestRunStore,
-    CatalogPriorStore,
+    CatalogDecisionStore,
 )
 from metatron.storage.migrate import migrate_legacy_db
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteIngestRunStore
@@ -42,7 +42,7 @@ class RepoResolutionError(Exception):
     """Raised when the repo to act on is ambiguous and the user must disambiguate."""
 
 
-def _resolve_repo(explicit: str | None, store: PriorStore, settings) -> str:
+def _resolve_repo(explicit: str | None, store: DecisionStore, settings) -> str:
     """The repo id a command should act on, git-style.
 
     Precedence, highest first:
@@ -94,7 +94,7 @@ def _resolve_and_announce(explicit, store, settings, out) -> str:
 def main(
     argv: list[str] | None = None,
     *,
-    store: PriorStore | None = None,
+    store: DecisionStore | None = None,
     provider: LLMProvider | None = None,
     event_store: SQLiteEventStore | None = None,
     run_store: SQLiteIngestRunStore | None = None,
@@ -132,7 +132,7 @@ def main(
         print("Your data is preserved in metatron.db; re-run to retry.", file=out)
 
     if store is None:
-        store = CatalogPriorStore(catalog)
+        store = CatalogDecisionStore(catalog)
     event_store = event_store or CatalogEventStore(catalog)
     run_store = run_store or CatalogIngestRunStore(catalog)
 
@@ -201,7 +201,7 @@ def _ingest_progress(out):
             )
         else:
             print(
-                f"  [{p['scopes_done']}/{total}] {p['priors_created']} candidate(s) so far …",
+                f"  [{p['scopes_done']}/{total}] {p['decisions_created']} candidate(s) so far …",
                 file=out, flush=True,
             )
 
@@ -223,7 +223,7 @@ def _cmd_ingest(args, store, provider, run_store, out) -> int:
     print(
         f"Ingested repo '{result.repo}' from {args.repo_path}: "
         f"parsed {result.files_parsed} files, read {result.commits_read} commits "
-        f"across {result.scopes} scopes, created {result.priors_created} candidate priors.",
+        f"across {result.scopes} scopes, created {result.decisions_created} candidate decisions.",
         file=out,
     )
     print(f"Review them with: metatron candidates list --repo {result.repo}", file=out)
@@ -291,7 +291,7 @@ def _cmd_import(catalog, path: str, out_stream) -> int:
         return 0
     for repo, c in counts.items():
         print(
-            f"Imported '{repo}': {c['priors']} priors, {c['events']} events, "
+            f"Imported '{repo}': {c['decisions']} decisions, {c['events']} events, "
             f"{c['runs']} ingest runs.",
             file=out_stream,
         )
@@ -342,7 +342,7 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
 def _cmd_triage(args, store, provider, settings, out) -> int:
     from collections import Counter
 
-    from metatron.extraction.triage import PriorJudge
+    from metatron.extraction.triage import DecisionJudge
     from metatron.models import TriageVerdict
     from metatron.pricing import estimate_cost
 
@@ -354,15 +354,15 @@ def _cmd_triage(args, store, provider, settings, out) -> int:
         limit=args.limit,
     )
     if not candidates:
-        print("No untriaged candidate priors.", file=out)
+        print("No untriaged candidate decisions.", file=out)
         return 0
 
-    results = PriorJudge(provider).evaluate(candidates, on_progress=_triage_progress(out))
-    for prior_id, (verdict, reason) in results.items():
+    results = DecisionJudge(provider).evaluate(candidates, on_progress=_triage_progress(out))
+    for decision_id, (verdict, reason) in results.items():
         try:
-            store.set_triage(prior_id, verdict, reason)
+            store.set_triage(decision_id, verdict, reason)
         except KeyError:
-            continue  # defensive: ignore any verdict that doesn't map to a prior
+            continue  # defensive: ignore any verdict that doesn't map to a decision
 
     counts = Counter(verdict.value for verdict, _ in results.values())
     print(
@@ -446,7 +446,7 @@ def _cmd_refine_feedback(args, store, event_store, provider, settings, out) -> i
         return 0
     print(
         f"Refined {result.events_processed} feedback report(s) into "
-        f"{result.priors_created} candidate prior(s) for curation.",
+        f"{result.decisions_created} candidate decision(s) for curation.",
         file=out,
     )
     cost = estimate_cost(
@@ -514,7 +514,7 @@ def _cmd_candidates(args, store, settings, out) -> int:
 def _candidates_list(store, repo, scope, out) -> int:
     candidates = store.list(repo=repo, status=Status.CANDIDATE, scope=scope)
     if not candidates:
-        print("No candidate priors.", file=out)
+        print("No candidate decisions.", file=out)
         return 0
     for p in candidates:
         print(f"{p.id}  [{p.confidence.value}]  ({p.scope or 'global'})", file=out)
@@ -522,13 +522,13 @@ def _candidates_list(store, repo, scope, out) -> int:
     return 0
 
 
-def _set_status(store, prior_id, status, verb, out) -> int:
+def _set_status(store, decision_id, status, verb, out) -> int:
     try:
-        store.set_status(prior_id, status)
+        store.set_status(decision_id, status)
     except KeyError:
-        print(f"No prior with id {prior_id!r} (not found).", file=out)
+        print(f"No decision with id {decision_id!r} (not found).", file=out)
         return 1
-    print(f"Prior {prior_id} {verb}.", file=out)
+    print(f"Decision {decision_id} {verb}.", file=out)
     return 0
 
 
@@ -542,7 +542,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command")
 
-    ingest_p = sub.add_parser("ingest", help="bootstrap candidate priors from a repo")
+    ingest_p = sub.add_parser("ingest", help="bootstrap candidate decisions from a repo")
     ingest_p.add_argument("repo_path", help="path to a local git repo")
     ingest_p.add_argument("--max-commits", type=int, default=500)
     ingest_p.add_argument("--since", default=None, help="e.g. 2024-01-01")
@@ -557,7 +557,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="override the repo id (defaults to the normalized origin remote)",
     )
 
-    serve_p = sub.add_parser("serve", help="serve one repo's priors to agents over MCP")
+    serve_p = sub.add_parser("serve", help="serve one repo's decisions to agents over MCP")
     serve_p.add_argument(
         "--repo",
         default=None,
@@ -566,7 +566,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     repo_p = sub.add_parser("repo", help="inspect and choose the repo commands act on")
     repo_sub = repo_p.add_subparsers(dest="repo_command")
-    repo_sub.add_parser("list", help="list repos with their prior counts (the ids serve uses)")
+    repo_sub.add_parser("list", help="list repos with their decision counts (the ids serve uses)")
     repo_set_p = repo_sub.add_parser(
         "set", help="persist a default repo (saved to metatron.toml)"
     )
@@ -585,7 +585,7 @@ def _build_parser() -> argparse.ArgumentParser:
     whoami_p.add_argument("--set-name", default=None, help="set your display name")
 
     triage_p = sub.add_parser(
-        "triage", help="run the advisory judge over candidate priors (does not auto-curate)"
+        "triage", help="run the advisory judge over candidate decisions (does not auto-curate)"
     )
     triage_p.add_argument(
         "--repo", default=None,
@@ -595,7 +595,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     refine_p = sub.add_parser(
         "refine-feedback",
-        help="reshape captured agent feedback into structured candidate priors (Opus)",
+        help="reshape captured agent feedback into structured candidate decisions (Opus)",
     )
     refine_p.add_argument(
         "--repo", default=None,
@@ -606,9 +606,9 @@ def _build_parser() -> argparse.ArgumentParser:
         "--model", default=None, help=f"override the refiner model (default {REFINE_MODEL})"
     )
 
-    cand = sub.add_parser("candidates", help="review and curate candidate priors")
+    cand = sub.add_parser("candidates", help="review and curate candidate decisions")
     cand_sub = cand.add_subparsers(dest="candidates_command")
-    list_p = cand_sub.add_parser("list", help="list candidate priors")
+    list_p = cand_sub.add_parser("list", help="list candidate decisions")
     list_p.add_argument("--scope", default=None)
     list_p.add_argument(
         "--repo",

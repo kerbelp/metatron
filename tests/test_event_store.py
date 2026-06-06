@@ -23,7 +23,7 @@ def _query(day: int, area="src/components/Home", count=2, ids=None, repo="github
         area=area,
         task="add a section",
         result_count=count,
-        prior_ids=ids or ["a", "b"],
+        decision_ids=ids or ["a", "b"],
         timestamp=datetime(2024, 1, day, tzinfo=timezone.utc),
     )
 
@@ -78,7 +78,7 @@ def test_ratings_column_is_added_to_a_preexisting_db(tmp_path):
     conn.execute(
         "CREATE TABLE events (id TEXT PRIMARY KEY, timestamp TEXT NOT NULL, "
         "repo TEXT, kind TEXT NOT NULL, area TEXT NOT NULL, task TEXT NOT NULL, "
-        "result_count INTEGER NOT NULL, prior_ids TEXT NOT NULL)"
+        "result_count INTEGER NOT NULL, decision_ids TEXT NOT NULL)"
     )
     conn.execute(
         "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

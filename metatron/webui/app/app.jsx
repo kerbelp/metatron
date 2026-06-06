@@ -12,7 +12,7 @@ const NAV = [
   ] },
   { group: "Knowledge", items: [
     { id: "overview", title: "Overview", icon: "grid" },
-    { id: "priors", title: "Priors", icon: "list" },
+    { id: "decisions", title: "Decisions", icon: "list" },
     { id: "curation", title: "Curation", icon: "gavel" },
   ] },
   { group: "Sources", items: [
@@ -158,26 +158,26 @@ function App() {
             <RepoSelect repo={repo} repos={repos.data.repos} onPick={(r) => { setRepo(r); }} />
           </header>
           <div className="stage-scroll" ref={scrollRef} key={view + repo + dataV}>
-            <Router view={view} repo={repo} openPrior={setDrawer} goto={setView} refreshStats={refreshStats} dataV={dataV} />
+            <Router view={view} repo={repo} openDecision={setDrawer} goto={setView} refreshStats={refreshStats} dataV={dataV} />
           </div>
         </div>
       </div>
 
-      <PriorDrawer prior={drawer} busy={drawerBusy} onClose={() => setDrawer(null)}
-        onApprove={async (p) => { setDrawerBusy(true); await MetatronAPI.approvePrior(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
-        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectPrior(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }} />
+      <DecisionDrawer decision={drawer} busy={drawerBusy} onClose={() => setDrawer(null)}
+        onApprove={async (p) => { setDrawerBusy(true); await MetatronAPI.approveDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
+        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }} />
     </ToastHost>
   );
 }
 
-function Router({ view, repo, openPrior, goto, refreshStats }) {
+function Router({ view, repo, openDecision, goto, refreshStats }) {
   switch (view) {
     case "impact": return <AgentImpactView repo={repo} />;
-    case "helpfulness": return <HelpfulnessView repo={repo} openPrior={openPrior} />;
+    case "helpfulness": return <HelpfulnessView repo={repo} openDecision={openDecision} />;
     case "loop": return <FeedbackLoopView repo={repo} refresh={refreshStats} />;
-    case "overview": return <OverviewView repo={repo} openPrior={openPrior} goto={goto} />;
-    case "priors": return <PriorsView repo={repo} openPrior={openPrior} />;
-    case "curation": return <CurationView repo={repo} openPrior={openPrior} refresh={refreshStats} />;
+    case "overview": return <OverviewView repo={repo} openDecision={openDecision} goto={goto} />;
+    case "decisions": return <DecisionsView repo={repo} openDecision={openDecision} />;
+    case "curation": return <CurationView repo={repo} openDecision={openDecision} refresh={refreshStats} />;
     case "origins": return <OriginsView repo={repo} />;
     case "ingest": return <IngestView repo={repo} />;
     default: return null;

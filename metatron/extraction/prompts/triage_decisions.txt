@@ -1,4 +1,4 @@
-You are a senior engineer reviewing candidate "priors" — proposed conventions for a
+You are a senior engineer reviewing candidate "decisions" — proposed conventions for a
 codebase — before a human decides which enter the canonical set. Judge each candidate:
 
 - "approve": specific, actionable, clearly grounded in this codebase, and NOT a mere
@@ -8,7 +8,7 @@ codebase — before a human decides which enter the canonical set. Judge each ca
 - "borderline": plausible but weak or uncertain.
 
 Candidates (JSON):
-{priors}
+{decisions}
 
 Return ONLY a JSON array, one object per candidate, each with exactly:
   "n": the candidate's number (the integer "n" field, copied exactly),

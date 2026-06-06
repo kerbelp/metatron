@@ -1,1 +1,1 @@
-"""Local web UI for browsing and curating priors."""
+"""Local web UI for browsing and curating decisions."""
