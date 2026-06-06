@@ -142,8 +142,9 @@ from the still-present legacy DB until the archive rename succeeds).
 
 ### 5. `metatron export` (hand-off ergonomics)
 
-`metatron export <repo> [--out PATH]`: copy the repo's per-repo file to `PATH`
-(default `./<slug>.db`) and `VACUUM` it so the artifact is compact. Because a per-repo
+`metatron export [--repo <id>] [--out PATH]`: copy the repo's per-repo file to `PATH`
+(default `./<repo-name>.db`) and `VACUUM` it so the artifact is compact. `--repo`
+resolves from context (see _resolve_repo) when omitted. Because a per-repo
 file is *already* standalone, export is essentially a safe file copy with a vacuum — but
 it gives a discoverable, documented command for the hand-off and a place to add options
 later (e.g. `--without-events`).
@@ -153,7 +154,7 @@ Recipient flow: `metatron --db received.db ui` (or `serve`, `candidates`, …).
 ## CLI / UX summary
 
 - `metatron <cmd>` — unchanged surface; data now lives in `~/.metatron/<slug>.db`.
-- `metatron export <repo> [--out PATH]` — produce a shippable single-repo file. (New.)
+- `metatron export [--repo <id>] [--out PATH]` — produce a shippable single-repo file. (New.)
 - `metatron --db <file-or-dir> <cmd>` — point at a specific file (single-file mode, the
   recipient) or an alternate catalog dir. (Widened semantics of the existing knob.)
 - First run after upgrade prints a one-line note that it migrated `metatron.db` into
@@ -175,7 +176,7 @@ Recipient flow: `metatron --db received.db ui` (or `serve`, `candidates`, …).
 - **End-to-end:** ingest two repos → two files exist; `serve` repo A sees only A's
   priors; `list_repos` shows both; copy A's file to a temp path, open in single-file
   mode, `serve` answers tool calls.
-- **Export:** `export <repo>` yields a file that opens cleanly in single-file mode and
+- **Export:** `export --repo <id>` yields a file that opens cleanly in single-file mode and
   serves the same priors; output is vacuumed.
 
 ## Build order (small PRs, each with tests)
