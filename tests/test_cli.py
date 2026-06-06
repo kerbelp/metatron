@@ -127,12 +127,12 @@ def test_candidates_list_ambiguous_repo_exits_with_guidance(monkeypatch):
     assert "repo set" in output
 
 
-def test_bare_invocation_shows_branded_home(monkeypatch):
+def test_bare_invocation_shows_home(monkeypatch):
     out = io.StringIO()
     code = main([], out=out)
     text = out.getvalue()
     assert code == 0
-    assert "METATRON" in text  # the ascii emblem
+    assert "metatron ·" in text  # tagline line
     assert "Available commands:" in text
     for cmd in ("ingest", "serve", "ui", "whoami", "export", "import"):
         assert cmd in text

@@ -91,17 +91,6 @@ def _resolve_and_announce(explicit, store, settings, out) -> str:
     return repo
 
 
-_HOME_ART = r"""
-     +--------------+
-    /              /|
-   +--------------+ |
-   |              | |
-   |   METATRON   | |
-   |              | +
-   |              |/
-   +--------------+
-"""
-
 _TAGLINE = "Capture your team's engineering decisions and serve them to AI coding agents over MCP."
 
 
@@ -115,15 +104,14 @@ def _subcommands(parser):
 
 
 def _render_home(parser, out) -> int:
-    """The branded landing screen shown for a bare ``metatron`` invocation."""
+    """The landing screen shown for a bare ``metatron`` invocation."""
     is_tty = bool(getattr(out, "isatty", lambda: False)())
 
     def style(text: str, code: str) -> str:
         return f"\033[{code}m{text}\033[0m" if is_tty else text
 
-    print(style(_HOME_ART, "36"), file=out)  # cyan cube
     print(f"{style('metatron', '1')} · {_TAGLINE}", file=out)
-    print(f"\nUsage:\n  metatron [--db PATH] <command> [flags]\n", file=out)
+    print("\nUsage:\n  metatron [--db PATH] <command> [flags]\n", file=out)
     print("Available commands:", file=out)
     for name, help_text in _subcommands(parser):
         print(f"  {name:<17} {help_text}", file=out)
