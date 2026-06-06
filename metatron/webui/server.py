@@ -70,12 +70,20 @@ def serve(
     run_store=None,
     refiner_factory=None,
     ingest_provider_factory=None,
+    open_browser: bool = True,
 ) -> None:
     port = find_free_port(start=start_port, host=host)
     httpd = make_server(
         store, host, port, event_store, run_store, refiner_factory, ingest_provider_factory
     )
-    print(f"Metatron curation UI on http://{host}:{port}  (Ctrl-C to stop)")
+    url = f"http://{host}:{port}"
+    print(f"Metatron curation UI on {url}  (Ctrl-C to stop)")
+    if open_browser:
+        # Open the default browser once the server loop is up. A short timer avoids
+        # racing serve_forever(); failures (headless/SSH) are non-fatal.
+        import threading
+        import webbrowser
+        threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

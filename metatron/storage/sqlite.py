@@ -363,6 +363,8 @@ class SQLiteIngestRunStore:
         self._conn = connect(path)
         self._conn.execute(_RUNS_SCHEMA)
         self._conn.execute(_REPO_META_SCHEMA)
+        # Migrate the legacy priors_created column (the priors->decisions rename).
+        _rename_legacy_column(self._conn, "ingest_runs", "priors_created", "decisions_created")
         self._conn.commit()
 
     def record(self, run: IngestRun) -> IngestRun:

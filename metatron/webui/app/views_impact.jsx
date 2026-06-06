@@ -99,7 +99,15 @@ function AgentImpactView({ repo }) {
 
         {act.loading ? <div style={{ height: 392 }}><Loading label="Locating active agents…" /></div>
           : act.error ? <div style={{ height: 392 }}><ErrorState onRetry={act.reload} /></div>
-            : act.data.agents.length === 0 ? <div style={{ height: 392 }}><Empty title="No agents active in this window" detail="Widen the time window to see more agent activity." icon="impact" /></div>
+            : act.data.agents.length === 0 ? (
+                <div style={{ height: 392, display: "grid", placeItems: "center", position: "relative", overflow: "hidden" }}>
+                  <div style={{ animation: "float-y 6s ease-in-out infinite" }}><MetatronCube size={300} opacity={0.9} /></div>
+                  <div style={{ position: "absolute", bottom: 30, left: 0, right: 0, textAlign: "center", padding: "0 24px" }}>
+                    <div className="mono" style={{ fontSize: 11.5, letterSpacing: ".22em", color: "var(--teal)" }}>AWAITING AGENTS</div>
+                    <div className="muted" style={{ fontSize: 12.5, marginTop: 7, lineHeight: 1.5 }}>No agents connected in the last {WINDOW_LABEL} — activity streams in here as agents query Metatron.</div>
+                  </div>
+                </div>
+              )
               : (
                 <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr" }}>
                   <div style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
@@ -272,7 +280,7 @@ function LoopArrow() {
 }
 
 function GapCard({ e, delay, onRefine, refining }) {
-  const ratings = Object.entries(e.ratings);
+  const ratings = Object.entries(e.ratings || {});
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>

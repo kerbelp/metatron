@@ -28,6 +28,26 @@ def test_decision_store_migrates_a_legacy_priors_table(tmp_path):
     assert "decisions" in names and "priors" not in names
 
 
+def test_ingest_run_store_migrates_legacy_priors_created_column(tmp_path):
+    from metatron.models import IngestRun
+    from metatron.storage.sqlite import SQLiteIngestRunStore
+
+    db = tmp_path / "legacy.db"
+    rs = SQLiteIngestRunStore(str(db))
+    rs.record(IngestRun(repo="r", model="m", decisions_created=7))
+    rs.close()
+
+    # Downgrade the column to its pre-rename name, as an old DB would have it.
+    conn = sqlite3.connect(db)
+    conn.execute("ALTER TABLE ingest_runs RENAME COLUMN decisions_created TO priors_created")
+    conn.commit()
+    conn.close()
+
+    reopened = SQLiteIngestRunStore(str(db))
+    runs = reopened.list_for_repo("r")
+    assert runs[0].decisions_created == 7  # value preserved, not reset to 0
+
+
 def test_event_store_migrates_legacy_prior_id_columns(tmp_path):
     db = tmp_path / "legacy.db"
     es = SQLiteEventStore(str(db))

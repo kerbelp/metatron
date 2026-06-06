@@ -122,7 +122,7 @@ function DecisionsView({ repo, openDecision }) {
 
       {/* filter rail */}
       <div className="panel pad enter" style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
-        <FilterGroup label="STATUS" opts={STATUS_OPTS} value={f.status} onPick={(v) => set("status", v)} render={(v) => v ? <StatusBadge status={v} /> : "all"} />
+        <FilterGroup label="STATUS" opts={STATUS_OPTS} value={f.status} onPick={(v) => set("status", v)} render={(v, on) => v ? (on ? v.toUpperCase() : <StatusBadge status={v} />) : "all"} />
         <span style={{ width: 1, height: 24, background: "var(--line)" }} />
         <FilterGroup label="ORIGIN" opts={ORIGIN_OPTS} value={f.origin} onPick={(v) => set("origin", v)} render={(v) => v ? OriginLabel[v] : "all"} />
         <span style={{ width: 1, height: 24, background: "var(--line)" }} />
@@ -159,7 +159,7 @@ function FilterGroup({ label, opts, value, onPick, render }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       <span className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".18em" }}>{label}</span>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
-        {opts.map((o) => <button key={o} className={"chip " + (value === o ? "on" : "")} onClick={() => onPick(o)}>{render(o)}</button>)}
+        {opts.map((o) => <button key={o} className={"chip " + (value === o ? "on" : "")} onClick={() => onPick(o)}>{render(o, value === o)}</button>)}
       </div>
     </div>
   );

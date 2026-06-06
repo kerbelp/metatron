@@ -98,7 +98,7 @@ function IngestView({ repo }) {
       {/* latest run hero */}
       <div className="panel pad enter" style={{ marginBottom: 18, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", right: -40, top: "50%", transform: "translateY(-50%)", opacity: .5, pointerEvents: "none" }}><MetatronCube size={300} opacity={0.1} /></div>
-        <div className="panel-head"><span style={{ color: "var(--teal)" }}><Icon name="layers" size={16} /></span><h3>Latest run</h3><span className="badge ghost mono">{latest.model}</span><div className="spacer" /><span className="mono dim" style={{ fontSize: 11 }}>{timeAgo(latest.timestamp)}</span></div>
+        <div className="panel-head"><span style={{ color: "var(--teal)" }}><Icon name="layers" size={16} /></span><h3>Latest run</h3><span className="badge ghost mono">{latest.model}</span><div className="spacer" /><span className="mono dim" style={{ fontSize: 11 }} title={new Date(latest.timestamp).toLocaleString()}>{timeAgo(latest.timestamp)}</span></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr) 1.1fr", gap: 0, position: "relative" }}>
           <RunStat label="Files parsed" value={latest.files_parsed} />
           <RunStat label="Commits read" value={latest.commits_read} />
@@ -131,7 +131,7 @@ function IngestView({ repo }) {
         </div>
         {runs.map((r, i) => (
           <div key={i} className="enter" style={{ display: "grid", gridTemplateColumns: "1.4fr repeat(5, 1fr) 0.9fr", gap: 12, padding: "14px 6px", borderBottom: i < runs.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", animationDelay: i * 0.05 + "s" }}>
-            <div><div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>{r.model}</div><div className="mono dim" style={{ fontSize: 10, marginTop: 3 }}>{timeAgo(r.timestamp)}</div></div>
+            <div><div className="mono" style={{ fontSize: 12, color: "var(--text)" }}>{r.model}</div><div className="mono dim" style={{ fontSize: 10, marginTop: 3 }} title={new Date(r.timestamp).toLocaleString()}>{timeAgo(r.timestamp)}</div></div>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.files_parsed.toLocaleString()}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.commits_read.toLocaleString()}</span>
             <span className="mono tnum" style={{ fontSize: 13, color: "var(--text-2)" }}>{r.scopes}</span>
