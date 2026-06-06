@@ -4,9 +4,17 @@
 
 const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
+// Plain-language gloss for each status — surfaced as a tooltip on every badge and
+// inline in the decision drawer, so "canonical" reads as what it actually means.
+const STATUS_DESC = {
+  canonical: "Approved by a human — served to coding agents",
+  candidate: "Proposed — awaiting human review, not yet served",
+  rejected: "Declined — not served to agents",
+};
+
 function StatusBadge({ status }) {
   const label = { canonical: "Canonical", candidate: "Candidate", rejected: "Rejected" }[status] || status;
-  return <span className={"badge " + status}><span className="pip" />{label}</span>;
+  return <span className={"badge " + status} title={STATUS_DESC[status] || ""}><span className="pip" />{label}</span>;
 }
 
 function Confidence({ level, showLabel = false }) {
@@ -122,7 +130,8 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
           <div className="spacer" style={{ flex: 1 }} />
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
-        <div style={{ padding: "26px 28px 40px" }}>
+        <div className="muted" style={{ fontSize: 11.5, padding: "11px 28px 0", lineHeight: 1.5 }}>{STATUS_DESC[decision.status]}</div>
+        <div style={{ padding: "20px 28px 40px" }}>
           <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".24em", marginBottom: 10 }}>THE RULE</div>
           <div style={{ fontSize: 20, lineHeight: 1.4, fontWeight: 400, color: "#eafff8", textWrap: "pretty" }}>{decision.pattern}</div>
 
