@@ -127,6 +127,25 @@ def test_candidates_list_ambiguous_repo_exits_with_guidance(monkeypatch):
     assert "repo set" in output
 
 
+def test_bare_invocation_shows_branded_home(monkeypatch):
+    out = io.StringIO()
+    code = main([], out=out)
+    text = out.getvalue()
+    assert code == 0
+    assert "METATRON" in text  # the ascii emblem
+    assert "Available commands:" in text
+    for cmd in ("ingest", "serve", "ui", "whoami", "export", "import"):
+        assert cmd in text
+    assert "metatron <command> --help" in text
+
+
+def test_bare_invocation_has_no_side_effects(tmp_path, monkeypatch):
+    # The home screen must not build the catalog or run migration.
+    monkeypatch.setenv("METATRON_DB", str(tmp_path / "should-not-exist"))
+    main([], out=io.StringIO())
+    assert not (tmp_path / "should-not-exist").exists()
+
+
 def test_repo_set_persists_default_and_list_marks_it(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # so metatron.toml is written/read here, not the repo
     monkeypatch.delenv("METATRON_REPO", raising=False)
