@@ -25,6 +25,17 @@ def test_open_creates_self_describing_file(tmp_path):
     stores.runs.close()
 
 
+def test_missing_db_file_path_errors_instead_of_making_a_directory(tmp_path):
+    # The recipient's hand-off path: a mistyped or not-yet-copied .db file must fail
+    # loudly, not silently materialize a directory named like the file.
+    import pytest
+
+    missing = tmp_path / "received.db"
+    with pytest.raises(FileNotFoundError):
+        Catalog(str(missing))
+    assert not missing.exists()  # no stray directory created
+
+
 def test_single_file_mode_treats_one_file_as_the_world(tmp_path):
     # Create a repo file via a directory catalog, then re-open that file directly:
     # the recipient's hand-off path. It must report the lone repo regardless of name.

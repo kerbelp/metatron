@@ -116,9 +116,19 @@ def main(
 
     # The catalog is the source of truth: one self-contained DB file per repo under
     # settings.db_path (a directory), or a single handed-off file in single-file mode.
-    catalog = Catalog(settings.db_path)
-    # One-time split of a legacy cwd metatron.db into the catalog (no-op afterwards).
-    migrate_legacy_db("metatron.db", catalog)
+    try:
+        catalog = Catalog(settings.db_path)
+    except FileNotFoundError as exc:
+        print(exc, file=out)
+        return 2
+    # One-time split of a legacy cwd metatron.db into the catalog. Guarded so a
+    # migration hiccup never takes down unrelated commands; the copy is idempotent,
+    # so re-running converges. The legacy file is left untouched until it fully lands.
+    try:
+        migrate_legacy_db("metatron.db", catalog)
+    except Exception as exc:  # noqa: BLE001 - degrade gracefully, don't brick the CLI
+        print(f"Warning: could not migrate legacy metatron.db: {exc}", file=out)
+        print("Your data is preserved in metatron.db; re-run to retry.", file=out)
 
     if store is None:
         store = CatalogPriorStore(catalog)
