@@ -7,6 +7,7 @@ in :mod:`metatron.webui.server` is a thin adapter over these.
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
 
 from metatron.events import EventKind
 from metatron.feedback_score import NEUTRAL, helpfulness_scores
@@ -153,6 +154,76 @@ def usage(
         enrich(e) for e in events if e.kind is EventKind.SUBMIT
     ][:recent]
     return summary
+
+
+def agent_activity(
+    event_store: EventStore,
+    store: PriorStore,
+    *,
+    repo: str | None = None,
+    window_mins: int = 30,
+) -> dict:
+    """Recent agent activity grouped by the employee (actor) who produced it.
+
+    Uses event attribution: each agent is one actor, with the queries they ran, the
+    priors they were served, and the feedback they sent within the time window. Powers
+    the live "agent impact" view — who Metatron is helping right now.
+    """
+    repo_filter = repo or None
+    now = datetime.now(timezone.utc)
+    cutoff = now - _timedelta_mins(window_mins)
+    recent = [e for e in event_store.list_events(repo=repo_filter) if e.timestamp >= cutoff]
+
+    by_actor: dict[str, list] = {}
+    for e in recent:
+        key = e.actor_id or e.actor_email or "anonymous"
+        by_actor.setdefault(key, []).append(e)
+
+    agents = []
+    for key, evs in by_actor.items():
+        evs.sort(key=lambda e: e.timestamp, reverse=True)  # newest first
+        latest = evs[0]
+        queries = [e for e in evs if e.kind is EventKind.QUERY]
+        feedback = [e for e in evs if e.kind is EventKind.FEEDBACK]
+        sample = next((e for e in queries if e.area), latest)  # a query with context
+        agents.append({
+            "id": key,
+            "name": latest.actor_name or latest.actor_email or "anonymous",
+            "email": latest.actor_email,
+            "mins": round((now - latest.timestamp).total_seconds() / 60, 1),
+            "status": "feedback" if latest.kind is EventKind.FEEDBACK else "active",
+            "area": sample.area,
+            "task": sample.task,
+            "queries": len(queries),
+            "feedback_sent": len(feedback),
+            "priors_received": sum(e.result_count for e in queries),
+            "served": _served_priors(store, sample.prior_ids),
+        })
+
+    agents.sort(key=lambda a: a["mins"])  # most recent first
+    return {
+        "window_mins": window_mins,
+        "total_agents": len(agents),
+        "total_served": sum(a["priors_received"] for a in agents),
+        "total_feedback": sum(a["feedback_sent"] for a in agents),
+        "agents": agents,
+    }
+
+
+def _timedelta_mins(mins: int):
+    from datetime import timedelta
+
+    return timedelta(minutes=mins)
+
+
+def _served_priors(store: PriorStore, prior_ids: list[str]) -> list[dict]:
+    out = []
+    for pid in prior_ids:
+        prior = store.get(pid)
+        if prior is not None:
+            out.append({"id": prior.id, "pattern": prior.pattern,
+                        "scope": prior.scope, "confidence": prior.confidence.value})
+    return out
 
 
 def origin_breakdown(store: PriorStore, *, repo: str | None = None) -> dict:
