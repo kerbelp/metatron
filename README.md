@@ -473,6 +473,9 @@ If you wire the server up yourself instead of using the script:
 uv run pytest          # run the test suite
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the PR workflow, and contribution
+guidelines.
+
 ## Tech stack
 
 Python 3.12+, the official MCP Python SDK, tree-sitter for parsing, SQLite (behind a
