@@ -342,6 +342,18 @@ metatron --db app.db serve   # serve them to their own agent
 
 In single-file mode the repo is inferred from the file, so no `--repo` is needed.
 
+### `import` — merge an employee's DB into your catalog
+
+```bash
+metatron import app.db
+```
+
+The curator side of the hand-off: folds another employee's exported DB (a single-repo
+file, or a whole catalog dir) into your catalog, deduping by id — so re-importing the
+same file is a no-op. Event attribution travels with the rows (who queried, who gave
+feedback — see [`whoami`](#whoami--the-identity-stamped-onto-served-events)), so after
+merging several employees' DBs you can see who contributed what across the team.
+
 ### `ui` — local curation web UI
 
 ```text
