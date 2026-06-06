@@ -183,7 +183,7 @@ function Router({ view, repo, openDecision, goto, refreshStats }) {
   switch (view) {
     case "impact": return <AgentImpactView repo={repo} />;
     case "helpfulness": return <HelpfulnessView repo={repo} openDecision={openDecision} />;
-    case "loop": return <FeedbackLoopView repo={repo} refresh={refreshStats} />;
+    case "loop": return <FeedbackLoopView repo={repo} refresh={refreshStats} openDecision={openDecision} />;
     case "overview": return <OverviewView repo={repo} openDecision={openDecision} goto={goto} />;
     case "decisions": return <DecisionsView repo={repo} openDecision={openDecision} />;
     case "curation": return <CurationView repo={repo} openDecision={openDecision} refresh={refreshStats} />;

@@ -74,25 +74,61 @@ function MetatronEmblem({ size = 40, glow = true, animate = true, stroke = "var(
    METATRON'S CUBE — full 13-circle field with connective lines.
    Used as a large ambient/hero motif.
    ============================================================ */
-function MetatronCube({ size = 360, opacity = 0.5, spin = true }) {
-  // 13 circle centers of Metatron's Cube (hex-packed)
-  const R = 1; // unit radius spacing
-  const cx = 0, cy = 0;
+function MetatronCube({ size = 360, opacity = 0.5, spin = true, hero = false }) {
+  // 13 circle centers of Metatron's Cube — Fruit of Life (center + 2 hex rings).
   const h = Math.sqrt(3);
   const centers = [
     [0, 0],
     [2, 0], [-2, 0], [1, h], [-1, h], [1, -h], [-1, -h],            // inner 6
     [4, 0], [-4, 0], [2, 2 * h], [-2, 2 * h], [2, -2 * h], [-2, -2 * h], // outer 6
   ];
-  const s = size / 12; // scale unit→px
-  const px = ([x, y]) => [50 + x * s / size * 100 * (size / 100) / 8.0, 50 + y * s / size * 100 * (size / 100) / 8.0];
-  // simpler: map unit coords into 100x100 viewBox
   const map = ([x, y]) => [50 + x * 9.5, 50 + y * 9.5];
   const pts = centers.map(map);
-  // connect every pair of outer/inner nodes (the classic dense lattice)
+  const ringOf = (i) => (i === 0 ? 0 : i < 7 ? 1 : 2);
   const lines = [];
   for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) lines.push([pts[i], pts[j]]);
   const id = useMemo(() => "mc" + Math.random().toString(36).slice(2, 7), []);
+
+  if (hero) {
+    // The www hero look: small glowing nodes (ring + pulsing core) + lit lattice.
+    const nodeR = (r) => (r === 0 ? 2.6 : r === 1 ? 2.1 : 1.7);
+    return (
+      <svg viewBox="0 0 100 100" width={size} height={size} style={{ opacity, overflow: "visible" }}>
+        <defs>
+          <radialGradient id={id} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor="var(--teal)" stopOpacity="0.5" />
+            <stop offset="60%" stopColor="var(--teal)" stopOpacity="0.12" />
+            <stop offset="100%" stopColor="var(--teal)" stopOpacity="0" />
+          </radialGradient>
+          <radialGradient id={id + "c"} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#bafff0" stopOpacity="1" />
+            <stop offset="100%" stopColor="var(--teal)" stopOpacity="0.9" />
+          </radialGradient>
+          <filter id={id + "g"} x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="0.7" />
+          </filter>
+        </defs>
+        <style>{`@keyframes mcpulse{0%,100%{opacity:.4}50%{opacity:1}}`}</style>
+        <g className={spin ? "spin-slow" : ""} style={{ transformOrigin: "50px 50px" }}>
+          <g stroke={`url(#${id})`} strokeWidth="0.35" fill="none">
+            {lines.map((l, i) => <line key={i} x1={l[0][0]} y1={l[0][1]} x2={l[1][0]} y2={l[1][1]} />)}
+          </g>
+          {/* node halos */}
+          <g fill="none" stroke="var(--teal)" strokeOpacity="0.7" strokeWidth="0.5" filter={`url(#${id}g)`}>
+            {pts.map((pt, i) => <circle key={i} cx={pt[0]} cy={pt[1]} r={nodeR(ringOf(i)) + 1.2} />)}
+          </g>
+          {/* node cores, pulsing */}
+          <g fill={`url(#${id}c)`}>
+            {pts.map((pt, i) => (
+              <circle key={i} cx={pt[0]} cy={pt[1]} r={nodeR(ringOf(i))}
+                style={{ animation: `mcpulse ${(2.6 + (i % 5) * 0.45).toFixed(2)}s ease-in-out ${(i * 0.18).toFixed(2)}s infinite` }} />
+            ))}
+          </g>
+        </g>
+      </svg>
+    );
+  }
+
   return (
     <svg viewBox="0 0 100 100" width={size} height={size} style={{ opacity }}>
       <defs>

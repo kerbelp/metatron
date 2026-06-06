@@ -68,6 +68,12 @@ def repos(store: DecisionStore) -> dict:
     return {"repos": store.list_repos()}
 
 
+def get_decision(store: DecisionStore, decision_id: str) -> dict | None:
+    """One decision by id (for opening a rated decision from the feedback view)."""
+    decision = store.get(decision_id)
+    return decision.model_dump(mode="json") if decision is not None else None
+
+
 def ingest_cost(run_store, *, repo: str | None = None) -> dict:
     runs = []
     for run in run_store.list_for_repo(repo):

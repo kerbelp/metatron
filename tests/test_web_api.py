@@ -166,6 +166,17 @@ def test_actor_is_exposed_in_usage_and_feedback_streams():
     assert fb["actor_id"] == "a1" and fb["actor_email"] == "dev@corp.com" and fb["actor_name"] == "Dev"
 
 
+def test_get_decision_returns_one_or_none():
+    from metatron.webui.api import get_decision
+    from metatron.models import Decision
+
+    store = SQLiteDecisionStore(":memory:")
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                           origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
+    assert get_decision(store, d.id)["pattern"] == "p"
+    assert get_decision(store, "missing") is None
+
+
 def test_feedback_events_include_ratings():
     # The UI's GapCard renders e.ratings; it must be present (its absence blanked
     # the Feedback Loop screen for repos that had feedback).

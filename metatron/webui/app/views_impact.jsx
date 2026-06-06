@@ -59,7 +59,7 @@ function AgentImpactView({ repo }) {
   if (usage.error) return <ErrorState onRetry={usage.reload} />;
 
   const u = usage.data;
-  const helpfulRate = fb.data ? (() => { const t = fb.data.by_origin.reduce((a, o) => ({ h: a.h + o.helpful, n: a.n + o.noise }), { h: 0, n: 0 }); return t.h / (t.h + t.n); })() : 0.84;
+  const helpfulRate = fb.data ? (() => { const t = fb.data.by_origin.reduce((a, o) => ({ h: a.h + o.helpful, n: a.n + o.noise }), { h: 0, n: 0 }); return (t.h + t.n) ? t.h / (t.h + t.n) : 0; })() : 0;
   const cur = queries[active] || queries[0];
   const WINDOW_LABEL = { 15: "15 min", 30: "30 min", 60: "1 hour" }[windowMins];
   const agNodes = act.data ? buildNodes(act.data.agents) : [];
@@ -100,9 +100,9 @@ function AgentImpactView({ repo }) {
         {act.loading ? <div style={{ height: 392 }}><Loading label="Locating active agents…" /></div>
           : act.error ? <div style={{ height: 392 }}><ErrorState onRetry={act.reload} /></div>
             : act.data.agents.length === 0 ? (
-                <div style={{ height: 392, display: "grid", placeItems: "center", position: "relative", overflow: "hidden" }}>
-                  <div style={{ animation: "float-y 6s ease-in-out infinite" }}><MetatronCube size={300} opacity={0.9} /></div>
-                  <div style={{ position: "absolute", bottom: 30, left: 0, right: 0, textAlign: "center", padding: "0 24px" }}>
+                <div style={{ height: 392, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, overflow: "hidden" }}>
+                  <div style={{ animation: "float-y 6s ease-in-out infinite", flex: "0 0 auto" }}><MetatronCube size={220} opacity={1} hero /></div>
+                  <div style={{ textAlign: "center", padding: "0 24px", maxWidth: 460 }}>
                     <div className="mono" style={{ fontSize: 11.5, letterSpacing: ".22em", color: "var(--teal)" }}>AWAITING AGENTS</div>
                     <div className="muted" style={{ fontSize: 12.5, marginTop: 7, lineHeight: 1.5 }}>No agents connected in the last {WINDOW_LABEL} — activity streams in here as agents query Metatron.</div>
                   </div>
@@ -224,11 +224,14 @@ function LoopStage({ icon, label, n, color, active }) {
   );
 }
 
-function FeedbackLoopView({ repo, refresh }) {
+function FeedbackLoopView({ repo, refresh, openDecision }) {
   const [filter, setFilter] = useState("all");
   const ev = useApi(() => MetatronAPI.getFeedbackEvents(repo, filter), [repo, filter]);
   const toast = useToast();
   const [refining, setRefining] = useState(null);
+  const openById = useCallback((id) => {
+    MetatronAPI.getDecision(id).then((d) => d && d.id && openDecision && openDecision(d));
+  }, [openDecision]);
 
   const doRefine = async (e) => {
     setRefining(e.id);
@@ -267,7 +270,7 @@ function FeedbackLoopView({ repo, refresh }) {
       {ev.loading ? <Loading label="Gathering feedback gaps…" /> : ev.error ? <ErrorState onRetry={ev.reload} /> :
         ev.data.events.length === 0 ? <Empty title="No gaps in this view" detail="Every reported gap has been refined into a candidate decision." icon="loop" /> :
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {ev.data.events.map((e, i) => <GapCard key={e.id} e={e} delay={i * 0.06} onRefine={() => doRefine(e)} refining={refining === e.id} />)}
+            {ev.data.events.map((e, i) => <GapCard key={e.id} e={e} delay={i * 0.06} onRefine={() => doRefine(e)} refining={refining === e.id} onOpenDecision={openById} />)}
           </div>}
     </div>
   );
@@ -279,7 +282,7 @@ function LoopArrow() {
   </div>;
 }
 
-function GapCard({ e, delay, onRefine, refining }) {
+function GapCard({ e, delay, onRefine, refining, onOpenDecision }) {
   const ratings = Object.entries(e.ratings || {});
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s" }}>
@@ -304,7 +307,8 @@ function GapCard({ e, delay, onRefine, refining }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
             {ratings.map(([id, score]) => (
               <div key={id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="mono" style={{ fontSize: 11, color: "var(--muted)", width: 96, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{id}</span>
+                <span className="mono link-id" title={"Open decision " + id} onClick={() => onOpenDecision && onOpenDecision(id)}
+                  style={{ fontSize: 11, color: "var(--cyan)", width: 96, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{id}</span>
                 <div style={{ flex: 1 }}><Meter value={score} max={10} color={score >= 6 ? "var(--emerald)" : score >= 4 ? "var(--amber)" : "var(--rose)"} height={6} /></div>
                 <span className="mono tnum" style={{ fontSize: 12, width: 18, textAlign: "right", color: score >= 6 ? "var(--emerald)" : score >= 4 ? "var(--amber)" : "var(--rose)" }}>{score}</span>
               </div>

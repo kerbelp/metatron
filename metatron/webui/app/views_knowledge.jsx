@@ -24,7 +24,7 @@ function OverviewView({ repo, openDecision, goto }) {
 
   return (
     <div className="view">
-      <SectionTitle eyebrow="Knowledge health" title="The lattice at a glance" />
+      <SectionTitle eyebrow="Knowledge health" title="Knowledge base overview" />
 
       <div className="grid" style={{ gridTemplateColumns: "auto 1fr", alignItems: "stretch", marginBottom: 18 }}>
         {/* donut hero */}
