@@ -2,8 +2,8 @@
 
 In production several processes open the *same* per-repo file at once: every
 running ``metatron serve`` plus ``metatron ui`` and CLI commands. Reads
-(``get_priors_for_context``) and writes (``submit_feedback`` /
-``submit_candidate_learning``) interleave constantly. Under SQLite's default
+(``get_decisions_for_context``) and writes (``submit_feedback`` /
+``submit_candidate_decision``) interleave constantly. Under SQLite's default
 rollback journal an open read holds a SHARED lock that blocks a writer's commit,
 surfacing as ``database is locked`` / ``attempt to write a readonly database``.
 WAL mode plus a busy timeout lets readers and writers proceed concurrently.
