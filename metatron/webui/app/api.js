@@ -46,6 +46,10 @@
       });
     },
 
+    getDecision(id) {
+      return J("/api/decisions/" + encodeURIComponent(id));
+    },
+
     getUsage(repo) {
       // Normalize the server's usage_summary keys to the names the impact view uses.
       return J("/api/usage?" + qs({ repo })).then((u) => ({

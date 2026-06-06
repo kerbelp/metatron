@@ -118,6 +118,9 @@ def _build_handler(
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/repos":
                 self._send_json(api.repos(store))
+            elif path.startswith("/api/decisions/"):
+                decision = api.get_decision(store, path.split("/")[-1])
+                self._send_json(decision or {"error": "not found"}, status=200 if decision else 404)
             elif path == "/api/version":
                 self._send_json(api.version())
             elif path == "/api/origins":
