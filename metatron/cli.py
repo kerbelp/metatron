@@ -17,6 +17,7 @@ from typing import TextIO
 
 from dotenv import find_dotenv, load_dotenv
 
+from metatron import identity
 from metatron.config import load_settings
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.repo_identity import repo_id
@@ -166,6 +167,8 @@ def main(
             return _cmd_refine_feedback(
                 args, store, event_store, provider, settings, out,
             )
+        if args.command == "whoami":
+            return _cmd_whoami(args, out)
         if args.command == "export":
             return _cmd_export(
                 catalog, _resolve_repo(args.repo, store, settings), args.out, out
@@ -223,6 +226,22 @@ def _cmd_ingest(args, store, provider, run_store, out) -> int:
     )
     print(f"Review them with: metatron candidates list --repo {result.repo}", file=out)
     print(f"Serve them with:  metatron serve --repo {result.repo}", file=out)
+    return 0
+
+
+def _cmd_whoami(args, out) -> int:
+    """Show or set the local identity that ``serve`` stamps onto events."""
+    if args.set_email is not None or args.set_name is not None:
+        ident = identity.set_identity(email=args.set_email, display_name=args.set_name)
+    else:
+        ident = identity.ensure_identity()  # seed from git on first use
+    if not (ident.actor_id or ident.email):
+        print("No identity set (events will be recorded anonymously).", file=out)
+        print("Set one with: metatron whoami --set-email you@corp.com --set-name 'Your Name'", file=out)
+        return 0
+    print(f"{ident.display_name or '(no name)'} <{ident.email or 'no-email'}>", file=out)
+    print(f"actor_id: {ident.actor_id}", file=out)
+    print(f"config:   {identity.config_path()}", file=out)
     return 0
 
 
@@ -528,6 +547,12 @@ def _build_parser() -> argparse.ArgumentParser:
     ui_p.add_argument(
         "--port", type=int, default=1337, help="starting port (bumps if taken)"
     )
+
+    whoami_p = sub.add_parser(
+        "whoami", help="show or set the local identity stamped onto served events"
+    )
+    whoami_p.add_argument("--set-email", default=None, help="set your email")
+    whoami_p.add_argument("--set-name", default=None, help="set your display name")
 
     triage_p = sub.add_parser(
         "triage", help="run the advisory judge over candidate priors (does not auto-curate)"
