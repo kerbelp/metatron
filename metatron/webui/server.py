@@ -139,6 +139,16 @@ def _build_handler(
                 self._send_json(triage_job.status())
             elif path == "/api/feedback/loop/status":
                 self._send_json(feedback_loop_job.status())
+            elif path == "/api/agent-activity":
+                query = parse_qs(parts.query)
+                repo = _first(query, "repo")
+                window = int(_first(query, "window") or 30)
+                if event_store is not None:
+                    self._send_json(api.agent_activity(
+                        event_store, store, repo=repo, window_mins=window))
+                else:
+                    self._send_json({"window_mins": window, "total_agents": 0,
+                                     "total_served": 0, "total_feedback": 0, "agents": []})
             elif path == "/api/stats":
                 self._send_json(api.stats(store, repo=_first(parse_qs(parts.query), "repo")))
             elif path == "/api/usage":
