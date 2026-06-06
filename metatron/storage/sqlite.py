@@ -99,11 +99,26 @@ def connect(path: str) -> sqlite3.Connection:
       of failing immediately with "database is locked" / "attempt to write a
       readonly database".
 
-    ``check_same_thread=False`` lets the web server (which runs in its own thread)
-    share a store created elsewhere; the UI server is single-threaded, so access
-    stays serialized. (WAL is a no-op for ``:memory:`` databases, which is fine.)
+    ``isolation_level=None`` runs the connection in **autocommit** mode, and this
+    is load-bearing for the live UI, not a style choice. In the default (legacy)
+    mode the driver opens an implicit transaction before the first write and holds
+    it until the next ``commit()``. That transaction is connection-global, and the
+    ``metatron ui`` process shares each connection between the request-serving
+    thread and the background job threads (ingest/valuate/feedback-loop). A job
+    that opened an implicit transaction would pin the connection to a single WAL
+    read snapshot, so every later UI read returned data frozen at that instant —
+    the "Knowledge in flight / real-time doesn't update" bug — while other
+    processes' writes (a running ``metatron serve``) sailed past unseen. In
+    autocommit mode no implicit transaction is ever held across statements, so each
+    read sees the latest committed state from every process. Every write here is a
+    single statement, so we rely on no multi-statement atomicity; the explicit
+    ``commit()`` calls in the stores become harmless no-ops.
+
+    ``check_same_thread=False`` lets the web server share a store created elsewhere
+    and lets the background job threads use it. (WAL and autocommit are no-ops for
+    ``:memory:`` databases, which is fine.)
     """
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
