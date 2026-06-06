@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,6 +21,7 @@ from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
     SQLiteDecisionStore,
+    connect,
 )
 
 _META_SCHEMA = "CREATE TABLE IF NOT EXISTS repo_meta (repo_id TEXT NOT NULL)"
@@ -41,7 +41,7 @@ def slug_for(repo_id: str) -> str:
 
 
 def _read_repo_id(path: Path) -> str | None:
-    conn = sqlite3.connect(path)
+    conn = connect(str(path))
     try:
         conn.execute(_META_SCHEMA)
         row = conn.execute("SELECT repo_id FROM repo_meta LIMIT 1").fetchone()
@@ -51,7 +51,7 @@ def _read_repo_id(path: Path) -> str | None:
 
 
 def _ensure_repo_meta(path: Path, repo_id: str) -> None:
-    conn = sqlite3.connect(path)
+    conn = connect(str(path))
     try:
         conn.execute(_META_SCHEMA)
         if conn.execute("SELECT 1 FROM repo_meta LIMIT 1").fetchone() is None:
