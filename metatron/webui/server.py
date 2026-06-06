@@ -1,8 +1,8 @@
 """A small stdlib HTTP server for the curation UI.
 
-No web framework — `http.server` serves one HTML page plus JSON endpoints backed
-by the same `PriorStore` the CLI uses. The request handler is a thin adapter over
-the pure functions in :mod:`metatron.webui.api`.
+No web framework — `http.server` serves the static front-end (in ``app/``) plus JSON
+endpoints backed by the same `PriorStore` the CLI uses. The request handler is a thin
+adapter over the pure functions in :mod:`metatron.webui.api`.
 """
 
 from __future__ import annotations
@@ -18,7 +18,21 @@ from metatron.webui import api
 from metatron.webui.jobs import FeedbackLoopJob, IngestJob, TriageJob
 from metatron.webui.observability import usage_summary
 
-_INDEX_HTML = (Path(__file__).parent / "index.html").read_text()
+# The built front-end (HTML/CSS/JSX/JS) lives here and is served as static files.
+_APP_DIR = Path(__file__).parent / "app"
+
+_CONTENT_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".jsx": "text/babel; charset=utf-8",
+    ".json": "application/json",
+    ".svg": "image/svg+xml",
+}
+
+
+def _content_type(name: str) -> str:
+    return _CONTENT_TYPES.get(Path(name).suffix, "application/octet-stream")
 
 
 def find_free_port(start: int = 1337, host: str = "127.0.0.1", attempts: int = 200) -> int:
@@ -91,7 +105,7 @@ def _build_handler(
             parts = urlsplit(self.path)
             path = parts.path
             if path in ("/", "/index.html"):
-                self._send_html(_INDEX_HTML)
+                self._send_file("index.html")
             elif path == "/api/priors":
                 self._send_json(_list(store, parse_qs(parts.query)))
             elif path == "/api/repos":
@@ -159,6 +173,8 @@ def _build_handler(
                     self._send_json(
                         {**usage_summary([]), "recent_queries": [], "recent_submissions": []}
                     )
+            elif not path.startswith("/api/"):
+                self._serve_static(path)
             else:
                 self._send_json({"error": "not found"}, status=404)
 
@@ -220,8 +236,16 @@ def _build_handler(
         def _send_json(self, payload: dict, status: int = 200) -> None:
             self._respond(status, "application/json", json.dumps(payload).encode())
 
-        def _send_html(self, html: str) -> None:
-            self._respond(200, "text/html; charset=utf-8", html.encode())
+        def _send_file(self, name: str) -> None:
+            self._respond(200, _content_type(name), (_APP_DIR / name).read_bytes())
+
+        def _serve_static(self, path: str) -> None:
+            # The app dir is flat; reject any nesting/traversal and serve only real files.
+            name = path.lstrip("/")
+            target = _APP_DIR / name
+            if "/" in name or not target.is_file() or target.parent != _APP_DIR:
+                return self._send_json({"error": "not found"}, status=404)
+            self._respond(200, _content_type(name), target.read_bytes())
 
         def _respond(self, status: int, content_type: str, body: bytes) -> None:
             self.send_response(status)

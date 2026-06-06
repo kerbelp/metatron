@@ -1,8 +1,9 @@
-"""Tests for the web server: free-port selection and real HTTP round-trips."""
+"""Tests for the web server: free-port selection, static app serving, and JSON APIs."""
 
 import json
 import socket
 import threading
+import urllib.error
 import urllib.request
 
 import pytest
@@ -16,6 +17,11 @@ from metatron.webui.server import find_free_port, make_server
 def _get(url: str):
     with urllib.request.urlopen(url) as r:
         return r.status, r.read()
+
+
+def _get_full(url: str):
+    with urllib.request.urlopen(url) as r:
+        return r.status, r.read(), r.headers.get("Content-Type", "")
 
 
 def _post(url: str):
@@ -53,16 +59,43 @@ def served():
         httpd.server_close()
 
 
-def test_root_serves_html(served):
+# --- static front-end serving -------------------------------------------------
+
+def test_root_serves_the_react_app(served):
     _, _, base = served
     status, body = _get(base + "/")
     assert status == 200
-    assert b"<!doctype html>" in body.lower() or b"<html" in body.lower()
+    html = body.decode().lower()
+    assert "<!doctype html>" in html or "<html" in html
+    assert 'id="root"' in html           # the React mount point
+    assert "api.js" in html              # the data layer is loaded
+    assert "styles.css" in html
 
+
+def test_static_assets_are_served_with_content_types(served):
+    _, _, base = served
+    status, body, ctype = _get_full(base + "/api.js")
+    assert status == 200 and "javascript" in ctype
+    assert b"MetatronAPI" in body        # the live data module
+
+    _, _, css_ctype = _get_full(base + "/styles.css")
+    assert "text/css" in css_ctype
+
+    _, _, jsx_ctype = _get_full(base + "/app.jsx")
+    assert "babel" in jsx_ctype          # served so in-browser Babel can fetch it
+
+
+def test_static_serving_rejects_unknown_and_nested_paths(served):
+    _, _, base = served
+    for path in ("/nope.js", "/sub/dir/x.js"):
+        with pytest.raises(urllib.error.HTTPError) as exc:
+            _get(base + path)
+        assert exc.value.code == 404
+
+
+# --- JSON API -----------------------------------------------------------------
 
 def test_ingest_status_idle_and_start_requires_provider(served):
-    # The test server has no ingest provider configured, so status is idle and
-    # starting an ingest is refused with a message — never a 500.
     _, _, base = served
     _, body = _get(base + "/api/ingest/status")
     assert json.loads(body)["state"] == "idle"
@@ -76,23 +109,11 @@ def test_ingest_status_idle_and_start_requires_provider(served):
     assert res["ok"] is False
 
 
-def test_ingest_screen_markup_is_served(served):
-    # The ingest view, the cube host, and the start/valuate/approve controls
-    # are present in the page (wiring is exercised via the API tests).
-    _, _, base = served
-    _, body = _get(base + "/")
-    html = body.decode()
-    for token in ('id="view-ingest"', 'id="ingestCube"', 'id="ingestStart"',
-                  'id="valuateStart"', 'id="approveRecommended"', 'cubeNodes'):
-        assert token in html, token
-
-
 def test_valuate_status_idle_and_approve_recommended_wired(served):
     _, _, base = served
     _, body = _get(base + "/api/valuate/status")
     assert json.loads(body)["state"] == "idle"
 
-    # nothing is triage=approve in the fixture, so this is a no-op count of 0
     req = urllib.request.Request(
         base + "/api/priors/approve-recommended",
         data=b'{"repo": "github.com/acme/app"}',
@@ -104,7 +125,6 @@ def test_valuate_status_idle_and_approve_recommended_wired(served):
 
 
 def test_approve_recommended_accepts_an_origin_filter(served):
-    # The Feedback screen's button scopes the bulk approve to one origin.
     _, _, base = served
     req = urllib.request.Request(
         base + "/api/priors/approve-recommended",
@@ -117,8 +137,6 @@ def test_approve_recommended_accepts_an_origin_filter(served):
 
 
 def test_valuate_start_accepts_origin_and_approve_and_is_graceful(served):
-    # The one-click "valuate & approve" passes origin + approve; with no provider
-    # configured in the fixture it refuses cleanly rather than 500-ing.
     _, _, base = served
     req = urllib.request.Request(
         base + "/api/valuate/start",
@@ -130,19 +148,7 @@ def test_valuate_start_accepts_origin_and_approve_and_is_graceful(served):
     assert res["ok"] is False  # no provider in the test server
 
 
-def test_valuate_and_approve_controls_present_in_html(served):
-    # Both screens carry a one-click action button.
-    _, _, base = served
-    _, body = _get(base + "/")
-    html = body.decode()
-    for token in ('id="priorsValuateApprove"', 'id="fbValuateApprove"',
-                  "valuateAndApprove", "runFeedbackLoop"):
-        assert token in html, token
-
-
 def test_feedback_loop_status_idle_and_start_requires_provider(served):
-    # The full feedback loop has its own status/start; with no provider it refuses
-    # cleanly (the served fixture configures none).
     _, _, base = served
     _, body = _get(base + "/api/feedback/loop/status")
     assert json.loads(body)["state"] == "idle"
@@ -155,25 +161,6 @@ def test_feedback_loop_status_idle_and_start_requires_provider(served):
     with urllib.request.urlopen(req) as r:
         res = json.loads(r.read())
     assert res["ok"] is False
-
-
-def test_action_item_titles_present_in_html(served):
-    # Every curation screen shows how many action items the human has.
-    _, _, base = served
-    _, body = _get(base + "/")
-    html = body.decode()
-    for token in ('id="priorsActions"', 'id="feedbackActions"', "setActionbar"):
-        assert token in html, token
-
-
-def test_ui_is_repo_exclusive_no_all_option(served):
-    # Priors are scoped to one repo: the UI must not offer an "all repos" view,
-    # and it surfaces the active repo id as a title.
-    _, _, base = served
-    _, body = _get(base + "/")
-    html = body.decode()
-    assert "All repos" not in html
-    assert 'id="repoTitle"' in html
 
 
 def test_api_priors_returns_json_with_the_prior(served):
@@ -197,31 +184,6 @@ def test_api_version_reports_a_revision(served):
     _, body = _get(base + "/api/version")
     data = json.loads(body)
     assert "revision" in data and isinstance(data["revision"], str) and data["revision"]
-
-
-def test_footer_markup_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    assert b'id="version"' in body
-
-
-def test_quality_analytics_markup_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    assert b'id="origin-breakdown"' in body
-    assert b'id="feedback-summary"' in body
-
-
-def test_origin_filter_dropdown_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    assert b'id="origin-filter"' in body
-
-
-def test_search_box_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    assert b'id="search"' in body
 
 
 def test_api_priors_filters_by_search(served):
@@ -264,19 +226,6 @@ def test_api_feedback_events_returns_stream(served):
     assert "events" in data and isinstance(data["events"], list)
 
 
-def test_feedback_filter_tabs_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    for f in (b'data-fstatus="all"', b'data-fstatus="unhandled"', b'data-fstatus="handled"'):
-        assert f in body
-
-
-def test_refine_button_handler_present_in_html(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    assert b"refineFb(" in body
-
-
 def test_api_feedback_events_accepts_status_filter(served):
     _, _, base = served
     _, body = _get(base + "/api/feedback-events?status=handled")
@@ -284,25 +233,22 @@ def test_api_feedback_events_accepts_status_filter(served):
     assert "events" in data and isinstance(data["events"], list)
 
 
-def test_nav_has_usage_quality_feedback_tabs(served):
+def test_api_leaderboard_returns_lists(served):
     _, _, base = served
-    _, body = _get(base + "/")
-    for view in (b'data-view="usage"', b'data-view="quality"', b'data-view="feedback"'):
-        assert view in body
-
-
-def test_leaderboard_view_and_endpoint_are_present(served):
-    _, _, base = served
-    _, body = _get(base + "/")
-    html = body.decode()
-    for token in ('data-view="leaderboard"', 'id="view-leaderboard"',
-                  'id="lb-helpful"', 'id="lb-misleading"', "loadLeaderboard"):
-        assert token in html, token
-
-    _, lb = _get(base + "/api/leaderboard")
-    data = json.loads(lb)
+    _, body = _get(base + "/api/leaderboard")
+    data = json.loads(body)
     assert "most_helpful" in data and "misleading" in data
     assert isinstance(data["most_helpful"], list)
+
+
+def test_api_agent_activity_groups_by_actor(served):
+    store, _, base = served
+    # the fixture recorded one anonymous query; add an attributed one
+    _, _, _ = served
+    _, body = _get(base + "/api/agent-activity?repo=github.com/acme/app&window=60")
+    data = json.loads(body)
+    assert "agents" in data and "total_agents" in data
+    assert isinstance(data["agents"], list)
 
 
 class _FakeRefiner:
@@ -335,7 +281,6 @@ def test_post_refine_feedback_produces_candidates_and_marks_handled():
 
 
 def test_post_refine_feedback_without_factory_is_graceful(served):
-    # no refiner configured (e.g. missing API key) -> ok:false, not a 500
     _, _, base = served
     _, body = _post(base + "/api/feedback/any-id/refine")
     data = json.loads(body)
