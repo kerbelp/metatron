@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,11 @@ def run_setup(target: Path, env: dict | None = None):
     # Set a deterministic repo id so tests don't depend on git remotes / uv.
     full_env = {**os.environ, "METATRON_REPO": "github.com/test/repo"}
     if env:
-        full_env.update(env)
+        for key, value in env.items():
+            if value is None:  # allow tests to unset an inherited var
+                full_env.pop(key, None)
+            else:
+                full_env[key] = value
     result = subprocess.run(
         ["bash", str(SCRIPT), str(target)],
         capture_output=True,
@@ -150,7 +155,46 @@ def test_creates_mcp_json_with_metatron_server(tmp_path):
         assert "run" not in server["args"]
     else:
         assert server["command"] == "uv"
-        assert "METATRON_DB" in server["env"]
+
+
+def _path_without_metatron(tmp_path: Path) -> str:
+    """A PATH carrying the tools the script needs but no ``metatron`` binary.
+
+    Forces the ``uv run`` fallback branch (``command -v metatron`` fails) — the
+    branch real ``uv``-based ``.mcp.json`` files use and where the DB-path bug
+    lived — instead of the PATH branch that the venv's console script enables
+    under ``uv run pytest``.
+    """
+    import shutil
+
+    bined = tmp_path / "_bin"
+    bined.mkdir()
+    for tool in ("bash", "dirname", "pwd", "mkdir", "cat", "cp", "grep", "sed",
+                 "rm", "mv", "env", "git", "basename"):
+        src = shutil.which(tool)
+        if src:
+            (bined / tool).symlink_to(src)
+    (bined / "python3").symlink_to(sys.executable)  # in a dir without `metatron`
+    return str(bined)
+
+
+def test_mcp_json_omits_db_path_when_metatron_db_unset(tmp_path):
+    # Without an explicit METATRON_DB the generated config must NOT pin a path:
+    # `metatron serve` then resolves its own default (the ~/.metatron catalog
+    # directory). Hardcoding a single-file `<home>/metatron.db` here drifts from
+    # config.DEFAULT_DB_PATH and, since the per-repo catalog split, points at a
+    # file that no longer exists — which crashes serve on startup.
+    run_setup(tmp_path, env={"METATRON_DB": None,
+                             "PATH": _path_without_metatron(tmp_path)})
+    server = _mcp(tmp_path)["mcpServers"]["metatron"]
+    assert server["command"] == "uv"  # confirm we exercised the fallback branch
+    assert "METATRON_DB" not in server.get("env", {})
+
+
+def test_mcp_json_pins_db_path_only_when_metatron_db_set(tmp_path):
+    run_setup(tmp_path, env={"METATRON_DB": "/tmp/custom-catalog"})
+    server = _mcp(tmp_path)["mcpServers"]["metatron"]
+    assert server["env"]["METATRON_DB"] == "/tmp/custom-catalog"
 
 
 def test_preserves_existing_mcp_servers(tmp_path):

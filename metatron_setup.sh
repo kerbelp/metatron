@@ -192,7 +192,6 @@ derive_repo_id() {
 
 # --- 4. MCP server config (.mcp.json, additive) ----------------------------
 MCP_FILE="$TARGET/.mcp.json"
-DB_PATH="${METATRON_DB:-$METATRON_HOME/metatron.db}"
 REPO_ID="${METATRON_REPO:-}"
 if [[ -z "$REPO_ID" ]]; then
   # Use shell helper so we don't depend on python/uv sync state at this stage.
@@ -202,19 +201,23 @@ if [[ -z "$REPO_ID" ]]; then
   echo "  warning: could not derive repo id; skipping .mcp.json" >&2
   echo "           (set METATRON_REPO=<id> or add an origin remote, then re-run)" >&2
 else
-  # If metatron CLI is globally available on PATH, use it directly
+  # Launch via the global `metatron` if it's on PATH, else the local checkout
+  # through `uv run`.
   if command -v metatron >/dev/null 2>&1; then
-    if [[ -n "${METATRON_DB:-}" ]]; then
-      SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"metatron","args":["serve","--repo",sys.argv[1]],"env":{"METATRON_DB":sys.argv[2]}}))' \
-        "$REPO_ID" "$METATRON_DB")"
-    else
-      SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"metatron","args":["serve","--repo",sys.argv[1]]}))' \
-        "$REPO_ID")"
-    fi
+    SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"metatron","args":["serve","--repo",sys.argv[1]]}))' \
+      "$REPO_ID")"
   else
-    # Fallback to running local check-out via uv project environment
-    SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"uv","args":["run","--project",sys.argv[1],"metatron","serve","--repo",sys.argv[2]],"env":{"METATRON_DB":sys.argv[3]}}))' \
-      "$METATRON_HOME" "$REPO_ID" "$DB_PATH")"
+    SERVER_JSON="$(python3 -c 'import json,sys; print(json.dumps({"command":"uv","args":["run","--project",sys.argv[1],"metatron","serve","--repo",sys.argv[2]]}))' \
+      "$METATRON_HOME" "$REPO_ID")"
+  fi
+  # Pin METATRON_DB only when the caller set it explicitly; otherwise let
+  # `metatron serve` resolve its own default (the ~/.metatron catalog directory).
+  # Hardcoding a path drifts from config.DEFAULT_DB_PATH, and the old
+  # `<home>/metatron.db` default points — since the per-repo catalog split — at a
+  # file that no longer exists, which crashes serve on startup.
+  if [[ -n "${METATRON_DB:-}" ]]; then
+    SERVER_JSON="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d["env"]={"METATRON_DB":sys.argv[2]}; print(json.dumps(d))' \
+      "$SERVER_JSON" "$METATRON_DB")"
   fi
   python3 - "$MCP_FILE" "$SERVER_JSON" <<'PYEOF'
 import json, os, sys
