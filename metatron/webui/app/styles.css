@@ -232,7 +232,9 @@ body {
   background: rgba(8,20,17,.5); cursor: pointer; transition: all .18s; white-space: nowrap;
 }
 .chip:hover { border-color: var(--line-strong); color: var(--text); }
-.chip.on { color: #04100d; background: linear-gradient(180deg, var(--teal), var(--emerald)); border-color: transparent; font-weight: 600; }
+/* Subtle selected state — a teal tint + border, with weight/size unchanged so a
+   chip never reflows itself or its neighbours when toggled on/off. */
+.chip.on { color: var(--teal); background: rgba(45,212,191,.12); border-color: rgba(45,212,191,.5); }
 .scope-tag { font-family: var(--mono); font-size: 11px; color: var(--cyan); opacity: .85; }
 .origin-tag { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 

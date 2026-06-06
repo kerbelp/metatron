@@ -122,7 +122,7 @@ function DecisionsView({ repo, openDecision }) {
 
       {/* filter rail */}
       <div className="panel pad enter" style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
-        <FilterGroup label="STATUS" opts={STATUS_OPTS} value={f.status} onPick={(v) => set("status", v)} render={(v, on) => v ? (on ? v.toUpperCase() : <StatusBadge status={v} />) : "all"} />
+        <FilterGroup label="STATUS" opts={STATUS_OPTS} value={f.status} onPick={(v) => set("status", v)} render={(v) => v ? <StatusBadge status={v} /> : "all"} />
         <span style={{ width: 1, height: 24, background: "var(--line)" }} />
         <FilterGroup label="ORIGIN" opts={ORIGIN_OPTS} value={f.origin} onPick={(v) => set("origin", v)} render={(v) => v ? OriginLabel[v] : "all"} />
         <span style={{ width: 1, height: 24, background: "var(--line)" }} />
