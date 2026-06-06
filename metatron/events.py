@@ -36,6 +36,12 @@ class Event(BaseModel):
     result_count: int = 0       # priors returned (queries) — 0 means a "miss"
     prior_ids: list[str] = Field(default_factory=list)
     version: str = Field(default_factory=current_version)  # build that produced the event
+    # Who was running Metatron when this event was recorded (stamped by `serve` from
+    # the local identity). Denormalized so a handed-off / merged DB stays
+    # self-describing; empty for anonymous or pre-attribution events.
+    actor_id: str = ""
+    actor_email: str = ""
+    actor_name: str = ""
     # Feedback events only:
     query_ref: str = ""                  # the QUERY event this feedback responds to
     helpful_prior_ids: list[str] = Field(default_factory=list)

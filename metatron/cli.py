@@ -273,7 +273,9 @@ def _cmd_export(catalog, repo: str, out: str | None, out_stream) -> int:
 def _cmd_serve(store, repo, event_store) -> int:
     from metatron.mcp_server.server import build_server
 
-    build_server(store, repo, event_store).run()
+    # Stamp served events with the local employee identity (seeded from git on first
+    # use), so feedback/queries are attributable once DBs are merged.
+    build_server(store, repo, event_store, identity=identity.ensure_identity()).run()
     return 0
 
 

@@ -178,6 +178,9 @@ CREATE TABLE IF NOT EXISTS events (
     result_count INTEGER NOT NULL,
     prior_ids    TEXT NOT NULL,
     version            TEXT NOT NULL DEFAULT '',
+    actor_id           TEXT NOT NULL DEFAULT '',
+    actor_email        TEXT NOT NULL DEFAULT '',
+    actor_name         TEXT NOT NULL DEFAULT '',
     query_ref          TEXT NOT NULL DEFAULT '',
     helpful_prior_ids   TEXT NOT NULL DEFAULT '[]',
     unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]',
@@ -189,7 +192,8 @@ CREATE TABLE IF NOT EXISTS events (
 
 _EVENT_COLUMNS = (
     "id", "timestamp", "repo", "kind", "area", "task", "result_count", "prior_ids",
-    "version", "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "ratings",
+    "version", "actor_id", "actor_email", "actor_name",
+    "query_ref", "helpful_prior_ids", "unhelpful_prior_ids", "ratings",
     "missing", "handled",
 )
 
@@ -206,6 +210,9 @@ class SQLiteEventStore(EventStore):
         self._conn.execute(_REPO_META_SCHEMA)
         _ensure_column(self._conn, "events", "repo", "repo TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "version", "version TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "actor_id", "actor_id TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "actor_email", "actor_email TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "events", "actor_name", "actor_name TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "query_ref", "query_ref TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "helpful_prior_ids", "helpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(self._conn, "events", "unhelpful_prior_ids", "unhelpful_prior_ids TEXT NOT NULL DEFAULT '[]'")
