@@ -11,15 +11,15 @@ from metatron.storage.sqlite import (
     SQLiteIngestRunStore,
     SQLitePriorStore,
 )
+from metatron.storage.transfer import copy_repo_rows
 
 
 def migrate_legacy_db(legacy_path: str | Path, catalog: Catalog) -> bool:
     """Copy each repo's rows from ``legacy_path`` into its catalog file, then archive.
 
     Idempotent: returns ``False`` (no-op) once the legacy file is gone/archived. The
-    copy goes through the stores (read filtered by repo, write into the new file), so
-    it stays schema-safe. Re-running after an interruption re-copies until the final
-    archive rename succeeds.
+    copy goes through the stores (dedupe by id), so it stays schema-safe and re-running
+    after an interruption converges until the final archive rename succeeds.
     """
     legacy = Path(legacy_path)
     if not legacy.is_file():
@@ -30,20 +30,7 @@ def migrate_legacy_db(legacy_path: str | Path, catalog: Catalog) -> bool:
     runs = SQLiteIngestRunStore(str(legacy))
     try:
         for repo in priors.list_repos():
-            dst = catalog.open(repo)
-            # Skip rows already present so an interrupted run (rows copied but the
-            # archive rename below not yet reached) re-runs cleanly instead of
-            # tripping a PRIMARY KEY conflict on the second pass.
-            for p in priors.list(repo=repo):
-                if dst.priors.get(p.id) is None:
-                    dst.priors.add(p)
-            for e in events.list_events(repo=repo):
-                if dst.events.get(e.id) is None:
-                    dst.events.record(e)
-            existing_runs = {r.id for r in dst.runs.list_for_repo(repo)}
-            for r in runs.list_for_repo(repo):
-                if r.id not in existing_runs:
-                    dst.runs.record(r)
+            copy_repo_rows(priors, events, runs, catalog.open(repo), repo)
     finally:
         priors.close()
         events.close()

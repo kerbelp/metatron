@@ -173,6 +173,8 @@ def main(
             return _cmd_export(
                 catalog, _resolve_repo(args.repo, store, settings), args.out, out
             )
+        if args.command == "import":
+            return _cmd_import(catalog, args.path, out)
         if args.command == "candidates":
             return _cmd_candidates(args, store, settings, out)
     except RepoResolutionError as exc:
@@ -267,6 +269,32 @@ def _cmd_export(catalog, repo: str, out: str | None, out_stream) -> int:
         d.close()
     print(f"Exported '{repo}' → {dst}", file=out_stream)
     print(f"Recipient: metatron --db {dst} ui", file=out_stream)
+    return 0
+
+
+def _cmd_import(catalog, path: str, out_stream) -> int:
+    """Merge another employee's per-repo DB (file or catalog dir) into this catalog.
+
+    Dedupes by id, so re-importing the same file is a no-op. Event attribution travels
+    with the rows, so a curator sees who contributed what after the merge.
+    """
+    from metatron.storage.catalog import Catalog
+    from metatron.storage.transfer import import_catalog
+
+    src = Path(path)
+    if not src.exists():
+        print(f"No such file or directory: {src}", file=out_stream)
+        return 2
+    counts = import_catalog(Catalog(str(src)), catalog)
+    if not counts:
+        print(f"Nothing to import from {src} (no repos found).", file=out_stream)
+        return 0
+    for repo, c in counts.items():
+        print(
+            f"Imported '{repo}': {c['priors']} priors, {c['events']} events, "
+            f"{c['runs']} ingest runs.",
+            file=out_stream,
+        )
     return 0
 
 
@@ -602,6 +630,11 @@ def _build_parser() -> argparse.ArgumentParser:
     export_p.add_argument(
         "--out", default=None, help="destination path (default ./<repo-name>.db)"
     )
+
+    import_p = sub.add_parser(
+        "import", help="merge another employee's exported DB into this catalog"
+    )
+    import_p.add_argument("path", help="a per-repo .db file (or a catalog dir) to merge in")
 
     return parser
 
