@@ -62,6 +62,18 @@ body {
 }
 #root { height: 100vh; }
 
+/* desktop-only gate: this console is built for a wide screen */
+.mobile-gate { display: none; }
+@media (max-width: 820px) {
+  .mobile-gate {
+    display: grid; place-items: center;
+    position: fixed; inset: 0; z-index: 1000;
+    background:
+      radial-gradient(600px 400px at 50% 30%, rgba(45,212,191,.10), transparent 70%),
+      var(--bg-0);
+  }
+}
+
 /* ambient gradient wash behind everything */
 .app-bg {
   position: fixed; inset: 0; z-index: 0; pointer-events: none;
