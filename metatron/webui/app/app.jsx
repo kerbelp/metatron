@@ -88,7 +88,16 @@ function App() {
   const [dataV, setDataV] = useState(0);
 
   const repos = useApi(() => MetatronAPI.getRepos(), []);
-  useEffect(() => { if (repos.data && !repo) setRepo(repos.data.repos[0]); }, [repos.data]);
+  const ver = useApi(() => MetatronAPI.getVersion(), []);
+  // Restore the last-chosen repo across refreshes; fall back to the first repo.
+  useEffect(() => {
+    if (repos.data && !repo) {
+      const saved = localStorage.getItem("metatron.repo");
+      const list = repos.data.repos;
+      setRepo(list.includes(saved) ? saved : list[0]);
+    }
+  }, [repos.data]);
+  const pickRepo = useCallback((r) => { setRepo(r); localStorage.setItem("metatron.repo", r); }, []);
   const stats = useApi(() => (repo ? MetatronAPI.getStats(repo) : Promise.resolve(null)), [repo, statsV]);
 
   const refreshStats = useCallback(() => setStatsV((v) => v + 1), []);
@@ -142,7 +151,7 @@ function App() {
           <div className="rail-foot">
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", boxShadow: "0 0 8px var(--emerald-glow)" }} />
-              <span className="mono dim" style={{ fontSize: 10.5, letterSpacing: ".1em" }}>API connected · seeded</span>
+              <span className="mono dim" style={{ fontSize: 10.5, letterSpacing: ".1em" }} title={ver.data ? `revision ${ver.data.revision}` : ""}>API connected{ver.data ? ` · v${ver.data.version}` : ""}</span>
             </div>
           </div>
         </nav>
@@ -155,7 +164,7 @@ function App() {
               <h1>{cur.title}</h1>
             </div>
             <div className="spacer" />
-            <RepoSelect repo={repo} repos={repos.data.repos} onPick={(r) => { setRepo(r); }} />
+            <RepoSelect repo={repo} repos={repos.data.repos} onPick={pickRepo} />
           </header>
           <div className="stage-scroll" ref={scrollRef} key={view + repo + dataV}>
             <Router view={view} repo={repo} openDecision={setDrawer} goto={setView} refreshStats={refreshStats} dataV={dataV} />

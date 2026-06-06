@@ -166,6 +166,17 @@ def test_actor_is_exposed_in_usage_and_feedback_streams():
     assert fb["actor_id"] == "a1" and fb["actor_email"] == "dev@corp.com" and fb["actor_name"] == "Dev"
 
 
+def test_feedback_events_include_ratings():
+    # The UI's GapCard renders e.ratings; it must be present (its absence blanked
+    # the Feedback Loop screen for repos that had feedback).
+    store = SQLiteDecisionStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo="r", kind=EventKind.FEEDBACK, missing="gap",
+                        ratings={"d1": 9, "d2": 3}))
+    ev = feedback_events(events, store)["events"][0]
+    assert ev["ratings"] == {"d1": 9, "d2": 3}
+
+
 def test_feedback_events_filters_by_handled_status():
     store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")

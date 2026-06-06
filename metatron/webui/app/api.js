@@ -29,6 +29,10 @@
       return J("/api/repos");
     },
 
+    getVersion() {
+      return J("/api/version");
+    },
+
     getStats(repo) {
       return J("/api/stats?" + qs({ repo }));
     },

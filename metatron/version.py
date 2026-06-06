@@ -10,7 +10,17 @@ from __future__ import annotations
 
 import subprocess
 from functools import lru_cache
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
+
+
+def package_version() -> str:
+    """The installed package version (e.g. ``0.2.1``), or ``dev`` if not installed."""
+    try:
+        return _pkg_version("getmetatron")
+    except PackageNotFoundError:
+        return "dev"
 
 
 def git_revision(repo_root: Path | str | None = None) -> str | None:

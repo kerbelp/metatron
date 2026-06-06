@@ -14,13 +14,13 @@ from metatron.feedback_score import NEUTRAL, helpfulness_scores
 from metatron.models import Origin, Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, DecisionStore
-from metatron.version import version_string
+from metatron.version import package_version, version_string
 from metatron.webui.observability import usage_summary
 
 
 def version() -> dict:
-    """The code revision this server is running (shown in the UI footer)."""
-    return {"revision": version_string()}
+    """The version + code revision this server is running (shown in the UI footer)."""
+    return {"version": package_version(), "revision": version_string()}
 
 
 def list_decisions(
@@ -422,6 +422,7 @@ def feedback_events(
             "actor_id": e.actor_id,
             "actor_email": e.actor_email,
             "actor_name": e.actor_name,
+            "ratings": e.ratings,
             "query_ref": e.query_ref,
             "helpful": resolve(e.helpful_decision_ids),
             "unhelpful": resolve(e.unhelpful_decision_ids),
