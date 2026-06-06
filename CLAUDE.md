@@ -54,6 +54,11 @@ change violates it:
 - Keep PRs **small and reviewable**, and **each PR includes tests**.
 - Before starting any work, **read `docs/` and `docs/incidents/`** (they may not
   exist yet — if so, note that and proceed).
+- **This is a public repo. Write every commit message and PR description as a
+  neutral, third-person technical note.** Describe the change and its rationale —
+  not how it was requested. **Never** reference the chat or agent session, "the
+  user", "you", "we just", "live-testing", screenshots, or any conversation
+  context in commit/PR text. (Same goes for code comments.)
 
 ## Scope discipline
 

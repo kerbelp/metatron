@@ -80,6 +80,10 @@ We work **PR-then-merge**. There are **no direct commits to `main`**.
 - Write commit messages and PR descriptions that explain **why**, not just what.
   If you're fixing a subtle bug, describe the root cause; the next person reading
   `git blame` should understand the change without re-deriving it.
+- Keep them **neutral and third-person**. This is a public repo — describe the
+  change and its rationale, not how it came to be requested. Don't reference a
+  chat, an agent session, "the user", "you", or live-testing in commit or PR
+  text (or in code comments).
 - A short type prefix (`fix:`, `feat:`, `ui:`, `docs:`, `chore:`) in the subject
   is appreciated but not required.
 - PRs are merged with **squash + delete branch**, so the PR title becomes the
