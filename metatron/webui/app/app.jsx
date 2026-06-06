@@ -193,5 +193,23 @@ function Router({ view, repo, openDecision, goto, refreshStats }) {
   }
 }
 
+/* ---------- desktop-only gate (shown under a mobile breakpoint via CSS) ---------- */
+function MobileNotice() {
+  return (
+    <div className="mobile-gate">
+      <div style={{ textAlign: "center", padding: 32, maxWidth: 360 }}>
+        <div style={{ animation: "float-y 3s ease-in-out infinite" }}><MetatronEmblem size={72} /></div>
+        <div className="mono" style={{ marginTop: 22, letterSpacing: ".3em", fontSize: 12, color: "var(--teal)" }}>METATRON</div>
+        <h2 style={{ margin: "16px 0 10px", fontSize: 18, fontWeight: 500 }}>Best on desktop</h2>
+        <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.6 }}>
+          The Metatron console is built for a wide screen — dense decision tables,
+          side-by-side panels, and the live agent lattice. Open it on a desktop to
+          curate and explore your knowledge base.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(<React.StrictMode><AppRoot /></React.StrictMode>);
-function AppRoot() { return <><ParticleField /><App /></>; }
+function AppRoot() { return <><ParticleField /><App /><MobileNotice /></>; }
