@@ -39,3 +39,20 @@ class GitRepoBuilder:
 @pytest.fixture
 def git_repo(tmp_path) -> GitRepoBuilder:
     return GitRepoBuilder(tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_metatron_store(tmp_path_factory, monkeypatch):
+    """Keep every test off real paths.
+
+    ``cli.main()`` builds the catalog from ``settings.db_path`` (default
+    ``~/.metatron``) and runs the legacy-``metatron.db`` auto-split against the cwd.
+    Without isolation a test could create/modify the developer's real catalog or
+    migrate the repo's own ``metatron.db``. This points the catalog at a throwaway
+    dir and parks the cwd in an empty one; tests that set their own ``METATRON_DB``
+    or ``chdir`` later still override these.
+    """
+    home = tmp_path_factory.mktemp("metatron-home")
+    monkeypatch.setenv("METATRON_DB", str(home / "catalog"))
+    monkeypatch.delenv("METATRON_REPO", raising=False)
+    monkeypatch.chdir(home)

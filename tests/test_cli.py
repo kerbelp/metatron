@@ -130,7 +130,8 @@ def test_candidates_list_ambiguous_repo_exits_with_guidance(monkeypatch):
 def test_repo_set_persists_default_and_list_marks_it(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)  # so metatron.toml is written/read here, not the repo
     monkeypatch.delenv("METATRON_REPO", raising=False)
-    monkeypatch.delenv("METATRON_DB", raising=False)
+    # METATRON_DB stays pointed at the autouse-isolated catalog (see conftest); don't
+    # clear it, or the defaulted event/run stores would hit the real ~/.metatron.
     store = SQLitePriorStore(":memory:")
     store.add(_candidate("x"))  # github.com/acme/app
 

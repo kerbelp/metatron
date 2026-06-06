@@ -1,6 +1,6 @@
 """Tests for settings loading: defaults, file values, and env overrides."""
 
-from metatron.config import load_settings, update_settings
+from metatron.config import DEFAULT_DB_PATH, load_settings, update_settings
 from metatron.extraction.provider import DEFAULT_MODEL
 
 
@@ -11,7 +11,8 @@ def test_defaults_when_no_file_and_no_env(tmp_path, monkeypatch):
 
     settings = load_settings(tmp_path / "absent.toml")
 
-    assert settings.db_path == "metatron.db"
+    # Defaults to the shared catalog data dir (~/.metatron), not a cwd file.
+    assert settings.db_path == DEFAULT_DB_PATH
     assert settings.model == DEFAULT_MODEL
     assert settings.anthropic_api_key is None
 
