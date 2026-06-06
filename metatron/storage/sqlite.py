@@ -15,6 +15,11 @@ from metatron.events import Event
 from metatron.models import IngestRun, Prior, Status
 from metatron.storage.base import EventStore, PriorStore
 
+# Every per-repo file carries this one-row table so it is self-describing (its repo
+# id travels inside the file, independent of filename). Defined here and created by
+# all three stores so a file opened directly always has it; the Catalog populates it.
+_REPO_META_SCHEMA = "CREATE TABLE IF NOT EXISTS repo_meta (repo_id TEXT NOT NULL)"
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS priors (
     id          TEXT PRIMARY KEY,
@@ -66,9 +71,11 @@ class SQLitePriorStore(PriorStore):
         # check_same_thread=False lets the web server (which runs in its own
         # thread) share a store created elsewhere; the UI server is
         # single-threaded, so access stays serialized.
+        self.path = path
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_SCHEMA)
+        self._conn.execute(_REPO_META_SCHEMA)
         _ensure_column(self._conn, "priors", "repo", "repo TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "priors", "model", "model TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "priors", "created_version", "created_version TEXT NOT NULL DEFAULT ''")
@@ -192,9 +199,11 @@ _EVENT_JSON_COLUMNS = ("prior_ids", "helpful_prior_ids", "unhelpful_prior_ids", 
 
 class SQLiteEventStore(EventStore):
     def __init__(self, path: str = "metatron.db") -> None:
+        self.path = path
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_EVENTS_SCHEMA)
+        self._conn.execute(_REPO_META_SCHEMA)
         _ensure_column(self._conn, "events", "repo", "repo TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "version", "version TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "events", "query_ref", "query_ref TEXT NOT NULL DEFAULT ''")
@@ -298,9 +307,11 @@ _RUN_COLUMNS = (
 
 class SQLiteIngestRunStore:
     def __init__(self, path: str = "metatron.db") -> None:
+        self.path = path
         self._conn = sqlite3.connect(path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute(_RUNS_SCHEMA)
+        self._conn.execute(_REPO_META_SCHEMA)
         self._conn.commit()
 
     def record(self, run: IngestRun) -> IngestRun:
