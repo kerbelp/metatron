@@ -1,1 +1,1 @@
-"""Candidate-prior extraction (deterministic signals + LLM)."""
+"""Candidate-decision extraction (deterministic signals + LLM)."""

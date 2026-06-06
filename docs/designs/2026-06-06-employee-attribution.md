@@ -70,7 +70,7 @@
   streams; the data contract now carries it.
 
 ### 5. Merge: `metatron import <file>`
-- `metatron/storage/transfer.py`: `copy_repo_rows(src_priors, src_events, src_runs,
+- `metatron/storage/transfer.py`: `copy_repo_rows(src_decisions, src_events, src_runs,
   dst, repo) -> dict` — insert rows whose ids aren't already in `dst` (dedupe by id),
   returns per-kind counts. Refactor `migrate_legacy_db` to use it (DRY with the
   crash-idempotent copy we just wrote).

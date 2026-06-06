@@ -5,8 +5,8 @@ import os
 
 from metatron.cli import main
 from metatron.extraction.provider import LLMProvider
-from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLiteIngestRunStore, SQLitePriorStore
+from metatron.models import Origin, Decision, Status
+from metatron.storage.sqlite import SQLiteIngestRunStore, SQLiteDecisionStore
 
 
 class FakeProvider(LLMProvider):
@@ -20,8 +20,8 @@ def _run(argv, store):
     return code, out.getvalue()
 
 
-def _candidate(pattern, scope="app") -> Prior:
-    return Prior(
+def _candidate(pattern, scope="app") -> Decision:
+    return Decision(
         repo="github.com/acme/app",
         pattern=pattern,
         scope=scope,
@@ -31,7 +31,7 @@ def _candidate(pattern, scope="app") -> Prior:
 
 
 def test_candidates_list_shows_candidates_only():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("a candidate"))
     canon = _candidate("a canonical")
     store.add(canon)
@@ -45,7 +45,7 @@ def test_candidates_list_shows_candidates_only():
 
 
 def test_candidates_list_filters_by_scope():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("app rule", scope="app"))
     store.add(_candidate("lib rule", scope="lib"))
 
@@ -58,11 +58,11 @@ def test_candidates_list_filters_by_scope():
 
 
 def test_candidates_list_is_exclusive_to_the_current_repo(monkeypatch):
-    # Priors are scoped to a repo — listing never bleeds across repos.
-    store = SQLitePriorStore(":memory:")
+    # Decisions are scoped to a repo — listing never bleeds across repos.
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("here rule"))  # repo github.com/acme/app
     store.add(
-        Prior(repo="github.com/acme/other", pattern="other rule", scope="app",
+        Decision(repo="github.com/acme/other", pattern="other rule", scope="app",
               rationale="r", origin=Origin.BOOTSTRAP)
     )
     monkeypatch.setenv("METATRON_REPO", "github.com/acme/app")
@@ -73,13 +73,13 @@ def test_candidates_list_is_exclusive_to_the_current_repo(monkeypatch):
 
 
 def test_repo_list_shows_repos_with_counts():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("a"))  # acme/app candidate
     canon = _candidate("b")
     store.add(canon)
     store.set_status(canon.id, Status.CANONICAL)  # acme/app canonical
     store.add(
-        Prior(repo="github.com/acme/other", pattern="c", scope="app",
+        Decision(repo="github.com/acme/other", pattern="c", scope="app",
               rationale="r", origin=Origin.BOOTSTRAP)
     )
 
@@ -93,14 +93,14 @@ def test_repo_list_shows_repos_with_counts():
 
 
 def test_repo_list_empty_is_friendly():
-    code, output = _run(["repo", "list"], SQLitePriorStore(":memory:"))
+    code, output = _run(["repo", "list"], SQLiteDecisionStore(":memory:"))
     assert code == 0
     assert "No repos" in output
 
 
 def test_candidates_list_announces_resolved_repo(monkeypatch):
     # The resolved repo is echoed so the acted-on repo is never a mystery.
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("here rule"))  # only repo: github.com/acme/app
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
@@ -113,9 +113,9 @@ def test_candidates_list_announces_resolved_repo(monkeypatch):
 
 
 def test_candidates_list_ambiguous_repo_exits_with_guidance(monkeypatch):
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("a"))  # github.com/acme/app
-    store.add(Prior(repo="github.com/acme/other", pattern="b", scope="app",
+    store.add(Decision(repo="github.com/acme/other", pattern="b", scope="app",
                     rationale="r", origin=Origin.BOOTSTRAP))
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
@@ -132,7 +132,7 @@ def test_repo_set_persists_default_and_list_marks_it(tmp_path, monkeypatch):
     monkeypatch.delenv("METATRON_REPO", raising=False)
     # METATRON_DB stays pointed at the autouse-isolated catalog (see conftest); don't
     # clear it, or the defaulted event/run stores would hit the real ~/.metatron.
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("x"))  # github.com/acme/app
 
     set_code, set_out = _run(["repo", "set", "github.com/acme/app"], store)
@@ -152,7 +152,7 @@ def test_resolve_repo_precedence(monkeypatch):
     from metatron.cli import _resolve_repo
     from metatron.config import Settings
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("x"))  # repo github.com/acme/app
     settings = Settings(default_repo="github.com/persisted/repo")
     # cwd id is controlled so the "inside a tracked repo" branch is deterministic.
@@ -172,9 +172,9 @@ def test_resolve_repo_uses_cwd_when_it_is_in_the_store(monkeypatch):
     from metatron.cli import _resolve_repo
     from metatron.config import Settings
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("x"))  # github.com/acme/app
-    store.add(Prior(repo="github.com/acme/other", pattern="y", scope="app",
+    store.add(Decision(repo="github.com/acme/other", pattern="y", scope="app",
                     rationale="r", origin=Origin.BOOTSTRAP))
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/acme/other")
@@ -186,7 +186,7 @@ def test_resolve_repo_auto_picks_the_only_repo(monkeypatch):
     from metatron.cli import _resolve_repo
     from metatron.config import Settings
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("x"))  # the only repo: github.com/acme/app
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
@@ -200,7 +200,7 @@ def test_resolve_repo_falls_back_to_cwd_on_empty_store(monkeypatch):
     from metatron.cli import _resolve_repo
     from metatron.config import Settings
 
-    store = SQLitePriorStore(":memory:")  # empty: no repos
+    store = SQLiteDecisionStore(":memory:")  # empty: no repos
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/fresh/clone")
     assert _resolve_repo(None, store, Settings()) == "github.com/fresh/clone"
@@ -212,9 +212,9 @@ def test_resolve_repo_ambiguous_raises_with_guidance(monkeypatch):
     from metatron.cli import RepoResolutionError, _resolve_repo
     from metatron.config import Settings
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     store.add(_candidate("x"))  # github.com/acme/app
-    store.add(Prior(repo="github.com/acme/other", pattern="y", scope="app",
+    store.add(Decision(repo="github.com/acme/other", pattern="y", scope="app",
                     rationale="r", origin=Origin.BOOTSTRAP))
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.setattr("metatron.cli.repo_id", lambda _: "github.com/unrelated/cwd")
@@ -226,29 +226,29 @@ def test_resolve_repo_ambiguous_raises_with_guidance(monkeypatch):
 
 
 def test_candidates_approve_promotes_to_canonical():
-    store = SQLitePriorStore(":memory:")
-    prior = _candidate("promote me")
-    store.add(prior)
+    store = SQLiteDecisionStore(":memory:")
+    decision = _candidate("promote me")
+    store.add(decision)
 
-    code, _ = _run(["candidates", "approve", prior.id], store)
+    code, _ = _run(["candidates", "approve", decision.id], store)
 
     assert code == 0
-    assert store.get(prior.id).status is Status.CANONICAL
+    assert store.get(decision.id).status is Status.CANONICAL
 
 
 def test_candidates_reject_marks_rejected():
-    store = SQLitePriorStore(":memory:")
-    prior = _candidate("reject me")
-    store.add(prior)
+    store = SQLiteDecisionStore(":memory:")
+    decision = _candidate("reject me")
+    store.add(decision)
 
-    code, _ = _run(["candidates", "reject", prior.id], store)
+    code, _ = _run(["candidates", "reject", decision.id], store)
 
     assert code == 0
-    assert store.get(prior.id).status is Status.REJECTED
+    assert store.get(decision.id).status is Status.REJECTED
 
 
 def test_approve_unknown_id_errors_without_raising():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     code, output = _run(["candidates", "approve", "nope"], store)
 
     assert code != 0
@@ -261,7 +261,7 @@ def test_cli_auto_loads_env_file_from_working_dir(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=from-dotenv\n")
 
-    main(["candidates", "list"], store=SQLitePriorStore(":memory:"), out=io.StringIO())
+    main(["candidates", "list"], store=SQLiteDecisionStore(":memory:"), out=io.StringIO())
 
     assert os.environ["ANTHROPIC_API_KEY"] == "from-dotenv"
 
@@ -271,7 +271,7 @@ def test_cli_does_not_override_already_exported_env(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=from-dotenv\n")
 
-    main(["candidates", "list"], store=SQLitePriorStore(":memory:"), out=io.StringIO())
+    main(["candidates", "list"], store=SQLiteDecisionStore(":memory:"), out=io.StringIO())
 
     assert os.environ["ANTHROPIC_API_KEY"] == "from-shell"
 
@@ -288,7 +288,7 @@ class JudgeProvider(LLMProvider):
 def test_triage_sets_advisory_verdicts_on_candidates():
     from metatron.models import TriageVerdict
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     a, b = _candidate("one"), _candidate("two")
     store.add(a)
     store.add(b)
@@ -308,7 +308,7 @@ def test_triage_sets_advisory_verdicts_on_candidates():
 
 
 def test_triage_prints_live_progress():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     for i in range(3):
         store.add(_candidate(f"cand {i}"))
     out = io.StringIO()
@@ -336,7 +336,7 @@ def test_refine_feedback_creates_structured_candidates_and_marks_handled():
     from metatron.events import Event, EventKind
     from metatron.storage.sqlite import SQLiteEventStore
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
     events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
                         missing="the credit path must mirror order_created", area="src/api"))
@@ -362,7 +362,7 @@ def test_refine_feedback_prints_live_progress():
     from metatron.events import Event, EventKind
     from metatron.storage.sqlite import SQLiteEventStore
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
     for area in ("src/api", "src/db"):
         events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
@@ -381,7 +381,7 @@ def test_refine_feedback_prints_live_progress():
 def test_ingest_prints_live_progress(git_repo):
     # Extraction is one LLM call per scope; the CLI must show it's working.
     git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     out = io.StringIO()
 
     code = main(
@@ -400,7 +400,7 @@ def test_ingest_prints_live_progress(git_repo):
 
 def test_ingest_path_option_scopes_to_subtree(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n", "lib/b.py": "import sys\n"})
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
 
     code = main(
         ["ingest", str(git_repo.path), "--path", "app"],
@@ -419,7 +419,7 @@ def test_ingest_path_option_scopes_to_subtree(git_repo):
 
 def test_ingest_stores_candidates_and_reports_summary(git_repo):
     git_repo.commit("init", {"app/a.py": "import os\n"})
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
 
     out = io.StringIO()
     code = main(
@@ -431,5 +431,5 @@ def test_ingest_stores_candidates_and_reports_summary(git_repo):
     )
 
     assert code == 0
-    assert store.list()  # priors were persisted
+    assert store.list()  # decisions were persisted
     assert all(p.status is Status.CANDIDATE for p in store.list())

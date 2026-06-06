@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Split the single shared `metatron.db` into one self-contained SQLite file per repo, so a repo's priors become a shippable hand-off artifact, while the CLI, MCP server, and local UI keep working seamlessly across repos.
+**Goal:** Split the single shared `metatron.db` into one self-contained SQLite file per repo, so a repo's decisions become a shippable hand-off artifact, while the CLI, MCP server, and local UI keep working seamlessly across repos.
 
-**Architecture:** A new `Catalog` (in `metatron/storage/catalog.py`) owns a data directory (default `~/.metatron/`) of `<slug>.db` files, each self-describing via a one-row `repo_meta` table. Catalog-backed store classes implement the existing `PriorStore`/`EventStore`/`IngestRunStore` interfaces by routing each call to the right per-repo file (fanning out when a query spans all repos), so callers stay unchanged — only store *construction* in `cli.main()` moves to the catalog. A one-time auto-migration splits a legacy `metatron.db` into per-repo files and archives the original. `metatron export <repo>` copies a repo's file out for hand-off; pointing `--db` at a single file enters single-file mode for the recipient.
+**Architecture:** A new `Catalog` (in `metatron/storage/catalog.py`) owns a data directory (default `~/.metatron/`) of `<slug>.db` files, each self-describing via a one-row `repo_meta` table. Catalog-backed store classes implement the existing `DecisionStore`/`EventStore`/`IngestRunStore` interfaces by routing each call to the right per-repo file (fanning out when a query spans all repos), so callers stay unchanged — only store *construction* in `cli.main()` moves to the catalog. A one-time auto-migration splits a legacy `metatron.db` into per-repo files and archives the original. `metatron export <repo>` copies a repo's file out for hand-off; pointing `--db` at a single file enters single-file mode for the recipient.
 
 **Tech Stack:** Python 3.12+, stdlib `sqlite3`, `pytest`, `uv`. (Run tests with `uv run -m pytest`; run scripts with `uv run python` — bare `python`/`pytest` are not on PATH here.)
 
@@ -14,11 +14,11 @@
 
 ## Refinement vs. the spec (read first)
 
-The spec said callers would use an `open_repo(...)` helper and that there would be "no cross-file id search." Implementation reveals the **local UI is genuinely cross-repo** (it serves all repos from one `store`, filters by a `repo` query param, and mutates priors by id with no repo in scope). To keep the UI, CLI, and serve code untouched, this plan implements **catalog-backed stores that satisfy the existing interface and route by `repo`**, with bounded fan-out for the few cross-repo operations (`repo=None` listings; id-only `get`/`set_status`/`set_triage`/`mark_handled`). The hot `get_priors_for_context` path stays single-file because it is always repo-scoped. `catalog.open(repo)` (single-repo access) still exists and is used by `export` and single-file recipient mode. This is a faithful, smaller-diff realization of the spec's intent; flag it in review.
+The spec said callers would use an `open_repo(...)` helper and that there would be "no cross-file id search." Implementation reveals the **local UI is genuinely cross-repo** (it serves all repos from one `store`, filters by a `repo` query param, and mutates decisions by id with no repo in scope). To keep the UI, CLI, and serve code untouched, this plan implements **catalog-backed stores that satisfy the existing interface and route by `repo`**, with bounded fan-out for the few cross-repo operations (`repo=None` listings; id-only `get`/`set_status`/`set_triage`/`mark_handled`). The hot `get_decisions_for_context` path stays single-file because it is always repo-scoped. `catalog.open(repo)` (single-repo access) still exists and is used by `export` and single-file recipient mode. This is a faithful, smaller-diff realization of the spec's intent; flag it in review.
 
 ## File structure
 
-- **Create** `metatron/storage/catalog.py` — `Catalog` (dir/file modes, `list_repos`, `open`, `path_for`, slug), `_ensure_repo_meta`/`_read_repo_id`, and the catalog-backed `CatalogPriorStore` / `CatalogEventStore` / `CatalogIngestRunStore`.
+- **Create** `metatron/storage/catalog.py` — `Catalog` (dir/file modes, `list_repos`, `open`, `path_for`, slug), `_ensure_repo_meta`/`_read_repo_id`, and the catalog-backed `CatalogDecisionStore` / `CatalogEventStore` / `CatalogIngestRunStore`.
 - **Create** `metatron/storage/migrate.py` — `migrate_legacy_db(legacy_path, catalog)`; idempotent split + archive.
 - **Modify** `metatron/storage/sqlite.py` — add the `repo_meta` table (`CREATE TABLE IF NOT EXISTS`) so any per-repo file always has it; expose the file path on each store (`self.path`) for `export`.
 - **Modify** `metatron/config.py` — default `db_path` → `~/.metatron`; add `DEFAULT_DATA_DIR`.
@@ -60,7 +60,7 @@ def test_open_creates_self_describing_file(tmp_path):
     assert path.exists()
     row = sqlite3.connect(path).execute("SELECT repo_id FROM repo_meta").fetchone()
     assert row[0] == "github.com/acme/app"
-    stores.priors.close(); stores.events.close(); stores.runs.close()
+    stores.decisions.close(); stores.events.close(); stores.runs.close()
 ```
 
 - [ ] **Step 2 — run, expect fail:** `uv run -m pytest tests/test_catalog.py -q` → ImportError (`catalog` missing).
@@ -70,7 +70,7 @@ def test_open_creates_self_describing_file(tmp_path):
 ```python
 """The repo catalog: one self-contained SQLite file per repo.
 
-A repo's data (priors, events, ingest runs) lives in its own ``<slug>.db`` inside a
+A repo's data (decisions, events, ingest runs) lives in its own ``<slug>.db`` inside a
 data directory (default ``~/.metatron``). Each file carries a one-row ``repo_meta``
 table so it is self-describing — a handed-off file announces its repo id regardless
 of filename. The :class:`Catalog` is the only thing that knows files exist; callers
@@ -88,7 +88,7 @@ from pathlib import Path
 from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
-    SQLitePriorStore,
+    SQLiteDecisionStore,
 )
 
 _META_SCHEMA = "CREATE TABLE IF NOT EXISTS repo_meta (repo_id TEXT NOT NULL)"
@@ -130,7 +130,7 @@ def _ensure_repo_meta(path: Path, repo_id: str) -> None:
 
 @dataclass
 class RepoStores:
-    priors: SQLitePriorStore
+    decisions: SQLiteDecisionStore
     events: SQLiteEventStore
     runs: SQLiteIngestRunStore
 
@@ -170,7 +170,7 @@ class Catalog:
         path = self.path_for(repo_id)
         _ensure_repo_meta(path, repo_id)
         stores = RepoStores(
-            SQLitePriorStore(str(path)),
+            SQLiteDecisionStore(str(path)),
             SQLiteEventStore(str(path)),
             SQLiteIngestRunStore(str(path)),
         )
@@ -179,7 +179,7 @@ class Catalog:
 
     def close(self) -> None:
         for s in self._open.values():
-            s.priors.close(); s.events.close(); s.runs.close()
+            s.decisions.close(); s.events.close(); s.runs.close()
         self._open.clear()
 ```
 
@@ -210,33 +210,33 @@ git commit -m "storage: add per-repo Catalog and repo_meta self-describing files
 - Modify: `metatron/storage/catalog.py`
 - Test: `tests/test_catalog_stores.py`
 
-These implement `PriorStore` / `EventStore` / `IngestRunStore` over the catalog: route by `repo`, fan out when `repo is None`, search files for id-only ops.
+These implement `DecisionStore` / `EventStore` / `IngestRunStore` over the catalog: route by `repo`, fan out when `repo is None`, search files for id-only ops.
 
 - [ ] **Step 1 — failing tests** (`tests/test_catalog_stores.py`):
 
 ```python
-from metatron.models import Origin, Prior, Status
+from metatron.models import Origin, Decision, Status
 from metatron.events import Event, EventKind
-from metatron.storage.catalog import Catalog, CatalogPriorStore, CatalogEventStore
+from metatron.storage.catalog import Catalog, CatalogDecisionStore, CatalogEventStore
 
 
-def _prior(repo, pattern):
-    return Prior(repo=repo, pattern=pattern, scope="app", rationale="r",
+def _decision(repo, pattern):
+    return Decision(repo=repo, pattern=pattern, scope="app", rationale="r",
                  origin=Origin.BOOTSTRAP, status=Status.CANONICAL)
 
 
 def test_add_routes_to_repo_file_and_list_repos_aggregates(tmp_path):
-    store = CatalogPriorStore(Catalog(str(tmp_path)))
-    store.add(_prior("repoA", "alpha"))
-    store.add(_prior("repoB", "beta"))
+    store = CatalogDecisionStore(Catalog(str(tmp_path)))
+    store.add(_decision("repoA", "alpha"))
+    store.add(_decision("repoB", "beta"))
     assert store.list_repos() == ["repoA", "repoB"]
     assert [p.pattern for p in store.list(repo="repoA")] == ["alpha"]
     assert {p.pattern for p in store.list()} == {"alpha", "beta"}   # repo=None fans out
 
 
 def test_get_and_set_status_find_owning_file(tmp_path):
-    store = CatalogPriorStore(Catalog(str(tmp_path)))
-    p = store.add(_prior("repoA", "alpha"))
+    store = CatalogDecisionStore(Catalog(str(tmp_path)))
+    p = store.add(_decision("repoA", "alpha"))
     assert store.get(p.id).pattern == "alpha"          # id-only search
     store.set_status(p.id, Status.REJECTED)
     assert store.get(p.id).status is Status.REJECTED
@@ -244,7 +244,7 @@ def test_get_and_set_status_find_owning_file(tmp_path):
 
 def test_event_store_routes_and_resolves_by_id(tmp_path):
     es = CatalogEventStore(Catalog(str(tmp_path)))
-    e = es.record(Event(repo="repoA", kind=EventKind.QUERY, prior_ids=["x"]))
+    e = es.record(Event(repo="repoA", kind=EventKind.QUERY, decision_ids=["x"]))
     assert es.get(e.id).repo == "repoA"
     assert es.count_events() == 1
 ```
@@ -255,19 +255,19 @@ def test_event_store_routes_and_resolves_by_id(tmp_path):
 
 ```python
 from metatron.events import Event
-from metatron.models import IngestRun, Origin, Prior, Status, TriageVerdict
-from metatron.storage.base import EventStore, PriorStore
+from metatron.models import IngestRun, Origin, Decision, Status, TriageVerdict
+from metatron.storage.base import EventStore, DecisionStore
 
 
-class CatalogPriorStore(PriorStore):
+class CatalogDecisionStore(DecisionStore):
     def __init__(self, catalog: Catalog) -> None:
         self._cat = catalog
 
-    def _p(self, repo_id: str) -> SQLitePriorStore:
-        return self._cat.open(repo_id).priors
+    def _p(self, repo_id: str) -> SQLiteDecisionStore:
+        return self._cat.open(repo_id).decisions
 
-    def add(self, prior: Prior) -> Prior:
-        return self._p(prior.repo).add(prior)
+    def add(self, decision: Decision) -> Decision:
+        return self._p(decision.repo).add(decision)
 
     def list(self, *, repo=None, status=None, scope=None, model=None,
              triage=None, origin=None, search=None, limit=None, offset=0):
@@ -275,7 +275,7 @@ class CatalogPriorStore(PriorStore):
                   origin=origin, search=search)
         if repo is not None:
             return self._p(repo).list(repo=repo, limit=limit, offset=offset, **kw)
-        merged: list[Prior] = []
+        merged: list[Decision] = []
         for rid in self._cat.list_repos():
             merged.extend(self._p(rid).list(repo=rid, **kw))
         merged.sort(key=lambda p: (p.created_at, p.id), reverse=True)
@@ -288,24 +288,24 @@ class CatalogPriorStore(PriorStore):
             return self._p(repo).count(repo=repo, **kw)
         return sum(self._p(rid).count(repo=rid, **kw) for rid in self._cat.list_repos())
 
-    def get(self, prior_id: str):
+    def get(self, decision_id: str):
         for rid in self._cat.list_repos():
-            hit = self._p(rid).get(prior_id)
+            hit = self._p(rid).get(decision_id)
             if hit is not None:
                 return hit
         return None
 
-    def _owner(self, prior_id: str) -> str:
+    def _owner(self, decision_id: str) -> str:
         for rid in self._cat.list_repos():
-            if self._p(rid).get(prior_id) is not None:
+            if self._p(rid).get(decision_id) is not None:
                 return rid
-        raise KeyError(prior_id)
+        raise KeyError(decision_id)
 
-    def set_status(self, prior_id: str, status: Status) -> Prior:
-        return self._p(self._owner(prior_id)).set_status(prior_id, status)
+    def set_status(self, decision_id: str, status: Status) -> Decision:
+        return self._p(self._owner(decision_id)).set_status(decision_id, status)
 
-    def set_triage(self, prior_id: str, verdict: TriageVerdict, reason: str) -> Prior:
-        return self._p(self._owner(prior_id)).set_triage(prior_id, verdict, reason)
+    def set_triage(self, decision_id: str, verdict: TriageVerdict, reason: str) -> Decision:
+        return self._p(self._owner(decision_id)).set_triage(decision_id, verdict, reason)
 
     def list_repos(self) -> list[str]:
         return self._cat.list_repos()
@@ -382,7 +382,7 @@ class CatalogIngestRunStore:
 
 ```bash
 git add metatron/storage/catalog.py tests/test_catalog_stores.py
-git commit -m "storage: catalog-backed PriorStore/EventStore/IngestRunStore routing"
+git commit -m "storage: catalog-backed DecisionStore/EventStore/IngestRunStore routing"
 ```
 
 ---
@@ -399,19 +399,19 @@ git commit -m "storage: catalog-backed PriorStore/EventStore/IngestRunStore rout
 from datetime import datetime, timezone
 from pathlib import Path
 
-from metatron.models import Origin, Prior, Status
+from metatron.models import Origin, Decision, Status
 from metatron.events import Event, EventKind
-from metatron.storage.sqlite import SQLitePriorStore, SQLiteEventStore
-from metatron.storage.catalog import Catalog, CatalogPriorStore
+from metatron.storage.sqlite import SQLiteDecisionStore, SQLiteEventStore
+from metatron.storage.catalog import Catalog, CatalogDecisionStore
 from metatron.storage.migrate import migrate_legacy_db
 
 
 def _seed_legacy(path):
-    ps = SQLitePriorStore(str(path)); es = SQLiteEventStore(str(path))
+    ps = SQLiteDecisionStore(str(path)); es = SQLiteEventStore(str(path))
     for repo in ("repoA", "repoB"):
-        ps.add(Prior(repo=repo, pattern=f"p-{repo}", scope="app", rationale="r",
+        ps.add(Decision(repo=repo, pattern=f"p-{repo}", scope="app", rationale="r",
                      origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
-        es.record(Event(repo=repo, kind=EventKind.QUERY, prior_ids=["x"]))
+        es.record(Event(repo=repo, kind=EventKind.QUERY, decision_ids=["x"]))
     ps.close(); es.close()
 
 
@@ -421,7 +421,7 @@ def test_migrate_splits_per_repo_and_archives(tmp_path):
     cat = Catalog(str(tmp_path / "data"))
     migrated = migrate_legacy_db(legacy, cat)
     assert migrated is True
-    store = CatalogPriorStore(cat)
+    store = CatalogDecisionStore(cat)
     assert store.list_repos() == ["repoA", "repoB"]
     assert [p.pattern for p in store.list(repo="repoA")] == ["p-repoA"]
     assert not legacy.exists()
@@ -451,7 +451,7 @@ from metatron.storage.catalog import Catalog
 from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
-    SQLitePriorStore,
+    SQLiteDecisionStore,
 )
 
 
@@ -467,20 +467,20 @@ def migrate_legacy_db(legacy_path: str | Path, catalog: Catalog) -> bool:
     if not legacy.is_file():
         return False
 
-    priors = SQLitePriorStore(str(legacy))
+    decisions = SQLiteDecisionStore(str(legacy))
     events = SQLiteEventStore(str(legacy))
     runs = SQLiteIngestRunStore(str(legacy))
     try:
-        for repo in priors.list_repos():
+        for repo in decisions.list_repos():
             dst = catalog.open(repo)
-            for p in priors.list(repo=repo):
-                dst.priors.add(p)
+            for p in decisions.list(repo=repo):
+                dst.decisions.add(p)
             for e in events.list_events(repo=repo):
                 dst.events.record(e)
             for r in runs.list_for_repo(repo):
                 dst.runs.record(r)
     finally:
-        priors.close(); events.close(); runs.close()
+        decisions.close(); events.close(); runs.close()
 
     archive = legacy.with_name(f"{legacy.name}.migrated-{date.today().isoformat()}")
     legacy.rename(archive)
@@ -515,15 +515,15 @@ DEFAULT_DB_PATH = str(Path.home() / ".metatron")
 
 ```python
 from metatron.config import Settings
-from metatron.storage.catalog import Catalog, CatalogPriorStore
+from metatron.storage.catalog import Catalog, CatalogDecisionStore
 from metatron.cli import _resolve_repo
 
 
 def test_resolve_repo_uses_catalog_listing(tmp_path):
     cat = Catalog(str(tmp_path))
-    store = CatalogPriorStore(cat)
-    from metatron.models import Origin, Prior, Status
-    store.add(Prior(repo="only/repo", pattern="p", scope="a", rationale="r",
+    store = CatalogDecisionStore(cat)
+    from metatron.models import Origin, Decision, Status
+    store.add(Decision(repo="only/repo", pattern="p", scope="a", rationale="r",
                     origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
     # sole repo in the catalog → resolved with no flags
     assert _resolve_repo(None, store, Settings()) == "only/repo"
@@ -533,7 +533,7 @@ def test_resolve_repo_uses_catalog_listing(tmp_path):
 
 ```python
 from metatron.storage.catalog import (
-    Catalog, CatalogPriorStore, CatalogEventStore, CatalogIngestRunStore,
+    Catalog, CatalogDecisionStore, CatalogEventStore, CatalogIngestRunStore,
 )
 from metatron.storage.migrate import migrate_legacy_db
 
@@ -543,7 +543,7 @@ catalog = Catalog(settings.db_path)
 migrate_legacy_db("metatron.db", catalog)
 
 if store is None:
-    store = CatalogPriorStore(catalog)
+    store = CatalogDecisionStore(catalog)
 event_store = event_store or CatalogEventStore(catalog)
 run_store = run_store or CatalogIngestRunStore(catalog)
 ```
@@ -556,7 +556,7 @@ Then simplify the call sites to pass `event_store` / `run_store` directly (they 
 
 - [ ] **Step 6 — full suite** `uv run -m pytest -q`. Fix any test that hard-coded a single `metatron.db` path; tests that inject `store=`/`event_store=` keep working since `main()` honors injected stores.
 
-- [ ] **Step 7 — manual smoke** (no API key needed): build a catalog with two repos in a temp dir, run `uv run metatron --db <tmp> candidates list --repo <id>` and `serve` handshake; confirm only that repo's priors appear.
+- [ ] **Step 7 — manual smoke** (no API key needed): build a catalog with two repos in a temp dir, run `uv run metatron --db <tmp> candidates list --repo <id>` and `serve` handshake; confirm only that repo's decisions appear.
 
 - [ ] **Step 8 — commit:**
 
@@ -576,21 +576,21 @@ git commit -m "cli: route all commands through the per-repo catalog (+ --db, mig
 - [ ] **Step 1 — failing test** (`tests/test_cli_export.py`):
 
 ```python
-from metatron.storage.catalog import Catalog, CatalogPriorStore
+from metatron.storage.catalog import Catalog, CatalogDecisionStore
 from metatron.cli import _cmd_export
-from metatron.models import Origin, Prior, Status
+from metatron.models import Origin, Decision, Status
 
 
 def test_export_copies_repo_file_and_is_openable_single_file(tmp_path, capsys):
     cat = Catalog(str(tmp_path / "data"))
-    CatalogPriorStore(cat).add(Prior(repo="acme/app", pattern="ship me", scope="a",
+    CatalogDecisionStore(cat).add(Decision(repo="acme/app", pattern="ship me", scope="a",
                                      rationale="r", origin=Origin.BOOTSTRAP,
                                      status=Status.CANONICAL))
     out = tmp_path / "app.db"
     rc = _cmd_export(cat, repo="acme/app", out=str(out), out_stream=capsys)  # see step 3 sig
     assert rc == 0 and out.exists()
-    # opens in single-file mode and serves the same prior
-    recip = CatalogPriorStore(Catalog(str(out)))
+    # opens in single-file mode and serves the same decision
+    recip = CatalogDecisionStore(Catalog(str(out)))
     assert recip.list_repos() == ["acme/app"]
     assert [p.pattern for p in recip.list(repo="acme/app")] == ["ship me"]
 ```

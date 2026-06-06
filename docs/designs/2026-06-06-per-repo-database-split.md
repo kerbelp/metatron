@@ -2,7 +2,7 @@
 
 - **Date:** 2026-06-06
 - **Status:** proposed (awaiting owner review)
-- **Motivation:** make a single repo's priors a self-contained, hand-off-able
+- **Motivation:** make a single repo's decisions a self-contained, hand-off-able
   artifact, so someone who doesn't want to set up MCP can be given one `.db` file
   and run `metatron` against it locally.
 
@@ -20,20 +20,20 @@ repos**, exactly as they do today.
 
 - **No Postgres, no multi-tenant, no auth, no hosted app.** This stays a single-user,
   local, SQLite-behind-the-interface system (CLAUDE.md scope discipline). Per-repo
-  files are still SQLite behind the existing `PriorStore`/`EventStore` interfaces.
+  files are still SQLite behind the existing `DecisionStore`/`EventStore` interfaces.
 - **No portable export format (Markdown/JSON) in this design.** The owner chose the
   "install metatron, point at file" hand-off model; the deliverable is the raw `.db`.
   A text export can be added later if a no-install path is wanted.
 - **No change to the curation invariant.** Nothing here promotes, demotes, or
-  auto-mutates priors across the canonical boundary.
+  auto-mutates decisions across the canonical boundary.
 
 ## Background: how storage works today
 
 - `metatron/config.py`: `Settings.db_path` (default `metatron.db`), overridable via
   `METATRON_DB` env or `metatron.toml`. One file path.
-- `metatron/storage/sqlite.py`: `SQLitePriorStore`, `SQLiteEventStore`,
+- `metatron/storage/sqlite.py`: `SQLiteDecisionStore`, `SQLiteEventStore`,
   `SQLiteIngestRunStore` each open that one path. Every table carries a `repo` column;
-  reads filter by it. `list_repos()` is `SELECT DISTINCT repo FROM priors`.
+  reads filter by it. `list_repos()` is `SELECT DISTINCT repo FROM decisions`.
 - `metatron/cli.py`: `_resolve_repo(explicit, store, settings)` picks the repo a
   command acts on (precedence: `--repo` > `METATRON_REPO` > persisted default >
   cwd-identity-if-in-store > sole repo > cwd-identity-if-store-empty; raises only when
@@ -67,7 +67,7 @@ remote. Consequences the design must respect:
 
 ### 1. The per-repo file is the unit
 
-Each repo gets one SQLite file containing all of its data — `priors`, `events`,
+Each repo gets one SQLite file containing all of its data — `decisions`, `events`,
 `ingest_runs` — plus one new table:
 
 ```sql
@@ -114,7 +114,7 @@ one repo and selects it with no flags.
 ### 3. Wiring: callers barely change
 
 - Add `open_repo(settings, repo_id) -> RepoStores` (a thin helper over the catalog)
-  and replace the scattered `SQLitePriorStore(settings.db_path)` construction in
+  and replace the scattered `SQLiteDecisionStore(settings.db_path)` construction in
   `cli.py` and the MCP `serve` path.
 - `_resolve_repo(...)` swaps `store.list_repos()` → `catalog.list_repos()`. Its
   precedence logic is otherwise unchanged. (Signature shifts from taking a `store` to
@@ -122,7 +122,7 @@ one repo and selects it with no flags.
 - The MCP server already takes `(store, repo, event_store)` — `serve` resolves the repo,
   opens its file via the catalog, and passes those stores in. Smallest change of all.
 - The local UI repo picker reads `catalog.list_repos()`; selecting a repo opens its file.
-- "Get by id" methods (`get(prior_id)`, `set_status`, …) stay simple: the store is
+- "Get by id" methods (`get(decision_id)`, `set_status`, …) stay simple: the store is
   already scoped to the resolved repo's file, so there is **no cross-file id search**.
 
 ### 4. Auto-split migration (one-time, on upgrade)
@@ -131,7 +131,7 @@ On first catalog use, if a legacy single `metatron.db` exists (in the cwd / at t
 `db_path`) and the target `.metatron/` is not yet populated:
 
 1. For each repo in the old DB, create its per-repo file and copy that repo's
-   `priors` / `events` / `ingest_runs` across **via the stores** (read filtered by repo,
+   `decisions` / `events` / `ingest_runs` across **via the stores** (read filtered by repo,
    write into the new file) — not raw SQL, so it stays schema-safe — and write
    `repo_meta`.
 2. Archive the old file → `metatron.db.migrated-2026-06-06`. The archive's existence is
@@ -171,13 +171,13 @@ Recipient flow: `metatron --db received.db ui` (or `serve`, `candidates`, …).
   (raises with guidance), cwd-identity-in-catalog — port the existing tests to the
   catalog.
 - **Migration:** legacy DB with two repos → two per-repo files with correctly
-  partitioned `priors`/`events`/`ingest_runs`; archive created; idempotent (second run
+  partitioned `decisions`/`events`/`ingest_runs`; archive created; idempotent (second run
   is a no-op); interrupted-then-rerun still converges.
 - **End-to-end:** ingest two repos → two files exist; `serve` repo A sees only A's
-  priors; `list_repos` shows both; copy A's file to a temp path, open in single-file
+  decisions; `list_repos` shows both; copy A's file to a temp path, open in single-file
   mode, `serve` answers tool calls.
 - **Export:** `export --repo <id>` yields a file that opens cleanly in single-file mode and
-  serves the same priors; output is vacuumed.
+  serves the same decisions; output is vacuumed.
 
 ## Build order (small PRs, each with tests)
 

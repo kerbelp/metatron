@@ -8,9 +8,9 @@
 ## Goal
 
 Let a coding agent, after using Metatron on a task, tell us **how helpful the
-served priors were** and — most valuably — **what convention was missing**. Route
+served decisions were** and — most valuably — **what convention was missing**. Route
 that signal into the existing curation queue so a human can periodically ("fine-tune
-once in a while") turn real gaps into canonical priors.
+once in a while") turn real gaps into canonical decisions.
 
 Motivated by real feedback (2026-06-01): an agent's most decision-relevant
 knowledge — "the credit path must mirror the `order_created` webhook publish chain;
@@ -28,7 +28,7 @@ and ranker.
 The core principle stands: **nothing self-promotes; a human curates everything into
 the canonical set.**
 
-- **No auto-canonicalization.** Feedback never creates a *canonical* prior. "What was
+- **No auto-canonicalization.** Feedback never creates a *canonical* decision. "What was
   missing" becomes a **candidate** in the normal queue.
 - **Ratings are advisory.** Helpful/unhelpful counts are shown to the curator (like
   the triage verdicts); they do **not** auto-adjust confidence, auto-demote, or
@@ -40,9 +40,9 @@ the canonical set.**
 ## The loop
 
 ```
-serve priors → agent works → agent calls submit_feedback
-   ├─ ratings (which served priors helped / were noise)  → advisory FEEDBACK event
-   └─ what_was_missing (free text)                        → CANDIDATE prior (agent_feedback)
+serve decisions → agent works → agent calls submit_feedback
+   ├─ ratings (which served decisions helped / were noise)  → advisory FEEDBACK event
+   └─ what_was_missing (free text)                        → CANDIDATE decision (agent_feedback)
                                                               → human curates → canonical
 ```
 
@@ -52,8 +52,8 @@ serve priors → agent works → agent calls submit_feedback
 
 ```
 submit_feedback(
-    query_id: str | "",          # the token Metatron returned with the priors
-    helpful: list[int] = [],     # 1-based indices of served priors that helped
+    query_id: str | "",          # the token Metatron returned with the decisions
+    helpful: list[int] = [],     # 1-based indices of served decisions that helped
     unhelpful: list[int] = [],   # 1-based indices that were noise
     what_was_missing: str = "",  # the convention Metatron should have had
     missing_scope: str = "",     # optional scope hint for the candidate
@@ -62,10 +62,10 @@ submit_feedback(
 
 - `helpful`/`unhelpful` are **small integer indices**, not UUIDs. We learned from the
   triage bug (`memory/...`) that models mangle UUIDs; indices + a single `query_id`
-  token are robust. Indices are resolved to real prior ids **locally**, against the
+  token are robust. Indices are resolved to real decision ids **locally**, against the
   stored QUERY event; out-of-range indices are ignored, not fatal.
 - `what_was_missing` (if present) creates a candidate via the existing
-  `submit_candidate_learning` path with `origin = agent_feedback`, scope =
+  `submit_candidate_decision` path with `origin = agent_feedback`, scope =
   `missing_scope` or the query's area, `confidence = high` (flags it for prompt
   curation — high confidence ≠ canonical; it is still a candidate).
 - `query_id` is **optional**: a pure gap report with an explicit `missing_scope` is
@@ -73,7 +73,7 @@ submit_feedback(
 
 ### 2. Expose a query token + indices in served output
 
-`get_priors_for_context` today returns text with no handles. We add:
+`get_decisions_for_context` today returns text with no handles. We add:
 
 ```
 metatron:query 7f3c… · rev 7ed9eea (reference the query id in submit_feedback)
@@ -82,11 +82,11 @@ metatron:query 7f3c… · rev 7ed9eea (reference the query id in submit_feedback
 ```
 
 The `query_id` is the id of the QUERY event we already record (it stores
-`prior_ids` in rank order). `submit_feedback` looks the event up and maps
-`helpful=[1]` → `prior_ids[0]`.
+`decision_ids` in rank order). `submit_feedback` looks the event up and maps
+`helpful=[1]` → `decision_ids[0]`.
 
-**Build revision on every response.** All MCP responses (`get_priors_for_context`,
-`submit_feedback`, `submit_candidate_learning`) include `rev <hash>` from
+**Build revision on every response.** All MCP responses (`get_decisions_for_context`,
+`submit_feedback`, `submit_candidate_decision`) include `rev <hash>` from
 `metatron.version`. This makes the serving build visible to the agent/curator, and —
 combined with the event stamping below — lets us track quality across builds.
 
@@ -101,14 +101,14 @@ combined with the event stamping below — lets us track quality across builds.
     `metatron.version.version_string()` (the build is constant for a process, so the
     git lookup is cached — no subprocess per event).
   - `query_ref: str` — the QUERY event this responds to.
-  - `helpful_prior_ids: list[str]`, `unhelpful_prior_ids: list[str]` (JSON).
+  - `helpful_decision_ids: list[str]`, `unhelpful_decision_ids: list[str]` (JSON).
   - `missing: str` — the gap text (also copied onto the created candidate's rationale).
 - `EventStore` gains `get(event_id)` so `submit_feedback` can resolve indices.
-- `Prior` gains `created_version: str` — the build that **created/extracted** the
-  prior (the code-side complement to the existing `model` field, which records the
+- `Decision` gains `created_version: str` — the build that **created/extracted** the
+  decision (the code-side complement to the existing `model` field, which records the
   LLM). Stamped at creation from the cached `version_string()`, immutable thereafter
   (re-ingest produces new candidates, so it never churns). This is the *extraction*
-  axis: `Event.version` measures serving quality over builds, `Prior.created_version`
+  axis: `Event.version` measures serving quality over builds, `Decision.created_version`
   measures extraction quality over builds (e.g. curation reject-rate by extractor
   build). Migrated via `_ensure_column`.
 
@@ -119,20 +119,20 @@ No new tables; feedback is a usage event in the existing `events` table.
 - **Gap candidates:** appear in the existing Candidates queue (CLI `candidates list`,
   UI Candidates tab) with an `agent_feedback` origin badge, `confidence=high` so they
   sort to the top and are caught by `triage`. Curated exactly like any candidate.
-- **Advisory ratings:** the Observability tab gains a per-canonical-prior tally —
+- **Advisory ratings:** the Observability tab gains a per-canonical-decision tally —
   "served N×, helpful H, noise X" — so during a curation pass the human can spot a
-  consistently-noisy prior to **review** (not auto-demote) or a consistently-helpful
+  consistently-noisy decision to **review** (not auto-demote) or a consistently-helpful
   one to keep. Mirrors the triage "advisory, human decides" model.
 - **Quality over time:** because every event carries `version`, the helpful-rate can
   be grouped by build — the basis for "did this change actually improve serving?"
-  (Phase-4 surfaces the per-prior tally; a build-over-build view can follow once
+  (Phase-4 surfaces the per-decision tally; a build-over-build view can follow once
   there is enough feedback to be meaningful.)
-- **Feedback vs ingest (origin breakdown):** since `Prior.origin` distinguishes
+- **Feedback vs ingest (origin breakdown):** since `Decision.origin` distinguishes
   `bootstrap` (ingest) from `agent_feedback` (feedback) and `agent_submitted`,
   Phase 4 shows, per origin, the **curation accept-rate**
   (`canonical / (canonical + rejected)`) and the **helpful-rate** — directly
-  answering "are feedback-born priors better than ingest-born ones?" This needs
-  `origin` added as a `PriorStore.list/count` filter dimension (alongside the
+  answering "are feedback-born decisions better than ingest-born ones?" This needs
+  `origin` added as a `DecisionStore.list/count` filter dimension (alongside the
   existing `model`/`triage` filters) — a small, additive change folded into Phase 4.
 
 ## Agent guidance
@@ -141,7 +141,7 @@ Update the onboarding so agents actually call it (capture is worthless if unused
 
 - CLAUDE.md block + `metatron_reminder.txt` (the UserPromptSubmit hook): "After a
   task where you consulted Metatron, call `submit_feedback` — reference the query
-  token, mark which priors helped, and **state any convention Metatron should have
+  token, mark which decisions helped, and **state any convention Metatron should have
   known but didn't**."
 - `metatron_setup.sh` writes this guidance (additive/idempotent, as today).
 
@@ -155,13 +155,13 @@ gap candidates to the triage judge) — and that would be its own change.
 
 ## Testing strategy (TDD throughout)
 
-- Index→prior-id resolution: correct mapping, out-of-range ignored, missing query_id
+- Index→decision-id resolution: correct mapping, out-of-range ignored, missing query_id
   tolerated.
 - `submit_feedback` with `what_was_missing` creates exactly one `candidate`
   (`agent_feedback`, never canonical); status stays `candidate`.
 - FEEDBACK event recorded with the right helpful/unhelpful ids.
 - Served output includes a stable query token and 1-based indices.
-- Advisory tally aggregates feedback events per prior; asserts no status/confidence
+- Advisory tally aggregates feedback events per decision; asserts no status/confidence
   mutation occurs.
 - Every recorded event carries a non-empty `version`; the served response text
   includes `rev <hash>`; the revision lookup is cached (one git call per process).
@@ -171,9 +171,9 @@ gap candidates to the triage judge) — and that would be its own change.
 1. **Model + storage:** `Origin.AGENT_FEEDBACK`, `EventKind.FEEDBACK`, `Event` fields,
    sqlite `_ensure_column` migrations, `EventStore.get`.
 2. **Service:** `submit_feedback` (index mapping, candidate creation) + query-token /
-   indices in `get_priors_for_context` output.
+   indices in `get_decisions_for_context` output.
 3. **MCP tool:** register `submit_feedback` in the server; record the FEEDBACK event.
-4. **Curation surface:** origin badge on candidates + advisory per-prior tally in the
+4. **Curation surface:** origin badge on candidates + advisory per-decision tally in the
    Observability tab.
 5. **Guidance:** CLAUDE.md block + reminder + `metatron_setup.sh`.
 

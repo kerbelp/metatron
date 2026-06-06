@@ -209,7 +209,7 @@ function Spark({ data, w = 260, h = 64, color = "var(--teal)", fill = true, stro
 
 /* ============================================================
    KNOWLEDGE FLOW — the signature viz. A central Metatron core
-   pulses priors outward along curved conduits into an agent node.
+   pulses decisions outward along curved conduits into an agent node.
    ============================================================ */
 function KnowledgeFlow({ count = 8, active = true, height = 220 }) {
   const id = useMemo(() => "kf" + Math.random().toString(36).slice(2, 7), []);
@@ -232,7 +232,7 @@ function KnowledgeFlow({ count = 8, active = true, height = 220 }) {
       </defs>
       {/* conduits */}
       {conduits.map((d, i) => <path key={i} d={d} fill="none" stroke={`url(#${id}wire)`} strokeWidth="1.2" className={active ? "flow-line" : ""} style={{ animationDelay: `${i * -1.7}s` }} />)}
-      {/* travelling prior packets */}
+      {/* travelling decision packets */}
       {active && conduits.map((d, i) => (
         <circle key={"p" + i} r="3.4" fill="var(--emerald)" filter={`url(#${id}glow)`}>
           <animateMotion dur={`${2.6 + i * 0.4}s`} repeatCount="indefinite" path={d} begin={`${i * 0.5}s`} />
@@ -252,7 +252,7 @@ function KnowledgeFlow({ count = 8, active = true, height = 220 }) {
         <g transform={`translate(${core[0] - 36}, ${core[1] - 36})`}><MetatronEmblem size={72} /></g>
         <text x={core[0]} y={core[1] + 56} textAnchor="middle" fill="var(--teal)" style={{ font: "600 11px var(--mono)", letterSpacing: ".12em" }}>METATRON</text>
       </g>
-      <text x={(core[0] + agent[0]) / 2} y={28} textAnchor="middle" fill="var(--dim)" style={{ font: "600 10px var(--mono)", letterSpacing: ".24em" }}>{count} PRIORS SERVED →</text>
+      <text x={(core[0] + agent[0]) / 2} y={28} textAnchor="middle" fill="var(--dim)" style={{ font: "600 10px var(--mono)", letterSpacing: ".24em" }}>{count} DECISIONS SERVED →</text>
     </svg>
   );
 }

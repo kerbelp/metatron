@@ -2,11 +2,11 @@
 
 Kept independent of the MCP server so it can be tested directly. Two operations:
 
-- ``get_priors_for_context`` — serve **canonical only** priors relevant to an
+- ``get_decisions_for_context`` — serve **canonical only** decisions relevant to an
   area, ranked by keyword overlap with the task, confidence, and scope
   specificity (resolved decisions: canonical-only serving; scope-match + keyword
   ranking, embeddings deferred).
-- ``submit_candidate_learning`` — accept a prior from an agent and store it as an
+- ``submit_candidate_decision`` — accept a decision from an agent and store it as an
   uncurated ``candidate`` of ``agent_submitted`` origin. It never auto-promotes.
 """
 
@@ -16,15 +16,15 @@ import math
 import re
 
 from metatron.events import Event, EventKind
-from metatron.models import Confidence, Origin, Prior, SourceRef, Status
-from metatron.storage.base import PriorStore
+from metatron.models import Confidence, Origin, Decision, SourceRef, Status
+from metatron.storage.base import DecisionStore
 
 _CONFIDENCE_WEIGHT = {Confidence.LOW: 1, Confidence.MEDIUM: 2, Confidence.HIGH: 3}
 _STOPWORDS = {
     "the", "and", "for", "with", "that", "this", "from", "into", "use", "using",
     "add", "should", "when", "your", "you", "are", "but", "not", "all", "any",
-    # Instruction/filler language: common in task phrasing, absent from priors, so
-    # idf (computed over priors) wrongly rates it rare/high. Stop it so keyword
+    # Instruction/filler language: common in task phrasing, absent from decisions, so
+    # idf (computed over decisions) wrongly rates it rare/high. Stop it so keyword
     # relevance reflects domain terms, not "change the X to Y instead" boilerplate.
     "change", "find", "its", "only", "instead", "free", "make", "update", "new",
     "set", "get", "via", "per", "each", "one", "want", "need", "like", "also",
@@ -33,66 +33,66 @@ _STOPWORDS = {
 }
 
 # Ranking weights. Scope and keyword evidence are combined for ordering *within* a
-# tier; the tiering itself (see get_priors_for_context) decides admission, so scope
+# tier; the tiering itself (see get_decisions_for_context) decides admission, so scope
 # no longer absolutely dominates — a strong topical match outranks generic same-scope.
 _SCOPE_SCALE = 10.0
 _CONF_SCALE = 0.1
 # Helpfulness weight. Agent ratings (see metatron/feedback_score.py) arrive as a
 # centered signal in roughly [-1, 1]; this scales it into the within-tier sort. At
-# 2.0 a loved prior gets a nudge comparable to a couple of keyword-idf hits — enough
+# 2.0 a loved decision gets a nudge comparable to a couple of keyword-idf hits — enough
 # to reorder peers, never enough to cross a tier (admission is decided before this
 # term is applied), so helpfulness can't override the scope/keyword relevance gate.
 _HELP_SCALE = 2.0
-# Evidence floor for priors with no scope relationship to the area (global/sibling):
+# Evidence floor for decisions with no scope relationship to the area (global/sibling):
 # admit only on real lexical evidence — at least this many distinct meaningful token
 # overlaps, OR a single hit on a term rare enough to clear _idf_evidence_threshold.
 # Stops a lone common token (e.g. "write") from admitting off-topic filler.
 _MIN_KEYWORD_HITS = 2
 
 # Curated synonym groups (P1b). Members of a group canonicalize to one token so a
-# task's word matches a prior's synonym — closing the lexical vocabulary gap (a task
-# says "href", the prior says "url"/"link"). Keep this tight and high-confidence:
+# task's word matches a decision's synonym — closing the lexical vocabulary gap (a task
+# says "href", the decision says "url"/"link"). Keep this tight and high-confidence:
 # over-broad groups manufacture false matches. Stemming is applied to members at load.
 _ALIAS_GROUPS = (
     # hyperlink target — kept narrow on purpose. "route"/"anchor"/"slug" are a
     # *different* concept (server routing, TOC anchors); folding them in here made
-    # generic routing/anchor priors spuriously match href tasks and crowd out the
-    # genuinely relevant cross-scope priors.
+    # generic routing/anchor decisions spuriously match href tasks and crowd out the
+    # genuinely relevant cross-scope decisions.
     ("href", "url", "urls", "link", "links", "hyperlink"),
     # authentication / authorization
     ("auth", "authn", "authentication", "authenticate", "authorize", "authorization", "login", "signin", "clerk", "session"),
 )
 
 
-def get_priors_for_context(
-    store: PriorStore,
+def get_decisions_for_context(
+    store: DecisionStore,
     repo: str,
     file_path_or_area: str,
     task_description: str,
     *,
     limit: int = 8,
     helpfulness: dict[str, float] | None = None,
-) -> list[Prior]:
+) -> list[Decision]:
     # Two relevance signals, neither a hard gate:
-    #   1. scope — how specifically the prior's path relates to the area(s) the
+    #   1. scope — how specifically the decision's path relates to the area(s) the
     #      agent named (exact/inside > broad ancestor > sibling/none), so naming a
-    #      precise sub-path surfaces the prior scoped there rather than generic
+    #      precise sub-path surfaces the decision scoped there rather than generic
     #      advice for its parent directory.
     #   2. keywords — overlap with the *task description*, weighted by inverse
-    #      document frequency across this repo's canonical priors, so rare domain
+    #      document frequency across this repo's canonical decisions, so rare domain
     #      terms ("checkout", "webhook") count and boilerplate counts for ~nothing.
     # Area path segments (src, components, the dir name) are deliberately NOT used as
     # keywords — they're the scope signal, and as keywords they only inflate every
-    # cross-scope prior with noise. A prior with no scope relationship still surfaces
+    # cross-scope decision with noise. A decision with no scope relationship still surfaces
     # on a real task keyword match; a lone corpus-common overlap carries almost none.
-    priors = store.list(repo=repo, status=Status.CANONICAL)
-    idf = _build_idf(priors)
+    decisions = store.list(repo=repo, status=Status.CANONICAL)
+    idf = _build_idf(decisions)
     area_paths = _area_paths(file_path_or_area)
     query_tokens = _tokens(task_description)
     threshold = _idf_evidence_threshold(idf)
     conf = lambda p: _CONFIDENCE_WEIGHT[p.confidence] * _CONF_SCALE
     # Agent-rated helpfulness, applied only to the *within-tier* sort score below.
-    # Tier admission is decided before this term, so a loved prior can outrank its
+    # Tier admission is decided before this term, so a loved decision can outrank its
     # peers but never jump the scope/keyword gate into a higher tier.
     help_score = helpfulness or {}
     helpful = lambda p: _HELP_SCALE * help_score.get(p.id, 0.0)
@@ -100,39 +100,39 @@ def get_priors_for_context(
     # Admission by tier, filled in priority order up to `limit`. This replaces the old
     # "scope*10 swamps keywords, then a fixed 3 reserved slots" scheme, which both
     # admitted single-weak-keyword filler and capped real cross-scope recall.
-    on_scope_topical: list[tuple[Prior, float]] = []   # A: in/under the area AND task-relevant
-    cross_scope_topical: list[tuple[Prior, float]] = []  # B: elsewhere but strong lexical evidence
-    on_scope_generic: list[tuple[Prior, float]] = []   # C: in/under the area, no task keyword
-    for prior in priors:
-        scope = _scope_weight(prior.scope, area_paths)
-        hits = _tokens(f"{prior.pattern} {prior.rationale}") & query_tokens
+    on_scope_topical: list[tuple[Decision, float]] = []   # A: in/under the area AND task-relevant
+    cross_scope_topical: list[tuple[Decision, float]] = []  # B: elsewhere but strong lexical evidence
+    on_scope_generic: list[tuple[Decision, float]] = []   # C: in/under the area, no task keyword
+    for decision in decisions:
+        scope = _scope_weight(decision.scope, area_paths)
+        hits = _tokens(f"{decision.pattern} {decision.rationale}") & query_tokens
         kw = sum(idf.get(tok, 0.0) for tok in hits)
         # The SAME evidence floor gates topical admission for both scopes. A same-scope
-        # prior counts as topical only if its keyword overlap is real (≥2 distinct hits,
+        # decision counts as topical only if its keyword overlap is real (≥2 distinct hits,
         # or one rare term); a lone common-word overlap ("review") is weak and drops to
         # the generic tier instead of pre-empting strong cross-scope evidence (P1).
         strong = _clears_evidence_floor(hits, idf, threshold)
         if scope > 0 and strong:
-            on_scope_topical.append((prior, scope * _SCOPE_SCALE + kw + conf(prior) + helpful(prior)))
+            on_scope_topical.append((decision, scope * _SCOPE_SCALE + kw + conf(decision) + helpful(decision)))
         elif scope > 0:
-            on_scope_generic.append((prior, scope * _SCOPE_SCALE + kw + conf(prior) + helpful(prior)))
+            on_scope_generic.append((decision, scope * _SCOPE_SCALE + kw + conf(decision) + helpful(decision)))
         elif strong:
-            cross_scope_topical.append((prior, kw + conf(prior) + helpful(prior)))
+            cross_scope_topical.append((decision, kw + conf(decision) + helpful(decision)))
         # else: no scope relationship and insufficient lexical evidence -> dropped
         #       (prefer returning nothing over plausible filler).
 
-    picked: list[Prior] = []
+    picked: list[Decision] = []
     for tier in (on_scope_topical, cross_scope_topical, on_scope_generic):
         tier.sort(key=lambda ps: ps[1], reverse=True)
-        for prior, _ in tier:
+        for decision, _ in tier:
             if len(picked) >= limit:
                 return picked
-            picked.append(prior)
+            picked.append(decision)
     return picked
 
 
-def submit_candidate_learning(
-    store: PriorStore,
+def submit_candidate_decision(
+    store: DecisionStore,
     *,
     repo: str,
     pattern: str,
@@ -140,8 +140,8 @@ def submit_candidate_learning(
     rationale: str,
     confidence: str | Confidence = Confidence.MEDIUM,
     source_refs: list[SourceRef] | None = None,
-) -> Prior:
-    prior = Prior(
+) -> Decision:
+    decision = Decision(
         repo=repo,
         pattern=pattern,
         scope=scope,
@@ -150,27 +150,27 @@ def submit_candidate_learning(
         origin=Origin.AGENT_SUBMITTED,
         source_refs=source_refs or [],
     )
-    return store.add(prior)
+    return store.add(decision)
 
 
-def format_priors(
-    priors: list[Prior],
+def format_decisions(
+    decisions: list[Decision],
     *,
     query_id: str | None = None,
     version: str | None = None,
 ) -> str:
-    """Render priors as compact structured context for an agent.
+    """Render decisions as compact structured context for an agent.
 
     When ``query_id``/``version`` are given, the output carries a header naming the
     query token (to reference in ``submit_feedback``) and the serving build, and the
-    priors are numbered ``[1]``.. so feedback can rate them by index — never by the
+    decisions are numbered ``[1]``.. so feedback can rate them by index — never by the
     UUIDs that models mangle.
     """
-    if not priors:
-        body = "No matching priors."
+    if not decisions:
+        body = "No matching decisions."
     else:
         blocks = []
-        for i, p in enumerate(priors, start=1):
+        for i, p in enumerate(decisions, start=1):
             blocks.append(
                 f"[{i}] [{p.confidence.value}] {p.pattern}\n"
                 f"  scope: {p.scope or '(global)'}\n"
@@ -188,7 +188,7 @@ def format_priors(
 
 
 def submit_feedback(
-    store: PriorStore,
+    store: DecisionStore,
     event_store,
     *,
     repo: str,
@@ -201,19 +201,19 @@ def submit_feedback(
 ) -> Event:
     """Capture agent feedback on a served query. Capture only — no candidate here.
 
-    Ratings are given as 1-based indices into the priors the named query served;
-    they are mapped to real prior ids locally (bogus indices ignored), so the agent
+    Ratings are given as 1-based indices into the decisions the named query served;
+    they are mapped to real decision ids locally (bogus indices ignored), so the agent
     never echoes a UUID. ``ratings`` is a graded ``{index: 1..10}`` map; out-of-range
     indices and out-of-band scores are dropped. When ``ratings`` is given without
     explicit ``helpful``/``unhelpful``, the binary lists are derived from it (≥7 →
     helpful, ≤4 → noise) so existing tallies keep working. ``what_was_missing`` is
     recorded as the gap text (with the scope hint in ``area``) for the human-gated
-    Opus refiner to later reshape into *structured* candidate priors — nothing enters
+    Opus refiner to later reshape into *structured* candidate decisions — nothing enters
     the queue here. The graded scores feed serve-time ranking (see
-    :mod:`metatron.feedback_score`) but never mutate a prior's status. Returns the
+    :mod:`metatron.feedback_score`) but never mutate a decision's status. Returns the
     recorded FEEDBACK event.
     """
-    served = _served_prior_ids(event_store, query_id)
+    served = _served_decision_ids(event_store, query_id)
     resolved_ratings = _resolve_ratings(ratings or {}, served)
     helpful_ids = _resolve_indices(helpful, served)
     unhelpful_ids = _resolve_indices(unhelpful, served)
@@ -226,23 +226,23 @@ def submit_feedback(
             kind=EventKind.FEEDBACK,
             area=missing_scope,  # scope hint for the refiner
             query_ref=query_id,
-            helpful_prior_ids=helpful_ids,
-            unhelpful_prior_ids=unhelpful_ids,
+            helpful_decision_ids=helpful_ids,
+            unhelpful_decision_ids=unhelpful_ids,
             ratings=resolved_ratings,
             missing=what_was_missing.strip(),
         )
     )
 
 
-def _served_prior_ids(event_store, query_id: str) -> list[str]:
+def _served_decision_ids(event_store, query_id: str) -> list[str]:
     if not query_id:
         return []
     event = event_store.get(query_id)
-    return list(event.prior_ids) if event is not None else []
+    return list(event.decision_ids) if event is not None else []
 
 
 def _resolve_indices(indices, served: list[str]) -> list[str]:
-    """Map 1-based indices to served prior ids; out-of-range indices are ignored."""
+    """Map 1-based indices to served decision ids; out-of-range indices are ignored."""
     out = []
     for i in indices:
         if isinstance(i, int) and 1 <= i <= len(served):
@@ -251,9 +251,9 @@ def _resolve_indices(indices, served: list[str]) -> list[str]:
 
 
 def _resolve_ratings(ratings: dict, served: list[str]) -> dict[str, int]:
-    """Map a ``{index: score}`` rating map to ``{prior_id: score}``.
+    """Map a ``{index: score}`` rating map to ``{decision_id: score}``.
 
-    Keys are 1-based indices into the served priors (ints, or the string ints models
+    Keys are 1-based indices into the served decisions (ints, or the string ints models
     emit as JSON object keys). Scores must be integers in 1..10. Out-of-range indices
     and out-of-band scores are dropped — a bogus rating is simply ignored, never an
     error, and last write wins if an index repeats.
@@ -315,7 +315,7 @@ _CANONICAL_TOKEN: dict[str, str] = {
 # evidence), not just its split parts. camelCase already survives the splitter (no
 # separator); we capture the _ . - / joined forms and normalise every separator to "_"
 # so a kebab event name ("order-created") and its code form ("order_created") unify,
-# and a route the task names ("/blog/write") matches a prior that references it.
+# and a route the task names ("/blog/write") matches a decision that references it.
 _CODE_LITERAL_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_./][A-Za-z0-9]+)+")
 _LITERAL_SEP_RE = re.compile(r"[-./]")
 
@@ -333,17 +333,17 @@ def _tokens(text: str) -> set[str]:
     return words | _code_literals(text)
 
 
-def _build_idf(priors: list[Prior]) -> dict[str, float]:
-    """Inverse document frequency for tokens across the served priors.
+def _build_idf(decisions: list[Decision]) -> dict[str, float]:
+    """Inverse document frequency for tokens across the served decisions.
 
-    A token in nearly every prior (boilerplate like "commit"/"shared") gets an idf
+    A token in nearly every decision (boilerplate like "commit"/"shared") gets an idf
     near 0; a rare domain term gets a high idf. Computed over the same set being
     ranked, so it is self-tuning per repo with no hand-maintained stopword list.
     """
-    n = len(priors)
+    n = len(decisions)
     df: dict[str, int] = {}
-    for prior in priors:
-        for tok in _tokens(f"{prior.pattern} {prior.rationale}"):
+    for decision in decisions:
+        for tok in _tokens(f"{decision.pattern} {decision.rationale}"):
             df[tok] = df.get(tok, 0) + 1
     return {tok: math.log((n + 1) / (count + 1)) for tok, count in df.items()}
 
@@ -360,9 +360,9 @@ def _area_paths(area: str) -> list[str]:
 
 
 def _idf_evidence_threshold(idf: dict[str, float]) -> float:
-    """idf a single keyword hit must clear to admit an out-of-scope prior on its own.
+    """idf a single keyword hit must clear to admit an out-of-scope decision on its own.
 
-    A term appearing in only one or two priors (≈ max idf, minus log 1.5 for the df=2
+    A term appearing in only one or two decisions (≈ max idf, minus log 1.5 for the df=2
     case) is rare/domain-specific enough that one hit is real evidence ("webhook",
     "ledger"); a common verb like "write" sits well below it. Self-tuning off the
     corpus's own idf — no hand-set constant, and robust to the skewed idf distribution
@@ -376,33 +376,33 @@ def _idf_evidence_threshold(idf: dict[str, float]) -> float:
 def _clears_evidence_floor(
     hits: set[str], idf: dict[str, float], threshold: float
 ) -> bool:
-    """Whether a prior with no scope relationship has enough lexical evidence.
+    """Whether a decision with no scope relationship has enough lexical evidence.
 
     Needs several distinct task-keyword overlaps, or one overlap on a rare term —
-    so a single common token can't pull off-topic priors into the result.
+    so a single common token can't pull off-topic decisions into the result.
     """
     if len(hits) >= _MIN_KEYWORD_HITS:
         return True
     return any(idf.get(tok, 0.0) >= threshold for tok in hits)
 
 
-def _scope_weight(prior_scope: str, area_paths: list[str]) -> float:
-    """Best scope relationship between a prior and any of the queried paths.
+def _scope_weight(decision_scope: str, area_paths: list[str]) -> float:
+    """Best scope relationship between a decision and any of the queried paths.
 
-    Rewards specificity: an exact or deeper match (the prior is the area, or sits
+    Rewards specificity: an exact or deeper match (the decision is the area, or sits
     *inside* it) outweighs a broad ancestor that merely contains the area, and
     siblings (sharing only a parent dir) score nothing.
     """
-    if prior_scope == "":
-        # Global priors get NO scope credit — applying "everywhere" is not evidence
+    if decision_scope == "":
+        # Global decisions get NO scope credit — applying "everywhere" is not evidence
         # of relevance to *this* task. With scope 0 they fall to the cross-scope tier
         # and must clear the lexical evidence floor, so unrelated doctrine isn't filler.
         return 0.0
-    return max((_pair_scope(prior_scope, area) for area in area_paths), default=0.0)
+    return max((_pair_scope(decision_scope, area) for area in area_paths), default=0.0)
 
 
-def _pair_scope(prior_scope: str, area: str) -> float:
-    scope = prior_scope.strip("/").split("/")
+def _pair_scope(decision_scope: str, area: str) -> float:
+    scope = decision_scope.strip("/").split("/")
     target = area.strip("/").split("/")
     shared = 0
     for a, b in zip(scope, target):
@@ -413,12 +413,12 @@ def _pair_scope(prior_scope: str, area: str) -> float:
         return 0.0
     if shared == len(scope) == len(target):  # exact match — most specific
         return 3.0 + shared
-    if shared == len(target):  # prior sits inside the queried area — specific
+    if shared == len(target):  # decision sits inside the queried area — specific
         return 2.0 + shared
-    if shared == len(scope):  # prior is an ancestor of the area
-        # Weight by how *close* the ancestor is: a prior scoped src/db is a far
+    if shared == len(scope):  # decision is an ancestor of the area
+        # Weight by how *close* the ancestor is: a decision scoped src/db is a far
         # better match for src/db/db.ts than one scoped src. Flattening every
-        # ancestor to the same weight let generic top-level priors crowd out the
-        # prior whose scope is the file's own directory.
+        # ancestor to the same weight let generic top-level decisions crowd out the
+        # decision whose scope is the file's own directory.
         return float(shared)
     return 0.0  # siblings: share a parent dir but diverge — not relevant

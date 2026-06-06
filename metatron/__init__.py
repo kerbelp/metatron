@@ -1,1 +1,1 @@
-"""Metatron — structured priors for coding agents."""
+"""Metatron — structured decisions for coding agents."""

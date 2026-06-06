@@ -1,1 +1,1 @@
-"""MCP server exposing priors to coding agents."""
+"""MCP server exposing decisions to coding agents."""

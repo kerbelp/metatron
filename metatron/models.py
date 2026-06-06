@@ -1,7 +1,7 @@
-"""Structured records for priors.
+"""Structured records for decisions.
 
-A *prior* is a captured implementation decision — a prescriptive pattern, the
-scope it applies to, why it holds, and where it came from. Priors are always
+A *decision* is a captured implementation decision — a prescriptive pattern, the
+scope it applies to, why it holds, and where it came from. Decisions are always
 structured records (never prose) and always start life as ``candidate``: nothing
 becomes ``canonical`` without human curation.
 """
@@ -54,7 +54,7 @@ def _now() -> datetime:
 
 
 class SourceRef(BaseModel):
-    """Provenance for a prior: a file path or a commit SHA, plus context."""
+    """Provenance for a decision: a file path or a commit SHA, plus context."""
 
     kind: SourceRefKind
     ref: str
@@ -71,13 +71,13 @@ class IngestRun(BaseModel):
     files_parsed: int = 0
     commits_read: int = 0
     scopes: int = 0
-    priors_created: int = 0
+    decisions_created: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
 
 
-class Prior(BaseModel):
-    """A single structured prior."""
+class Decision(BaseModel):
+    """A single structured decision."""
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     repo: str  # stable repo identity (normalized git remote) — see repo_identity
@@ -86,7 +86,7 @@ class Prior(BaseModel):
     rationale: str
     origin: Origin
     confidence: Confidence = Confidence.MEDIUM
-    model: str = ""  # the model that extracted it ("" for agent-submitted priors)
+    model: str = ""  # the model that extracted it ("" for agent-submitted decisions)
     created_version: str = Field(default_factory=current_version)  # build that created it
     source_refs: list[SourceRef] = Field(default_factory=list)
     status: Status = Status.CANDIDATE

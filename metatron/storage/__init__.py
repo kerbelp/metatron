@@ -1,1 +1,1 @@
-"""Storage layer for priors."""
+"""Storage layer for decisions."""

@@ -1,8 +1,8 @@
-"""Turn per-scope signals into candidate priors via an LLM provider.
+"""Turn per-scope signals into candidate decisions via an LLM provider.
 
 This is the LLM half of extraction. It renders the editable prompt from a
 ``ScopeSignals`` bundle, asks the provider for structured JSON, and validates the
-result into ``Prior`` records. Every prior produced here is a ``candidate`` of
+result into ``Decision`` records. Every decision produced here is a ``candidate`` of
 ``bootstrap`` origin — bootstrapping never promotes anything to canonical.
 """
 
@@ -13,14 +13,14 @@ import json
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
 from metatron.extraction.signals import ScopeSignals
-from metatron.models import Confidence, Origin, Prior, SourceRef, SourceRefKind
+from metatron.models import Confidence, Origin, Decision, SourceRef, SourceRefKind
 
 
 class ExtractionError(Exception):
-    """Raised when an LLM response cannot be parsed into priors."""
+    """Raised when an LLM response cannot be parsed into decisions."""
 
 
-class PriorExtractor:
+class DecisionExtractor:
     def __init__(
         self,
         provider: LLMProvider,
@@ -32,22 +32,22 @@ class PriorExtractor:
         self._repo = repo
         self._model = model
         self._template = template if template is not None else load_prompt(
-            "extract_priors"
+            "extract_decisions"
         )
 
-    def extract(self, signals: ScopeSignals) -> list[Prior]:
+    def extract(self, signals: ScopeSignals) -> list[Decision]:
         prompt = render(
             self._template,
             scope=signals.scope,
             signals=_format_signals(signals),
         )
         raw = self._provider.complete(prompt)
-        return [self._to_prior(item, signals) for item in _parse_json_array(raw)]
+        return [self._to_decision(item, signals) for item in _parse_json_array(raw)]
 
-    def _to_prior(self, item: dict, signals: ScopeSignals) -> Prior:
+    def _to_decision(self, item: dict, signals: ScopeSignals) -> Decision:
         if "pattern" not in item:
-            raise ExtractionError(f"prior missing 'pattern': {item!r}")
-        return Prior(
+            raise ExtractionError(f"decision missing 'pattern': {item!r}")
+        return Decision(
             repo=self._repo,
             pattern=item["pattern"],
             scope=item.get("scope") or signals.scope,

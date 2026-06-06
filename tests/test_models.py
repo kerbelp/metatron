@@ -1,16 +1,16 @@
-"""Tests for the Prior data model and its enums."""
+"""Tests for the Decision data model and its enums."""
 
 from metatron.models import (
     Confidence,
     Origin,
-    Prior,
+    Decision,
     SourceRef,
     SourceRefKind,
     Status,
 )
 
 
-def _minimal_prior(**overrides) -> Prior:
+def _minimal_decision(**overrides) -> Decision:
     fields = dict(
         repo="github.com/acme/app",
         pattern="Use the repository pattern for DB access",
@@ -19,43 +19,43 @@ def _minimal_prior(**overrides) -> Prior:
         origin=Origin.BOOTSTRAP,
     )
     fields.update(overrides)
-    return Prior(**fields)
+    return Decision(**fields)
 
 
-def test_prior_defaults_to_candidate_status():
+def test_decision_defaults_to_candidate_status():
     # Core principle: nothing is canonical without curation.
-    prior = _minimal_prior()
-    assert prior.status is Status.CANDIDATE
+    decision = _minimal_decision()
+    assert decision.status is Status.CANDIDATE
 
 
-def test_prior_generates_unique_ids():
-    a = _minimal_prior()
-    b = _minimal_prior()
+def test_decision_generates_unique_ids():
+    a = _minimal_decision()
+    b = _minimal_decision()
     assert a.id and b.id
     assert a.id != b.id
 
 
-def test_prior_requires_origin():
-    # Provenance is mandatory — a prior must say where it came from.
+def test_decision_requires_origin():
+    # Provenance is mandatory — a decision must say where it came from.
     import pytest
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        Prior(
+        Decision(
             pattern="x",
             scope="y",
             rationale="z",
         )  # type: ignore[call-arg]
 
 
-def test_prior_defaults_confidence_to_medium():
-    assert _minimal_prior().confidence is Confidence.MEDIUM
+def test_decision_defaults_confidence_to_medium():
+    assert _minimal_decision().confidence is Confidence.MEDIUM
 
 
-def test_prior_sets_created_and_updated_timestamps():
-    prior = _minimal_prior()
-    assert prior.created_at is not None
-    assert prior.updated_at is not None
+def test_decision_sets_created_and_updated_timestamps():
+    decision = _minimal_decision()
+    assert decision.created_at is not None
+    assert decision.updated_at is not None
 
 
 def test_source_ref_carries_kind_and_ref():

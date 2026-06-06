@@ -1,4 +1,4 @@
-"""The triage judge: an advisory critic pass over candidate priors.
+"""The triage judge: an advisory critic pass over candidate decisions.
 
 A separate LLM call (independent of extraction — ideally a different/fresh judgment)
 scores each candidate as approve / borderline / reject with a one-line reason, to
@@ -13,7 +13,7 @@ from collections.abc import Callable
 
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
-from metatron.models import Prior, TriageVerdict
+from metatron.models import Decision, TriageVerdict
 
 _VERDICTS = {
     "approve": TriageVerdict.APPROVE,
@@ -26,7 +26,7 @@ class TriageError(Exception):
     """Raised when a judge response cannot be parsed."""
 
 
-class PriorJudge:
+class DecisionJudge:
     def __init__(
         self,
         provider: LLMProvider,
@@ -35,17 +35,17 @@ class PriorJudge:
     ) -> None:
         self._provider = provider
         self._template = template if template is not None else load_prompt(
-            "triage_priors"
+            "triage_decisions"
         )
         self._batch_size = max(1, batch_size)
 
     def evaluate(
         self,
-        priors: list[Prior],
+        decisions: list[Decision],
         *,
         on_progress: Callable[[dict], None] | None = None,
     ) -> dict[str, tuple[TriageVerdict, str]]:
-        """Return ``{prior_id: (verdict, reason)}`` for the given candidates.
+        """Return ``{decision_id: (verdict, reason)}`` for the given candidates.
 
         Candidates are numbered per batch and mapped back by index, so the judge
         never echoes a uuid (which it mangles); a bogus/out-of-range index from
@@ -56,7 +56,7 @@ class PriorJudge:
         batches_done, candidates_total, candidates_done}`` (``phase`` is ``start``
         then ``judging``), letting a caller show live progress.
         """
-        batches = list(_batches(priors, self._batch_size))
+        batches = list(_batches(decisions, self._batch_size))
         total_batches = len(batches)
 
         def report(phase: str, done_batches: int, done_candidates: int) -> None:
@@ -65,7 +65,7 @@ class PriorJudge:
                     "phase": phase,
                     "batches_total": total_batches,
                     "batches_done": done_batches,
-                    "candidates_total": len(priors),
+                    "candidates_total": len(decisions),
                     "candidates_done": done_candidates,
                 })
 
@@ -74,12 +74,12 @@ class PriorJudge:
         done_candidates = 0
         for batch_index, batch in enumerate(batches):
             report("judging", batch_index, done_candidates)
-            prompt = render(self._template, priors=_format_priors(batch))
+            prompt = render(self._template, decisions=_format_decisions(batch))
             for item in _parse_json_array(self._provider.complete(prompt)):
                 index = item.get("n")
                 if isinstance(index, int) and 1 <= index <= len(batch):
-                    prior = batch[index - 1]
-                    results[prior.id] = (
+                    decision = batch[index - 1]
+                    results[decision.id] = (
                         _parse_verdict(item.get("verdict")),
                         item.get("reason", ""),
                     )
@@ -92,7 +92,7 @@ def _batches(items: list, size: int):
         yield items[i : i + size]
 
 
-def _format_priors(priors: list[Prior]) -> str:
+def _format_decisions(decisions: list[Decision]) -> str:
     return json.dumps(
         [
             {
@@ -102,7 +102,7 @@ def _format_priors(priors: list[Prior]) -> str:
                 "rationale": p.rationale,
                 "confidence": p.confidence.value,
             }
-            for i, p in enumerate(priors, start=1)
+            for i, p in enumerate(decisions, start=1)
         ],
         indent=2,
     )

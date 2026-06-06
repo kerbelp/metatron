@@ -38,7 +38,7 @@ def version_string(repo_root: Path | str | None = None) -> str:
 def current_version() -> str:
     """The running build's revision, resolved once per process.
 
-    Used to stamp every prior and event cheaply — the build cannot change during a
+    Used to stamp every decision and event cheaply — the build cannot change during a
     process's lifetime, so the git lookup runs at most once.
     """
     return version_string()

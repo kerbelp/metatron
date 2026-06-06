@@ -2,7 +2,7 @@
 
 The curation UI is single-user and ingests one repo at a time, so this is a
 deliberately small single-job runner: ``start()`` kicks ingest off on a daemon
-thread and ``status()`` returns a live snapshot (priors landing, tokens, rising
+thread and ``status()`` returns a live snapshot (decisions landing, tokens, rising
 cost) the page polls. Nothing here curates — ingest only ever produces candidates.
 """
 
@@ -59,7 +59,7 @@ class IngestJob:
             self._status = {
                 "state": "running", "phase": "starting", "path": path, "repo": repo,
                 "files_parsed": 0, "commits_read": 0, "scopes_total": 0, "scopes_done": 0,
-                "priors_created": 0, "input_tokens": 0, "output_tokens": 0,
+                "decisions_created": 0, "input_tokens": 0, "output_tokens": 0,
                 "est_cost": None, "error": None,
             }
             self._thread = threading.Thread(
@@ -98,7 +98,7 @@ class IngestJob:
                 state="done", phase="done", repo=result.repo,
                 files_parsed=result.files_parsed, commits_read=result.commits_read,
                 scopes_total=result.scopes, scopes_done=result.scopes,
-                priors_created=result.priors_created,
+                decisions_created=result.decisions_created,
             )
             self._record_cost(provider)
 
@@ -111,9 +111,9 @@ class IngestJob:
 
 
 def _default_judge_factory(provider):
-    from metatron.extraction.triage import PriorJudge
+    from metatron.extraction.triage import DecisionJudge
 
-    return PriorJudge(provider)
+    return DecisionJudge(provider)
 
 
 class TriageJob:
@@ -172,7 +172,7 @@ class TriageJob:
             )
             if not candidates:
                 # Nothing new to judge — but if asked, still approve anything already
-                # rated 'approve' in scope (e.g. a prior valuation left winners).
+                # rated 'approve' in scope (e.g. a decision valuation left winners).
                 approved = 0
                 if approve_after:
                     approved = self._approve(repo, origin)
@@ -215,9 +215,9 @@ class TriageJob:
             for i in range(0, len(candidates), self._chunk):
                 batch = candidates[i : i + self._chunk]
                 results = judge.evaluate(batch)
-                for prior_id, (verdict, reason) in results.items():
+                for decision_id, (verdict, reason) in results.items():
                     try:
-                        self._store.set_triage(prior_id, verdict, reason)
+                        self._store.set_triage(decision_id, verdict, reason)
                     except KeyError:
                         continue
                 with self._lock:
@@ -247,7 +247,7 @@ class TriageJob:
 class FeedbackLoopJob:
     """The Feedback screen's one-click loop: refine -> valuate -> approve.
 
-    Refines every unhandled feedback report into candidate priors (Opus), values
+    Refines every unhandled feedback report into candidate decisions (Opus), values
     the resulting feedback-born candidates (judge), then promotes the ones it rates
     ``approve`` to canonical. A human clicks it, so the curation invariant holds.
     Runs at most one at a time and tracks phased progress + combined cost for the UI.
@@ -319,7 +319,7 @@ class FeedbackLoopJob:
             with self._lock:
                 self._status["refine_total"] = p["events_total"]
                 self._status["refine_done"] = p["events_done"]
-                self._status["refined"] = p["priors_created"]
+                self._status["refined"] = p["decisions_created"]
                 self._cost(refiner_provider, judge_provider)
 
         try:
@@ -332,7 +332,7 @@ class FeedbackLoopJob:
                 self._cost(refiner_provider, judge_provider)
             return
         with self._lock:
-            self._status["refined"] = refine_result.priors_created
+            self._status["refined"] = refine_result.decisions_created
             self._status["refine_done"] = refine_result.events_processed
             self._status["phase"] = "valuating"
 
@@ -347,9 +347,9 @@ class FeedbackLoopJob:
             for i in range(0, len(candidates), self._chunk):
                 batch = candidates[i : i + self._chunk]
                 results = judge.evaluate(batch)
-                for prior_id, (verdict, reason) in results.items():
+                for decision_id, (verdict, reason) in results.items():
                     try:
-                        self._store.set_triage(prior_id, verdict, reason)
+                        self._store.set_triage(decision_id, verdict, reason)
                     except KeyError:
                         continue
                 with self._lock:

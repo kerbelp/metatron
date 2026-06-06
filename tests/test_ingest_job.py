@@ -4,7 +4,7 @@ import threading
 import time
 
 from metatron.pipeline import IngestResult
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.storage.sqlite import SQLiteDecisionStore
 from metatron.webui.jobs import IngestJob
 
 
@@ -27,14 +27,14 @@ def _wait(job, *, state, timeout=2.0):
 
 
 def test_start_without_provider_is_rejected(tmp_path):
-    job = IngestJob(SQLitePriorStore(":memory:"), provider_factory=None)
+    job = IngestJob(SQLiteDecisionStore(":memory:"), provider_factory=None)
     res = job.start(str(tmp_path))
     assert res["ok"] is False and "provider" in res["error"].lower()
     assert job.status()["state"] == "idle"
 
 
 def test_start_with_bad_path_is_rejected(tmp_path):
-    job = IngestJob(SQLitePriorStore(":memory:"), provider_factory=FakeProvider)
+    job = IngestJob(SQLiteDecisionStore(":memory:"), provider_factory=FakeProvider)
     res = job.start(str(tmp_path / "does-not-exist"))
     assert res["ok"] is False
     assert job.status()["state"] == "idle"
@@ -45,20 +45,20 @@ def test_ingest_runs_and_reports_progress_and_cost(tmp_path):
         provider.input_tokens += 100
         provider.output_tokens += 40
         on_progress({"repo": "github.com/acme/app", "scopes_total": 2,
-                     "scopes_done": 1, "priors_created": 1})
+                     "scopes_done": 1, "decisions_created": 1})
         provider.input_tokens += 100
         provider.output_tokens += 40
         on_progress({"repo": "github.com/acme/app", "scopes_total": 2,
-                     "scopes_done": 2, "priors_created": 2})
+                     "scopes_done": 2, "decisions_created": 2})
         return IngestResult(repo="github.com/acme/app", model="fake-model",
-                            files_parsed=3, commits_read=5, scopes=2, priors_created=2)
+                            files_parsed=3, commits_read=5, scopes=2, decisions_created=2)
 
-    job = IngestJob(SQLitePriorStore(":memory:"),
+    job = IngestJob(SQLiteDecisionStore(":memory:"),
                     provider_factory=FakeProvider, ingest_fn=fake_ingest)
     assert job.start(str(tmp_path))["ok"] is True
 
     s = _wait(job, state="done")
-    assert s["priors_created"] == 2
+    assert s["decisions_created"] == 2
     assert s["scopes_done"] == s["scopes_total"] == 2
     assert s["repo"] == "github.com/acme/app"
     assert s["input_tokens"] == 200 and s["output_tokens"] == 80
@@ -69,12 +69,12 @@ def test_double_start_is_rejected_while_running(tmp_path):
     gate = threading.Event()
 
     def blocking_ingest(repo_path, store, provider, *, repo=None, run_store=None, on_progress=None):
-        on_progress({"scopes_total": 1, "scopes_done": 0, "priors_created": 0})
+        on_progress({"scopes_total": 1, "scopes_done": 0, "decisions_created": 0})
         gate.wait(2.0)
         return IngestResult(repo="r", model="fake-model", files_parsed=0,
-                            commits_read=0, scopes=1, priors_created=0)
+                            commits_read=0, scopes=1, decisions_created=0)
 
-    job = IngestJob(SQLitePriorStore(":memory:"),
+    job = IngestJob(SQLiteDecisionStore(":memory:"),
                     provider_factory=FakeProvider, ingest_fn=blocking_ingest)
     assert job.start(str(tmp_path))["ok"] is True
     _wait(job, state="running")
@@ -90,7 +90,7 @@ def test_ingest_error_is_captured_not_raised(tmp_path):
     def boom(repo_path, store, provider, *, repo=None, run_store=None, on_progress=None):
         raise RuntimeError("kaboom")
 
-    job = IngestJob(SQLitePriorStore(":memory:"),
+    job = IngestJob(SQLiteDecisionStore(":memory:"),
                     provider_factory=FakeProvider, ingest_fn=boom)
     assert job.start(str(tmp_path))["ok"] is True
     s = _wait(job, state="error")
@@ -99,12 +99,12 @@ def test_ingest_error_is_captured_not_raised(tmp_path):
 
 # ---- TriageJob ----------------------------------------------------------------
 
-from metatron.models import Origin, Prior, Status, TriageVerdict  # noqa: E402
+from metatron.models import Origin, Decision, Status, TriageVerdict  # noqa: E402
 from metatron.webui.jobs import TriageJob  # noqa: E402
 
 
 def _candidate(store, pattern):
-    return store.add(Prior(repo="github.com/acme/app", pattern=pattern, scope="app",
+    return store.add(Decision(repo="github.com/acme/app", pattern=pattern, scope="app",
                            rationale="r", origin=Origin.BOOTSTRAP))
 
 
@@ -120,7 +120,7 @@ class FakeJudge:
 
 
 def test_triage_job_sets_verdicts_and_counts_without_changing_status():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     a = _candidate(store, "approve me")
     b = _candidate(store, "reject me")
     c = _candidate(store, "meh")
@@ -141,13 +141,13 @@ def test_triage_job_sets_verdicts_and_counts_without_changing_status():
 
 
 def test_triage_job_without_provider_is_rejected():
-    job = TriageJob(SQLitePriorStore(":memory:"), provider_factory=None)
+    job = TriageJob(SQLiteDecisionStore(":memory:"), provider_factory=None)
     res = job.start("github.com/acme/app")
     assert res["ok"] is False and "provider" in res["error"].lower()
 
 
 def test_triage_job_with_no_candidates_is_done_immediately():
-    job = TriageJob(SQLitePriorStore(":memory:"), provider_factory=FakeProvider,
+    job = TriageJob(SQLiteDecisionStore(":memory:"), provider_factory=FakeProvider,
                     judge_factory=lambda p: FakeJudge({}))
     res = job.start("github.com/acme/app")
     assert res["ok"] is True and res["total"] == 0
@@ -157,7 +157,7 @@ def test_triage_job_with_no_candidates_is_done_immediately():
 def test_approve_recommended_promotes_only_approve_picks():
     from metatron.webui.api import approve_recommended
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     a = _candidate(store, "approve me")
     b = _candidate(store, "reject me")
     c = _candidate(store, "untriaged")
@@ -174,14 +174,14 @@ def test_approve_recommended_promotes_only_approve_picks():
 
 
 def _feedback_candidate(store, pattern):
-    return store.add(Prior(repo="github.com/acme/app", pattern=pattern, scope="app",
+    return store.add(Decision(repo="github.com/acme/app", pattern=pattern, scope="app",
                            rationale="r", origin=Origin.AGENT_FEEDBACK))
 
 
 def test_approve_recommended_can_scope_to_one_origin():
     from metatron.webui.api import approve_recommended
 
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     ingest_pick = _candidate(store, "ingest approve")           # BOOTSTRAP
     fb_pick = _feedback_candidate(store, "feedback approve")     # AGENT_FEEDBACK
     for p in (ingest_pick, fb_pick):
@@ -195,7 +195,7 @@ def test_approve_recommended_can_scope_to_one_origin():
 
 
 def test_triage_job_valuate_then_approve_scoped_to_feedback():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     fb_good = _feedback_candidate(store, "feedback approve")
     fb_bad = _feedback_candidate(store, "feedback reject")
     ingest_good = _candidate(store, "ingest approve")  # different origin, must be ignored
@@ -220,10 +220,10 @@ def test_triage_job_valuate_then_approve_scoped_to_feedback():
     assert store.get(ingest_good.id).status is Status.CANDIDATE
 
 
-def test_triage_job_approve_after_with_nothing_new_still_approves_prior_winners():
-    store = SQLitePriorStore(":memory:")
+def test_triage_job_approve_after_with_nothing_new_still_approves_decision_winners():
+    store = SQLiteDecisionStore(":memory:")
     already = _feedback_candidate(store, "already judged")
-    store.set_triage(already.id, TriageVerdict.APPROVE, "good")  # judged in a prior run
+    store.set_triage(already.id, TriageVerdict.APPROVE, "good")  # judged in a decision run
 
     job = TriageJob(store, provider_factory=FakeProvider,
                     judge_factory=lambda p: FakeJudge({}))
@@ -248,18 +248,18 @@ class _LoopRefiner:
         self.provider = FakeProvider()
 
     def refine(self, gap, scope_hint="", task=""):
-        return [Prior(repo="placeholder", pattern=f"refined:{gap}", scope=scope_hint or "app",
+        return [Decision(repo="placeholder", pattern=f"refined:{gap}", scope=scope_hint or "app",
                       rationale="r", origin=Origin.AGENT_FEEDBACK)]
 
 
 def test_feedback_loop_refines_then_valuates_then_approves():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
     events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
                         missing="approve me", area="src/a"))
     events.record(Event(repo="github.com/acme/app", kind=EventKind.FEEDBACK,
                         missing="reject me", area="src/b"))
-    # the judge approves the first refined prior, rejects the second
+    # the judge approves the first refined decision, rejects the second
     verdicts = {"refined:approve me": TriageVerdict.APPROVE,
                 "refined:reject me": TriageVerdict.REJECT}
 
@@ -282,14 +282,14 @@ def test_feedback_loop_refines_then_valuates_then_approves():
 
 
 def test_feedback_loop_without_provider_is_rejected():
-    job = FeedbackLoopJob(SQLitePriorStore(":memory:"), SQLiteEventStore(":memory:"),
+    job = FeedbackLoopJob(SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:"),
                           refiner_factory=None, judge_provider_factory=None)
     res = job.start("github.com/acme/app")
     assert res["ok"] is False and "provider" in res["error"].lower()
 
 
 def test_feedback_loop_without_event_store_is_rejected():
-    job = FeedbackLoopJob(SQLitePriorStore(":memory:"), None,
+    job = FeedbackLoopJob(SQLiteDecisionStore(":memory:"), None,
                           refiner_factory=_LoopRefiner, judge_provider_factory=FakeProvider)
     res = job.start("github.com/acme/app")
     assert res["ok"] is False and "event store" in res["error"].lower()

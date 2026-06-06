@@ -21,8 +21,8 @@ def test_readme_documents_every_cli_subcommand():
 
 def test_readme_documents_every_mcp_tool():
     for tool in (
-        "get_priors_for_context",
+        "get_decisions_for_context",
         "submit_feedback",
-        "submit_candidate_learning",
+        "submit_candidate_decision",
     ):
         assert tool in README, f"README.md does not document MCP tool {tool!r}"

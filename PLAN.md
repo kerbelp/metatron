@@ -7,7 +7,7 @@
 ## Goal (restated)
 
 Validate the single riskiest assumption: *can we automatically bootstrap useful
-priors from a real codebase + its git history, and serve them to an agent over
+decisions from a real codebase + its git history, and serve them to an agent over
 MCP in a way that would plausibly change what the agent writes?*
 
 A thin end-to-end vertical slice: **ingest → store → serve → curate.**
@@ -32,11 +32,11 @@ behind interfaces (the portability/configurability the brief requires).
 ```
 metatron/
   config.py              # Settings: provider, model, repo path, db path; reads env / file
-  models.py              # Prior, SourceRef, enums (Status, Origin, Confidence). pydantic.
+  models.py              # Decision, SourceRef, enums (Status, Origin, Confidence). pydantic.
 
   storage/
-    base.py              # PriorStore (ABC) — the storage interface
-    sqlite.py            # SQLitePriorStore — SQLite implementation behind the ABC
+    base.py              # DecisionStore (ABC) — the storage interface
+    sqlite.py            # SQLiteDecisionStore — SQLite implementation behind the ABC
 
   parsing/
     base.py              # LanguageParser (ABC), ParsedFile, StructuralSummary
@@ -49,11 +49,11 @@ metatron/
   extraction/
     signals.py           # deterministic signal collection (parsing + gitlog -> facts)
     provider.py          # LLMProvider (ABC) + AnthropicProvider
-    extractor.py         # orchestrates: signals -> prompt -> LLM -> candidate Priors
+    extractor.py         # orchestrates: signals -> prompt -> LLM -> candidate Decisions
     prompts/             # editable prompt templates (plain text, {placeholder} subst.)
 
   mcp/
-    server.py            # MCP server: get_priors_for_context, submit_candidate_learning
+    server.py            # MCP server: get_decisions_for_context, submit_candidate_decision
 
   pipeline.py            # ingest orchestration (point at a repo path)
   cli.py                 # entrypoint: ingest / serve / candidates list|approve|reject
@@ -61,9 +61,9 @@ metatron/
 tests/                   # pytest, one area per module; fixtures use tiny synthetic repos
 ```
 
-## Prior data schema (the structured record)
+## Decision data schema (the structured record)
 
-Priors are **structured records, never prose**. Proposed fields (pydantic model,
+Decisions are **structured records, never prose**. Proposed fields (pydantic model,
 mirrored in the SQLite schema):
 
 | Field         | Type                          | Notes |
@@ -81,13 +81,13 @@ mirrored in the SQLite schema):
 
 `SourceRef` = `{ kind: file \| commit, ref: <path or SHA>, detail: str }`.
 
-**Core principle enforced here:** every prior — including bootstrapped ones from
+**Core principle enforced here:** every decision — including bootstrapped ones from
 ingest — starts as `candidate`. Nothing becomes `canonical` except via the
 curation CLI. Ingest does not self-promote.
 
 Storage stays portable to Postgres: the SQLite DDL uses portable types (TEXT,
 INTEGER, TIMESTAMP), `source_refs` stored as JSON text, all access through the
-`PriorStore` ABC so the SQL never leaks into callers.
+`DecisionStore` ABC so the SQL never leaks into callers.
 
 ## Extraction approach (the riskiest part)
 
@@ -99,11 +99,11 @@ Three options considered:
   shapes, naming, base classes) and git signals (reverts, repeated churn on the
   same area, "fix"/"refactor" messages, the *why* in commit bodies). Then group
   signals by scope and feed bounded, focused context to the LLM with an editable
-  prompt, asking for candidate priors as structured JSON validated against the
+  prompt, asking for candidate decisions as structured JSON validated against the
   schema. *Pro:* controls token cost, gives the model focused context, easier to
   debug. *Con:* signal collection is upfront work.
 
-- **(B) Raw-feed.** Chunk files/diffs and ask the LLM to emit priors directly.
+- **(B) Raw-feed.** Chunk files/diffs and ask the LLM to emit decisions directly.
   *Pro:* simplest to build. *Con:* costly, noisy, little control over relevance —
   works against validating "are these *useful*."
 
@@ -115,8 +115,8 @@ just abundant) and keeps cost/observability under control.
 
 Pipeline: `pipeline.py` walks the repo → `signals.py` builds per-scope signal
 bundles → `extractor.py` renders an editable prompt and calls the provider →
-output JSON is validated into `Prior` records (status `candidate`, origin
-`bootstrap`, with `source_refs` populated) → persisted via `PriorStore`.
+output JSON is validated into `Decision` records (status `candidate`, origin
+`bootstrap`, with `source_refs` populated) → persisted via `DecisionStore`.
 
 Prompts live as plain-text files under `extraction/prompts/` with `{placeholder}`
 substitution — no templating dependency — so they're trivial to inspect and edit.
@@ -125,34 +125,34 @@ substitution — no templating dependency — so they're trivial to inspect and 
 
 MCP server (official SDK), **stdio transport** for local agent integration.
 
-- `get_priors_for_context(file_path_or_area: str, task_description: str)` →
-  returns relevant **canonical** priors as compact structured context. v1
+- `get_decisions_for_context(file_path_or_area: str, task_description: str)` →
+  returns relevant **canonical** decisions as compact structured context. v1
   relevance: filter by `scope` match against the path/area, then rank by simple
   keyword overlap with `task_description` and confidence. (Embeddings/vector
   search noted as a future door, not built — YAGNI.)
-- `submit_candidate_learning(pattern, scope, rationale, source_refs, ...)` →
-  stores a new prior as `status=candidate, origin=agent_submitted`, returns its
+- `submit_candidate_decision(pattern, scope, rationale, source_refs, ...)` →
+  stores a new decision as `status=candidate, origin=agent_submitted`, returns its
   id. Does **not** enter the canonical set.
 
 ## Curate (minimal CLI)
 
 - `metatron ingest <repo_path>` — run the bootstrap pipeline.
 - `metatron serve` — start the MCP server.
-- `metatron candidates list [--scope ...]` — show candidate priors.
+- `metatron candidates list [--scope ...]` — show candidate decisions.
 - `metatron candidates approve <id>` / `metatron candidates reject <id>` —
   human-in-the-loop promotion. Approve sets `canonical`; reject sets `rejected`.
 
 ## Testing
 
 pytest throughout, each PR ships tests. Storage and extraction tested against the
-`PriorStore` ABC and a faked `LLMProvider` (no network in tests). Parsing/gitlog
+`DecisionStore` ABC and a faked `LLMProvider` (no network in tests). Parsing/gitlog
 tested against tiny synthetic repos created in fixtures. The real target repo is
 used only for manual end-to-end validation, never committed.
 
 ## Proposed PR sequence (small, reviewable, each with tests)
 
-1. **Models + storage interface + SQLite store** — schema, `PriorStore` ABC,
-   `SQLitePriorStore`, round-trip tests.
+1. **Models + storage interface + SQLite store** — schema, `DecisionStore` ABC,
+   `SQLiteDecisionStore`, round-trip tests.
 2. **Parsing + gitlog signal collection** — `LanguageParser` ABC, reference
    grammar, git reader, `signals.py`; tests on synthetic repos.
 3. **Extraction** — `LLMProvider` ABC + `AnthropicProvider`, editable prompts,
@@ -175,10 +175,10 @@ These were the open questions; resolved as follows for milestone 1.
    case and enough to run the slice end-to-end). If the provided target repo is a
    different language, its grammar is added to the registry in the parsing PR —
    the language-agnostic abstraction makes that a drop-in.
-4. **Retrieval in `get_priors_for_context`:** v1 = deterministic **scope match +
+4. **Retrieval in `get_decisions_for_context`:** v1 = deterministic **scope match +
    keyword/confidence ranking**. Embeddings / vector search are a noted future
    door, not built (YAGNI).
-5. **Serving:** `get_priors_for_context` returns **canonical priors only**.
+5. **Serving:** `get_decisions_for_context` returns **canonical decisions only**.
    Consistent with the curation principle — uncurated candidates never reach an
    agent through the serve path.
 6. **Config:** secrets via env (`ANTHROPIC_API_KEY`); non-secret settings

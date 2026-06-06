@@ -9,7 +9,7 @@ from metatron.storage.catalog import Catalog
 from metatron.storage.sqlite import (
     SQLiteEventStore,
     SQLiteIngestRunStore,
-    SQLitePriorStore,
+    SQLiteDecisionStore,
 )
 from metatron.storage.transfer import copy_repo_rows
 
@@ -25,14 +25,14 @@ def migrate_legacy_db(legacy_path: str | Path, catalog: Catalog) -> bool:
     if not legacy.is_file():
         return False
 
-    priors = SQLitePriorStore(str(legacy))
+    decisions = SQLiteDecisionStore(str(legacy))
     events = SQLiteEventStore(str(legacy))
     runs = SQLiteIngestRunStore(str(legacy))
     try:
-        for repo in priors.list_repos():
-            copy_repo_rows(priors, events, runs, catalog.open(repo), repo)
+        for repo in decisions.list_repos():
+            copy_repo_rows(decisions, events, runs, catalog.open(repo), repo)
     finally:
-        priors.close()
+        decisions.close()
         events.close()
         runs.close()
 

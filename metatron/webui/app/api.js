@@ -33,10 +33,10 @@
       return J("/api/stats?" + qs({ repo }));
     },
 
-    getPriors(repo, { status = "", scope = "", origin = "", search = "", confidence = "", page = 1, page_size = 8 } = {}) {
+    getDecisions(repo, { status = "", scope = "", origin = "", search = "", confidence = "", page = 1, page_size = 8 } = {}) {
       // The server filters by status/scope/origin/search; confidence isn't a server
       // filter, so narrow the returned page client-side when it's set.
-      return J("/api/priors?" + qs({ repo, status, scope, origin, search, page, page_size })).then((d) => {
+      return J("/api/decisions?" + qs({ repo, status, scope, origin, search, page, page_size })).then((d) => {
         if (confidence) d.items = (d.items || []).filter((p) => p.confidence === confidence);
         return d;
       });
@@ -49,7 +49,7 @@
         coverage: u.coverage_rate,
         hit_rate: u.coverage_rate,
         avg_served: u.avg_results,
-        served_priors: Math.round((u.avg_results || 0) * (u.total_queries || 0)),
+        served_decisions: Math.round((u.avg_results || 0) * (u.total_queries || 0)),
       }));
     },
 
@@ -77,16 +77,16 @@
       return J("/api/ingest-cost?" + qs({ repo }));
     },
 
-    approvePrior(id) {
-      return P(`/api/priors/${id}/approve`);
+    approveDecision(id) {
+      return P(`/api/decisions/${id}/approve`);
     },
 
-    rejectPrior(id) {
-      return P(`/api/priors/${id}/reject`);
+    rejectDecision(id) {
+      return P(`/api/decisions/${id}/reject`);
     },
 
     approveRecommended(repo) {
-      return P("/api/priors/approve-recommended", { repo });
+      return P("/api/decisions/approve-recommended", { repo });
     },
 
     refineFeedback(eventId) {

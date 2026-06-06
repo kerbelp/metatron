@@ -1,19 +1,19 @@
 """One-time split of a legacy single metatron.db into per-repo catalog files."""
 
 from metatron.events import Event, EventKind
-from metatron.models import Origin, Prior, Status
-from metatron.storage.catalog import Catalog, CatalogPriorStore
+from metatron.models import Origin, Decision, Status
+from metatron.storage.catalog import Catalog, CatalogDecisionStore
 from metatron.storage.migrate import migrate_legacy_db
-from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
+from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 
 
 def _seed_legacy(path):
-    ps = SQLitePriorStore(str(path))
+    ps = SQLiteDecisionStore(str(path))
     es = SQLiteEventStore(str(path))
     for repo in ("repoA", "repoB"):
-        ps.add(Prior(repo=repo, pattern=f"p-{repo}", scope="app", rationale="r",
+        ps.add(Decision(repo=repo, pattern=f"p-{repo}", scope="app", rationale="r",
                      origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
-        es.record(Event(repo=repo, kind=EventKind.QUERY, prior_ids=["x"]))
+        es.record(Event(repo=repo, kind=EventKind.QUERY, decision_ids=["x"]))
     ps.close()
     es.close()
 
@@ -25,7 +25,7 @@ def test_migrate_splits_per_repo_and_archives(tmp_path):
 
     assert migrate_legacy_db(legacy, cat) is True
 
-    store = CatalogPriorStore(cat)
+    store = CatalogDecisionStore(cat)
     assert store.list_repos() == ["repoA", "repoB"]
     assert [p.pattern for p in store.list(repo="repoA")] == ["p-repoA"]
     assert not legacy.exists()
@@ -53,13 +53,13 @@ def test_migrate_recovers_from_a_partially_copied_destination(tmp_path):
     _seed_legacy(legacy)
     cat = Catalog(str(tmp_path / "data"))
 
-    src = SQLitePriorStore(str(legacy))
+    src = SQLiteDecisionStore(str(legacy))
     pa = src.list(repo="repoA")[0]
     src.close()
-    cat.open("repoA").priors.add(pa)  # pre-existing duplicate-id row
+    cat.open("repoA").decisions.add(pa)  # pre-existing duplicate-id row
 
     assert migrate_legacy_db(legacy, cat) is True
-    store = CatalogPriorStore(cat)
+    store = CatalogDecisionStore(cat)
     assert store.count(repo="repoA") == 1  # no duplicate
     assert [p.pattern for p in store.list(repo="repoB")] == ["p-repoB"]
     assert not legacy.exists()

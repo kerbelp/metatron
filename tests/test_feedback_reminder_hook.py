@@ -41,7 +41,7 @@ def _new_session() -> str:
 
 
 def test_blocks_when_queried_but_no_feedback(tmp_path):
-    t = _transcript(tmp_path, "mcp__metatron__get_priors_for_context")
+    t = _transcript(tmp_path, "mcp__metatron__get_decisions_for_context")
     res = _run({"session_id": _new_session(), "transcript_path": str(t), "stop_hook_active": False})
     out = json.loads(res.stdout)
     assert out["decision"] == "block"
@@ -49,7 +49,7 @@ def test_blocks_when_queried_but_no_feedback(tmp_path):
 
 
 def test_silent_when_feedback_already_given(tmp_path):
-    t = _transcript(tmp_path, "mcp__metatron__get_priors_for_context",
+    t = _transcript(tmp_path, "mcp__metatron__get_decisions_for_context",
                     "mcp__metatron__submit_feedback")
     res = _run({"session_id": _new_session(), "transcript_path": str(t), "stop_hook_active": False})
     assert res.stdout.strip() == ""
@@ -64,13 +64,13 @@ def test_silent_when_metatron_never_consulted(tmp_path):
 
 def test_silent_when_stop_hook_already_active(tmp_path):
     # We are already continuing because of this hook -> never loop.
-    t = _transcript(tmp_path, "mcp__metatron__get_priors_for_context")
+    t = _transcript(tmp_path, "mcp__metatron__get_decisions_for_context")
     res = _run({"session_id": _new_session(), "transcript_path": str(t), "stop_hook_active": True})
     assert res.stdout.strip() == ""
 
 
 def test_reminds_at_most_once_per_session(tmp_path):
-    t = _transcript(tmp_path, "mcp__metatron__get_priors_for_context")
+    t = _transcript(tmp_path, "mcp__metatron__get_decisions_for_context")
     session = _new_session()
     first = _run({"session_id": session, "transcript_path": str(t), "stop_hook_active": False})
     assert json.loads(first.stdout)["decision"] == "block"

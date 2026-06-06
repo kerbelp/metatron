@@ -3,80 +3,80 @@
 from metatron.mcp_server.service import (
     _stem,
     _tokens,
-    format_priors,
-    get_priors_for_context,
-    submit_candidate_learning,
+    format_decisions,
+    get_decisions_for_context,
+    submit_candidate_decision,
 )
-from metatron.models import Confidence, Origin, Prior, Status
-from metatron.storage.sqlite import SQLitePriorStore
+from metatron.models import Confidence, Origin, Decision, Status
+from metatron.storage.sqlite import SQLiteDecisionStore
 
 REPO = "github.com/acme/app"
 
 
-def _canonical(**kw) -> Prior:
+def _canonical(**kw) -> Decision:
     kw.setdefault("origin", Origin.BOOTSTRAP)
     kw.setdefault("repo", REPO)
-    return Prior(status=Status.CANONICAL, **kw)
+    return Decision(status=Status.CANONICAL, **kw)
 
 
-def _store(*priors) -> SQLitePriorStore:
-    s = SQLitePriorStore(":memory:")
-    for p in priors:
+def _store(*decisions) -> SQLiteDecisionStore:
+    s = SQLiteDecisionStore(":memory:")
+    for p in decisions:
         s.add(p)
     return s
 
 
-def test_only_canonical_priors_are_served():
+def test_only_canonical_decisions_are_served():
     store = _store(
         _canonical(pattern="canon", scope="app", rationale="r"),
-        Prior(repo=REPO, pattern="cand", scope="app", rationale="r", origin=Origin.BOOTSTRAP),
+        Decision(repo=REPO, pattern="cand", scope="app", rationale="r", origin=Origin.BOOTSTRAP),
     )
-    results = get_priors_for_context(store, REPO, "app", "anything")
+    results = get_decisions_for_context(store, REPO, "app", "anything")
     assert [p.pattern for p in results] == ["canon"]
 
 
-def test_only_the_requested_repos_priors_are_served():
+def test_only_the_requested_repos_decisions_are_served():
     store = _store(
         _canonical(pattern="mine", scope="app", rationale="r", repo=REPO),
         _canonical(pattern="theirs", scope="app", rationale="r", repo="github.com/other/x"),
     )
-    results = get_priors_for_context(store, REPO, "app", "anything")
+    results = get_decisions_for_context(store, REPO, "app", "anything")
     assert [p.pattern for p in results] == ["mine"]
 
 
 def test_helpfulness_reorders_peers_within_a_tier():
-    # Two equally-relevant on-scope priors; the higher-rated one is served first.
+    # Two equally-relevant on-scope decisions; the higher-rated one is served first.
     loved = _canonical(pattern="webhook ledger handling", scope="src/api", rationale="r")
     meh = _canonical(pattern="webhook ledger handling", scope="src/api", rationale="r")
     store = _store(meh, loved)  # insertion order puts meh first absent ratings
 
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "src/api", "webhook ledger",
         helpfulness={loved.id: 1.0},  # loved gets the full positive nudge
     )
     assert results[0].id == loved.id
 
 
-def test_helpfulness_cannot_lift_a_prior_across_a_scope_tier():
-    # A loved off-scope prior must NOT outrank an on-scope prior with the same
+def test_helpfulness_cannot_lift_a_decision_across_a_scope_tier():
+    # A loved off-scope decision must NOT outrank an on-scope decision with the same
     # keywords — helpfulness only reorders within a tier, never across the gate.
     on_scope = _canonical(pattern="webhook ledger retry", scope="src/api/orders", rationale="r")
     off_scope = _canonical(pattern="webhook ledger retry", scope="docs/notes", rationale="r")
     store = _store(on_scope, off_scope)
 
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "src/api/orders", "webhook ledger retry",
         helpfulness={off_scope.id: 1.0, on_scope.id: -1.0},  # try hard to invert it
     )
     assert results.index(_by_id(results, on_scope.id)) < results.index(_by_id(results, off_scope.id))
 
 
-def _by_id(priors, pid):
-    return next(p for p in priors if p.id == pid)
+def _by_id(decisions, pid):
+    return next(p for p in decisions if p.id == pid)
 
 
-def test_keyword_relevant_prior_surfaces_across_directories():
-    # The agent enters from the route file, but the relevant prior lives under
+def test_keyword_relevant_decision_surfaces_across_directories():
+    # The agent enters from the route file, but the relevant decision lives under
     # the components dir. Keyword overlap ("section") should still surface it.
     store = _store(
         _canonical(
@@ -90,7 +90,7 @@ def test_keyword_relevant_prior_surfaces_across_directories():
             rationale="reliability",
         ),
     )
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store,
         REPO,
         "src/routes/index.tsx homepage",
@@ -108,30 +108,30 @@ def test_unrelated_query_returns_nothing():
             rationale="reliability",
         ),
     )
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "src/routes/index.tsx", "fix a typo in the footer"
     )
     assert results == []
 
 
-def test_out_of_scope_priors_are_excluded():
+def test_out_of_scope_decisions_are_excluded():
     store = _store(
         _canonical(pattern="storage rule", scope="app/storage", rationale="r"),
         _canonical(pattern="ui rule", scope="app/ui", rationale="r"),
     )
-    results = get_priors_for_context(store, REPO, "app/storage/db.py", "task")
+    results = get_decisions_for_context(store, REPO, "app/storage/db.py", "task")
     assert [p.pattern for p in results] == ["storage rule"]
 
 
-def test_global_prior_needs_keyword_evidence_not_just_scope():
-    # "Prefer no priors over plausible filler": a global prior with no keyword
+def test_global_decision_needs_keyword_evidence_not_just_scope():
+    # "Prefer no decisions over plausible filler": a global decision with no keyword
     # overlap must NOT be served for an unrelated task (the founding-incident rule).
     store = _store(_canonical(pattern="prefer composition", scope="", rationale="r"))
-    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    results = get_decisions_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
     assert results == []
 
 
-def test_global_prior_surfaces_on_keyword_match():
+def test_global_decision_surfaces_on_keyword_match():
     # needs a corpus where "webhook" is distinguishing (idf > 0), as in any real repo
     store = _store(
         _canonical(pattern="always handle webhook retries", scope="", rationale="r"),
@@ -139,7 +139,7 @@ def test_global_prior_surfaces_on_keyword_match():
         _canonical(pattern="route strings via urls helper", scope="src/utils/i18n", rationale="r"),
         _canonical(pattern="render FAQ with details elements", scope="src/components/App", rationale="r"),
     )
-    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    results = get_decisions_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
     assert "always handle webhook retries" in [p.pattern for p in results]
 
 
@@ -149,7 +149,7 @@ def test_returns_empty_over_filler_when_nothing_relates():
         _canonical(pattern="compose home zones", scope="src/components/Home", rationale="r"),
         _canonical(pattern="prefer composition", scope="", rationale="r"),
     )
-    results = get_priors_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    results = get_decisions_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
     assert results == []
 
 
@@ -158,14 +158,14 @@ def test_keyword_overlap_with_task_ranks_higher():
         _canonical(pattern="use retries for network calls", scope="app", rationale="flaky"),
         _canonical(pattern="prefer dataclasses for config", scope="app", rationale="clarity"),
     )
-    results = get_priors_for_context(store, REPO, "app", "add retries to the network client")
+    results = get_decisions_for_context(store, REPO, "app", "add retries to the network client")
     assert results[0].pattern == "use retries for network calls"
 
 
 def test_specific_subpath_outranks_broad_ancestor_for_multipath_area():
     # Regression for the real www query: the agent named several precise paths
-    # (comma-joined), and a broad ancestor prior (src/routes) with no domain
-    # keywords outranked the prior scoped to the exact sub-path the task was about.
+    # (comma-joined), and a broad ancestor decision (src/routes) with no domain
+    # keywords outranked the decision scoped to the exact sub-path the task was about.
     store = _store(
         _canonical(
             pattern="record sale events in the shared payments ledger",
@@ -182,12 +182,12 @@ def test_specific_subpath_outranks_broad_ancestor_for_multipath_area():
         "src/routes/api/order_created, src/routes/api/subscription, "
         "src/components/SubmitFlow"
     )
-    results = get_priors_for_context(store, REPO, area, "account for payment webhook logic")
+    results = get_decisions_for_context(store, REPO, area, "account for payment webhook logic")
     assert results[0].pattern == "record sale events in the shared payments ledger"
 
 
 def test_rare_domain_keyword_outranks_common_token_overlap():
-    # Two priors share the same scope and both overlap the task. The one matching
+    # Two decisions share the same scope and both overlap the task. The one matching
     # a RARE domain term (checkout) should beat one matching only common, low-signal
     # tokens (components/logic/shared) that appear all over the corpus.
     filler = [
@@ -203,7 +203,7 @@ def test_rare_domain_keyword_outranks_common_token_overlap():
         pattern="structure with shared components and logic", scope="app", rationale="general"
     )
     store = _store(rare, common, *filler)
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "app", "wire up checkout using shared components and logic"
     )
     assert results[0].pattern == "use LemonSqueezy for checkout"
@@ -224,27 +224,27 @@ def test_sibling_directory_without_keywords_is_not_returned():
             rationale="checkout",
         ),
     )
-    results = get_priors_for_context(store, REPO, "src/components/SubmitFlow", "wire the checkout step")
+    results = get_decisions_for_context(store, REPO, "src/components/SubmitFlow", "wire the checkout step")
     assert [p.pattern for p in results] == ["drive the submit flow via SubmitFlow"]
 
 
 def test_response_is_capped_to_a_focused_set():
     # The served payload should be a focused set, not a 20-item dump.
-    priors = [
+    decisions = [
         _canonical(pattern=f"rule {i}", scope="app", rationale="retries on the network client")
         for i in range(20)
     ]
-    store = _store(*priors)
-    results = get_priors_for_context(store, REPO, "app", "improve retries on the network client")
+    store = _store(*decisions)
+    results = get_decisions_for_context(store, REPO, "app", "improve retries on the network client")
     assert len(results) <= 8
 
 
 def test_closer_ancestor_scope_outranks_farther_ancestor():
-    # Regression for a real db.ts query: the on-point prior lives in src/db (a
+    # Regression for a real db.ts query: the on-point decision lives in src/db (a
     # close ancestor of src/db/db.ts) but has ~no task keywords, while a generic
-    # src-scoped prior matched a coincidental keyword ("app"). The closer ancestor
+    # src-scoped decision matched a coincidental keyword ("app"). The closer ancestor
     # must win — both being "ancestors" should not flatten to the same weight.
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     far = _canonical(pattern="serve the app via an express node server", scope="src", rationale="infra")
     near = _canonical(
         pattern="wrap db ops with transient retry for turso resets",
@@ -253,15 +253,15 @@ def test_closer_ancestor_scope_outranks_farther_ancestor():
     )
     store.add(far)  # added first: a flat-weight tie would leave this on top
     store.add(near)
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "src/db/db.ts", "add app credit ledger methods, atomic consume"
     )
     assert results[0].pattern.startswith("wrap db ops")
 
 
-def test_submit_candidate_learning_stores_uncurated_agent_prior():
-    store = SQLitePriorStore(":memory:")
-    prior = submit_candidate_learning(
+def test_submit_candidate_decision_stores_uncurated_agent_decision():
+    store = SQLiteDecisionStore(":memory:")
+    decision = submit_candidate_decision(
         store,
         repo=REPO,
         pattern="always log request ids",
@@ -269,38 +269,38 @@ def test_submit_candidate_learning_stores_uncurated_agent_prior():
         rationale="traceability",
         confidence="high",
     )
-    assert prior.id
-    assert prior.status is Status.CANDIDATE
-    assert prior.origin is Origin.AGENT_SUBMITTED
-    assert prior.confidence is Confidence.HIGH
+    assert decision.id
+    assert decision.status is Status.CANDIDATE
+    assert decision.origin is Origin.AGENT_SUBMITTED
+    assert decision.confidence is Confidence.HIGH
     # persisted
-    assert store.get(prior.id) is not None
+    assert store.get(decision.id) is not None
 
 
 def test_submit_defaults_bad_confidence_to_medium():
-    store = SQLitePriorStore(":memory:")
-    prior = submit_candidate_learning(
+    store = SQLiteDecisionStore(":memory:")
+    decision = submit_candidate_decision(
         store, repo=REPO, pattern="p", scope="s", rationale="r", confidence="bogus"
     )
-    assert prior.confidence is Confidence.MEDIUM
+    assert decision.confidence is Confidence.MEDIUM
 
 
-def test_format_priors_is_compact_and_names_each_pattern():
-    text = format_priors(
+def test_format_decisions_is_compact_and_names_each_pattern():
+    text = format_decisions(
         [_canonical(pattern="rule one", scope="app", rationale="because")]
     )
     assert "rule one" in text
     assert "because" in text
 
 
-def test_format_priors_handles_no_matches():
-    assert "no" in format_priors([]).lower()
+def test_format_decisions_handles_no_matches():
+    assert "no" in format_decisions([]).lower()
 
 
 # --- stemming: morphological variants should match on keywords ---
 
 def test_tokens_stem_unifies_morphological_variants():
-    # the task says "owner", the prior says "ownership"; "link" vs "links"
+    # the task says "owner", the decision says "ownership"; "link" vs "links"
     assert _tokens("owner") & _tokens("ownership")
     assert _tokens("link") & _tokens("links")
     assert _tokens("redirect") & _tokens("redirects")
@@ -334,17 +334,17 @@ def test_alias_unifies_auth_vocabulary():
 
 
 def test_alias_closes_href_url_vocabulary_gap():
-    # task says "href"; the relevant prior says only "urls/links" and lives elsewhere.
+    # task says "href"; the relevant decision says only "urls/links" and lives elsewhere.
     # Without aliasing the only overlap is the (common) word "dashboard" -> filtered.
     area = "src/components/Button"
     filler = [_canonical(pattern=f"compose layout piece {i}", scope=area, rationale="x")
               for i in range(4)]
     commons = [_canonical(pattern=f"dashboard widget {i} loads data", scope=f"src/d{i}", rationale="r")
                for i in range(6)]  # make "dashboard" common (low idf)
-    link_prior = _canonical(pattern="build dashboard links through the urls helper",
+    link_decision = _canonical(pattern="build dashboard links through the urls helper",
                             scope="src/utils/i18n", rationale="r")
-    store = _store(*filler, *commons, link_prior)
-    results = get_priors_for_context(store, REPO, area, "fix the href on the dashboard", limit=8)
+    store = _store(*filler, *commons, link_decision)
+    results = get_decisions_for_context(store, REPO, area, "fix the href on the dashboard", limit=8)
     assert any(p.scope == "src/utils/i18n" for p in results)
 
 
@@ -354,14 +354,14 @@ def test_code_literal_preserved_as_single_token():
 
 
 def test_stemming_surfaces_keyword_match_despite_suffix():
-    # prior phrased with "-ship"/"-s" suffixes still matches a bare-stem task
+    # decision phrased with "-ship"/"-s" suffixes still matches a bare-stem task
     store = _store(
         _canonical(pattern="filler one", scope="app", rationale="x"),
         _canonical(pattern="filler two", scope="app", rationale="y"),
         _canonical(pattern="Resolve resource ownership and gate owners",
                    scope="src/utils/ownership", rationale="z"),
     )
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, "app", "restrict this to the resource owner", limit=8
     )
     assert any("ownership" in p.pattern for p in results)
@@ -370,30 +370,30 @@ def test_stemming_surfaces_keyword_match_despite_suffix():
 # --- reserved slots: a strong cross-scope keyword match is not shut out ---
 
 def test_reserved_slots_surface_cross_scope_keyword_match():
-    # The agent names src/components/ApplicationPage and many generic priors live
-    # there (exact-scope, no task-keyword overlap). One prior elsewhere is the real
+    # The agent names src/components/ApplicationPage and many generic decisions live
+    # there (exact-scope, no task-keyword overlap). One decision elsewhere is the real
     # answer to the task. Pure scope ranking buries it; reserved slots surface it.
     area = "src/components/ApplicationPage"
     generic = [
         _canonical(pattern=f"structure rule {i}", scope=area, rationale="layout")
         for i in range(8)
     ]
-    link_prior = _canonical(
+    link_decision = _canonical(
         pattern="Build internal links through the urls helper instead of hardcoding hrefs",
         scope="src/utils/i18n", rationale="routing convention",
     )
-    store = _store(*generic, link_prior)
+    store = _store(*generic, link_decision)
 
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, area,
         "change the CTA href to /blog/write using internal links", limit=8,
     )
     assert any(p.scope == "src/utils/i18n" for p in results), \
-        "the keyword-relevant cross-scope prior should occupy a reserved slot"
+        "the keyword-relevant cross-scope decision should occupy a reserved slot"
 
 
-def test_single_weak_keyword_does_not_admit_out_of_scope_prior():
-    # P1a: a cross-scope prior matching only ONE low-value token ("write", common in
+def test_single_weak_keyword_does_not_admit_out_of_scope_decision():
+    # P1a: a cross-scope decision matching only ONE low-value token ("write", common in
     # this corpus so low idf) must NOT be admitted as filler.
     area = "src/components/App"
     same_scope = [_canonical(pattern=f"structure rule {i}", scope=area, rationale="layout")
@@ -403,13 +403,13 @@ def test_single_weak_keyword_does_not_admit_out_of_scope_prior():
     docs = _canonical(pattern="write a dedicated spec document for each feature",
                       scope="docs/specs", rationale="process")
     store = _store(*same_scope, *writers, docs)
-    results = get_priors_for_context(store, REPO, area, "write a free review for the page", limit=8)
+    results = get_decisions_for_context(store, REPO, area, "write a free review for the page", limit=8)
     assert all(p.scope != "docs/specs" for p in results)
 
 
 def test_more_than_three_topical_outsiders_can_be_returned():
     # P2: with generic same-scope filler present, strong cross-scope matches are not
-    # capped at 3 — they fill ahead of keyword-less same-scope priors.
+    # capped at 3 — they fill ahead of keyword-less same-scope decisions.
     area = "src/components/ApplicationPage"
     structure = [_canonical(pattern=f"compose discrete piece {i}", scope=area, rationale="layout")
                  for i in range(8)]
@@ -427,14 +427,14 @@ def test_more_than_three_topical_outsiders_can_be_returned():
     ]
     store = _store(*structure, *outsiders)
     task = "handle webhook payments: ledger, email report, admin table, idempotent retry"
-    results = get_priors_for_context(store, REPO, area, task, limit=8)
+    results = get_decisions_for_context(store, REPO, area, task, limit=8)
     n_outsiders = sum(1 for p in results if p.scope != area)
     assert n_outsiders >= 4, f"expected >3 topical outsiders, got {n_outsiders}"
 
 
 def test_weak_same_scope_keyword_does_not_block_strong_cross_scope():
-    # P1: 8 same-scope priors overlap the task only on a COMMON word ("review", low
-    # idf); one cross-scope prior matches a RARE term ("webhook"). Tier A must not be
+    # P1: 8 same-scope decisions overlap the task only on a COMMON word ("review", low
+    # idf); one cross-scope decision matches a RARE term ("webhook"). Tier A must not be
     # filled by weak same-scope hits and bury the strong cross-scope evidence — a weak
     # same-scope match is demoted to the generic tier, behind strong cross-scope.
     area = "src/components/ApplicationPage"
@@ -443,7 +443,7 @@ def test_weak_same_scope_keyword_does_not_block_strong_cross_scope():
     strong = _canonical(pattern="verify the webhook signature before processing",
                         scope="src/routes/api/payments", rationale="security")
     store = _store(*weak, strong)
-    results = get_priors_for_context(
+    results = get_decisions_for_context(
         store, REPO, area, "review the webhook handling on this page", limit=8
     )
     assert any(p.scope == "src/routes/api/payments" for p in results), \
@@ -458,7 +458,7 @@ def test_path_literal_preserved_as_single_token():
 def test_kebab_literal_unifies_with_snake_case():
     # P2a: event names appear kebab in prose ("order-created") and snake in code
     # ("order_created"); both should canonicalize to the same literal token so a task
-    # phrased either way matches a prior phrased the other.
+    # phrased either way matches a decision phrased the other.
     assert "order_created" in _tokens("listen for the order-created event")
     assert _tokens("emit order-created") & _tokens("the order_created webhook")
 
@@ -471,6 +471,6 @@ def test_reserved_slots_still_return_scope_matches_when_no_keyword_signal():
         for i in range(10)
     ]
     store = _store(*generic)
-    results = get_priors_for_context(store, REPO, area, "unrelated task words", limit=8)
+    results = get_decisions_for_context(store, REPO, area, "unrelated task words", limit=8)
     assert len(results) == 8
     assert all(p.scope == area for p in results)

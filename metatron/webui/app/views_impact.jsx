@@ -73,10 +73,10 @@ function AgentImpactView({ repo }) {
 
       {/* impact summary */}
       <div className="grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 18 }}>
-        <StatCard label="Queries answered" value={u.total_queries} series={[28, 36, 33, 48, 52, 60, 71, 83]} sub={`${u.avg_served} priors served on average`} delay={0.02} />
+        <StatCard label="Queries answered" value={u.total_queries} series={[28, 36, 33, 48, 52, 60, 71, 83]} sub={`${u.avg_served} decisions served on average`} delay={0.02} />
         <StatCard label="Coverage" value={u.coverage * 100} decimals={1} suffix="%" color="var(--emerald)" series={[60, 66, 70, 74, 78, 80, 83, 84]} sub={`${u.misses.toLocaleString()} misses logged`} delay={0.08} />
-        <StatCard label="Helpful rate" value={helpfulRate * 100} decimals={1} suffix="%" color="var(--cyan)" series={[70, 72, 75, 79, 80, 82, 84, 85]} sub="agents rate served priors 1–10" delay={0.14} />
-        <StatCard label="Priors in flight" value={u.served_priors} color="var(--violet)" series={[40, 52, 49, 63, 70, 81, 90, 99]} sub="cumulative priors delivered" delay={0.2} />
+        <StatCard label="Helpful rate" value={helpfulRate * 100} decimals={1} suffix="%" color="var(--cyan)" series={[70, 72, 75, 79, 80, 82, 84, 85]} sub="agents rate served decisions 1–10" delay={0.14} />
+        <StatCard label="Decisions in flight" value={u.served_decisions} color="var(--violet)" series={[40, 52, 49, 63, 70, 81, 90, 99]} sub="cumulative decisions delivered" delay={0.2} />
       </div>
 
       {/* knowledge in flight — bidirectional agent constellation */}
@@ -89,7 +89,7 @@ function AgentImpactView({ repo }) {
           </div>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-            <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", boxShadow: "0 0 6px var(--emerald)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>priors out</span></span>
+            <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", boxShadow: "0 0 6px var(--emerald)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>decisions out</span></span>
             <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", boxShadow: "0 0 6px var(--cyan)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>feedback in</span></span>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
@@ -115,7 +115,7 @@ function AgentImpactView({ repo }) {
                   </div>
                 </div>
               )}
-        <style>{`.prior-flit{animation:fadeup .5s both}`}</style>
+        <style>{`.decision-flit{animation:fadeup .5s both}`}</style>
       </div>
 
       {/* activity stream */}
@@ -128,7 +128,7 @@ function AgentImpactView({ repo }) {
                 border: "1px solid " + (i === active ? "rgba(45,212,191,.35)" : "var(--line)"), background: i === active ? "rgba(45,212,191,.07)" : "rgba(8,18,16,.3)", transition: "all .25s" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, width: 44 }}>
                 <span className="mono tnum" style={{ fontSize: 19, fontWeight: 600, color: i === active ? "var(--emerald)" : "var(--teal)" }}>{q.result_count}</span>
-                <span className="mono dim" style={{ fontSize: 8.5, letterSpacing: ".1em" }}>PRIORS</span>
+                <span className="mono dim" style={{ fontSize: 8.5, letterSpacing: ".1em" }}>DECISIONS</span>
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, color: "var(--text)", marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.task}</div>
@@ -169,12 +169,12 @@ function RatedRow({ r, rank, onOpen }) {
   );
 }
 
-function HelpfulnessView({ repo, openPrior }) {
+function HelpfulnessView({ repo, openDecision }) {
   const lb = useApi(() => MetatronAPI.getLeaderboard(repo), [repo]);
   if (lb.loading) return <Loading label="Tallying agent ratings…" />;
   if (lb.error) return <ErrorState onRetry={lb.reload} />;
   const d = lb.data;
-  const resolve = (id) => MetatronAPI.getPriors(repo, { page_size: 100 }).then((r) => r.items.find((p) => p.id === id)).then((p) => p && openPrior(p));
+  const resolve = (id) => MetatronAPI.getDecisions(repo, { page_size: 100 }).then((r) => r.items.find((p) => p.id === id)).then((p) => p && openDecision(p));
   return (
     <div className="view">
       <SectionTitle eyebrow="Live helpfulness signal" title="What's actually helping agents"
@@ -184,16 +184,16 @@ function HelpfulnessView({ repo, openPrior }) {
         </div>} />
       <div className="grid" style={{ gridTemplateColumns: "1.4fr 1fr", alignItems: "start" }}>
         <div className="panel pad enter">
-          <div className="panel-head"><span style={{ color: "var(--emerald)" }}><Icon name="star" size={16} /></span><h3>Most-helpful canonical priors</h3><div className="spacer" /><span className="sub">score · rising/sinking</span></div>
+          <div className="panel-head"><span style={{ color: "var(--emerald)" }}><Icon name="star" size={16} /></span><h3>Most-helpful canonical decisions</h3><div className="spacer" /><span className="sub">score · rising/sinking</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {d.most_helpful.map((r, i) => <RatedRow key={r.id} r={r} rank={i + 1} onOpen={() => resolve(r.id)} />)}
           </div>
         </div>
         <div className="panel pad enter enter-2" style={{ borderColor: "rgba(251,113,133,.16)" }}>
           <div className="panel-head"><span style={{ color: "var(--rose)" }}><Icon name="target" size={16} /></span><h3>Misleading queue</h3><div className="spacer" /><span className="nav-badge" style={{ background: "rgba(251,113,133,.14)", color: "var(--rose)", borderColor: "rgba(251,113,133,.22)" }}>{d.review_count} to review</span></div>
-          <div className="muted" style={{ fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>Low-scoring priors agents flagged as noise. Pull these from canonical or refine them.</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>Low-scoring decisions agents flagged as noise. Pull these from canonical or refine them.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {d.misleading.length ? d.misleading.map((r, i) => <RatedRow key={r.id} r={r} rank={i + 1} onOpen={() => resolve(r.id)} />) : <Empty title="No misleading priors" detail="Every served prior is scoring above the neutral baseline." />}
+            {d.misleading.length ? d.misleading.map((r, i) => <RatedRow key={r.id} r={r} rank={i + 1} onOpen={() => resolve(r.id)} />) : <Empty title="No misleading decisions" detail="Every served decision is scoring above the neutral baseline." />}
           </div>
         </div>
       </div>
@@ -226,7 +226,7 @@ function FeedbackLoopView({ repo, refresh }) {
     setRefining(e.id);
     await MetatronAPI.refineFeedback(e.id);
     setRefining(null);
-    toast("Gap refined into a new candidate prior", { icon: "loop" });
+    toast("Gap refined into a new candidate decision", { icon: "loop" });
     ev.reload(); refresh && refresh();
   };
 
@@ -257,7 +257,7 @@ function FeedbackLoopView({ repo, refresh }) {
       </div>
 
       {ev.loading ? <Loading label="Gathering feedback gaps…" /> : ev.error ? <ErrorState onRetry={ev.reload} /> :
-        ev.data.events.length === 0 ? <Empty title="No gaps in this view" detail="Every reported gap has been refined into a candidate prior." icon="loop" /> :
+        ev.data.events.length === 0 ? <Empty title="No gaps in this view" detail="Every reported gap has been refined into a candidate decision." icon="loop" /> :
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {ev.data.events.map((e, i) => <GapCard key={e.id} e={e} delay={i * 0.06} onRefine={() => doRefine(e)} refining={refining === e.id} />)}
           </div>}
@@ -306,7 +306,7 @@ function GapCard({ e, delay, onRefine, refining }) {
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-        <span className="mono dim" style={{ fontSize: 11 }}>{e.handled ? "A candidate prior was distilled from this gap." : "Distill this gap into a new candidate prior for human review."}</span>
+        <span className="mono dim" style={{ fontSize: 11 }}>{e.handled ? "A candidate decision was distilled from this gap." : "Distill this gap into a new candidate decision for human review."}</span>
         <div style={{ flex: 1 }} />
         <button className="btn primary" disabled={e.handled || refining} onClick={onRefine}>
           {refining ? <><Spinner size={15} /> Refining…</> : e.handled ? <><Icon name="check" size={15} /> Refined</> : <><Icon name="loop" size={15} /> Refine into candidate</>}

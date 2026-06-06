@@ -9,8 +9,8 @@ import urllib.request
 import pytest
 
 from metatron.events import Event, EventKind
-from metatron.models import Origin, Prior, Status
-from metatron.storage.sqlite import SQLiteEventStore, SQLitePriorStore
+from metatron.models import Origin, Decision, Status
+from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 from metatron.webui.server import find_free_port, make_server
 
 
@@ -43,9 +43,9 @@ def test_find_free_port_bumps_when_start_is_taken():
 
 @pytest.fixture
 def served():
-    store = SQLitePriorStore(":memory:")
-    prior = Prior(repo="github.com/acme/app", pattern="serve me", scope="app", rationale="r", origin=Origin.BOOTSTRAP)
-    store.add(prior)
+    store = SQLiteDecisionStore(":memory:")
+    decision = Decision(repo="github.com/acme/app", pattern="serve me", scope="app", rationale="r", origin=Origin.BOOTSTRAP)
+    store.add(decision)
     events = SQLiteEventStore(":memory:")
     events.record(Event(repo="github.com/acme/app", kind=EventKind.QUERY, area="app", result_count=1))
     port = find_free_port(start=8800, host="127.0.0.1")
@@ -53,7 +53,7 @@ def served():
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
     try:
-        yield store, prior, f"http://127.0.0.1:{port}"
+        yield store, decision, f"http://127.0.0.1:{port}"
     finally:
         httpd.shutdown()
         httpd.server_close()
@@ -115,7 +115,7 @@ def test_valuate_status_idle_and_approve_recommended_wired(served):
     assert json.loads(body)["state"] == "idle"
 
     req = urllib.request.Request(
-        base + "/api/priors/approve-recommended",
+        base + "/api/decisions/approve-recommended",
         data=b'{"repo": "github.com/acme/app"}',
         method="POST", headers={"Content-Type": "application/json"},
     )
@@ -127,7 +127,7 @@ def test_valuate_status_idle_and_approve_recommended_wired(served):
 def test_approve_recommended_accepts_an_origin_filter(served):
     _, _, base = served
     req = urllib.request.Request(
-        base + "/api/priors/approve-recommended",
+        base + "/api/decisions/approve-recommended",
         data=b'{"repo": "github.com/acme/app", "origin": "agent_feedback"}',
         method="POST", headers={"Content-Type": "application/json"},
     )
@@ -163,12 +163,12 @@ def test_feedback_loop_status_idle_and_start_requires_provider(served):
     assert res["ok"] is False
 
 
-def test_api_priors_returns_json_with_the_prior(served):
-    _, prior, base = served
-    status, body = _get(base + "/api/priors")
+def test_api_decisions_returns_json_with_the_decision(served):
+    _, decision, base = served
+    status, body = _get(base + "/api/decisions")
     assert status == 200
     data = json.loads(body)
-    assert any(item["id"] == prior.id for item in data["items"])
+    assert any(item["id"] == decision.id for item in data["items"])
 
 
 def test_api_stats_returns_counts(served):
@@ -186,20 +186,20 @@ def test_api_version_reports_a_revision(served):
     assert "revision" in data and isinstance(data["revision"], str) and data["revision"]
 
 
-def test_api_priors_filters_by_search(served):
+def test_api_decisions_filters_by_search(served):
     store, _, base = served
-    store.add(Prior(repo="github.com/acme/app", pattern="emit highlights only",
+    store.add(Decision(repo="github.com/acme/app", pattern="emit highlights only",
                     scope="src/review", rationale="r", origin=Origin.BOOTSTRAP))
-    _, body = _get(base + "/api/priors?search=highlights")
+    _, body = _get(base + "/api/decisions?search=highlights")
     data = json.loads(body)
     assert [it["scope"] for it in data["items"]] == ["src/review"]
 
 
-def test_api_priors_filters_by_origin(served):
+def test_api_decisions_filters_by_origin(served):
     store, _, base = served
-    store.add(Prior(repo="github.com/acme/app", pattern="from feedback", scope="app",
+    store.add(Decision(repo="github.com/acme/app", pattern="from feedback", scope="app",
                     rationale="r", origin=Origin.AGENT_FEEDBACK, status=Status.CANONICAL))
-    _, body = _get(base + "/api/priors?origin=agent_feedback")
+    _, body = _get(base + "/api/decisions?origin=agent_feedback")
     data = json.loads(body)
     assert all(it["origin"] == "agent_feedback" for it in data["items"])
     assert any(it["pattern"] == "from feedback" for it in data["items"])
@@ -216,7 +216,7 @@ def test_api_feedback_returns_tallies(served):
     _, _, base = served
     _, body = _get(base + "/api/feedback")
     data = json.loads(body)
-    assert "priors" in data and "by_origin" in data
+    assert "decisions" in data and "by_origin" in data
 
 
 def test_api_feedback_events_returns_stream(served):
@@ -253,12 +253,12 @@ def test_api_agent_activity_groups_by_actor(served):
 
 class _FakeRefiner:
     def refine(self, gap, scope_hint="", task=""):
-        return [Prior(repo="x", pattern="refined from gap", scope=scope_hint,
+        return [Decision(repo="x", pattern="refined from gap", scope=scope_hint,
                       rationale="r", origin=Origin.AGENT_FEEDBACK, status=Status.CANDIDATE)]
 
 
 def test_post_refine_feedback_produces_candidates_and_marks_handled():
-    store = SQLitePriorStore(":memory:")
+    store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
     e = Event(repo="r", kind=EventKind.FEEDBACK, missing="gap text", area="src/a")
     events.record(e)
@@ -272,7 +272,7 @@ def test_post_refine_feedback_produces_candidates_and_marks_handled():
         _, body = _post(base + f"/api/feedback/{e.id}/refine")
         data = json.loads(body)
         assert data["ok"] is True
-        assert data["priors_created"] == 1
+        assert data["decisions_created"] == 1
         assert events.get(e.id).handled is True
         assert len(store.list(repo="r", status=Status.CANDIDATE)) == 1
     finally:
@@ -288,11 +288,11 @@ def test_post_refine_feedback_without_factory_is_graceful(served):
     assert "error" in data
 
 
-def test_post_approve_promotes_prior(served):
-    store, prior, base = served
-    _, body = _post(base + f"/api/priors/{prior.id}/approve")
+def test_post_approve_promotes_decision(served):
+    store, decision, base = served
+    _, body = _post(base + f"/api/decisions/{decision.id}/approve")
     assert json.loads(body)["ok"] is True
-    assert store.get(prior.id).status is Status.CANONICAL
+    assert store.get(decision.id).status is Status.CANONICAL
 
 
 def test_api_usage_returns_summary(served):

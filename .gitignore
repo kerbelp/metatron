@@ -220,7 +220,7 @@ __marimo__/
 # macOS
 .DS_Store
 
-# Metatron — local prior store (SQLite); secrets go in .env (ignored above)
+# Metatron — local decision store (SQLite); secrets go in .env (ignored above)
 *.db
 *.sqlite
 *.sqlite3
