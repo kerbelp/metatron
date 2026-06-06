@@ -101,7 +101,7 @@ function AgentImpactView({ repo }) {
           : act.error ? <div style={{ height: 392 }}><ErrorState onRetry={act.reload} /></div>
             : act.data.agents.length === 0 ? (
                 <div style={{ height: 392, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18, overflow: "hidden" }}>
-                  <div style={{ animation: "float-y 6s ease-in-out infinite", flex: "0 0 auto" }}><MetatronCube size={280} opacity={1} hero /></div>
+                  <div style={{ animation: "float-y 6s ease-in-out infinite", flex: "0 0 auto" }}><MetatronCube size={140} opacity={1} hero /></div>
                   <div style={{ textAlign: "center", padding: "0 24px", maxWidth: 460 }}>
                     <div className="mono" style={{ fontSize: 11.5, letterSpacing: ".22em", color: "var(--teal)" }}>AWAITING AGENTS</div>
                     <div className="muted" style={{ fontSize: 12.5, marginTop: 7, lineHeight: 1.5 }}>No agents connected in the last {WINDOW_LABEL} — activity streams in here as agents query Metatron.</div>
