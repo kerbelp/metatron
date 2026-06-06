@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 import sys
+from pathlib import Path
 from typing import TextIO
 
 from dotenv import find_dotenv, load_dotenv
@@ -154,6 +156,10 @@ def main(
             return _cmd_refine_feedback(
                 args, store, event_store, provider, settings, out,
             )
+        if args.command == "export":
+            return _cmd_export(
+                catalog, _resolve_repo(args.repo, store, settings), args.out, out
+            )
         if args.command == "candidates":
             return _cmd_candidates(args, store, settings, out)
     except RepoResolutionError as exc:
@@ -207,6 +213,31 @@ def _cmd_ingest(args, store, provider, run_store, out) -> int:
     )
     print(f"Review them with: metatron candidates list --repo {result.repo}", file=out)
     print(f"Serve them with:  metatron serve --repo {result.repo}", file=out)
+    return 0
+
+
+def _cmd_export(catalog, repo: str, out: str | None, out_stream) -> int:
+    """Copy a repo's self-contained DB out for hand-off, then VACUUM it.
+
+    The per-repo file is already standalone; export is a consistent snapshot (sqlite
+    backup) plus a vacuum so the artifact is compact. The recipient opens it directly
+    with ``metatron --db <file> ...`` (single-file mode) — no MCP, no re-ingest.
+    """
+    if repo not in catalog.list_repos():
+        print(f"No data for repo '{repo}'.", file=out_stream)
+        return 2
+    src = catalog.path_for(repo)
+    dst = Path(out) if out else Path(f"{repo.rstrip('/').split('/')[-1]}.db")
+    s = sqlite3.connect(src)
+    d = sqlite3.connect(dst)
+    try:
+        s.backup(d)  # consistent copy of the whole per-repo file
+        d.execute("VACUUM")
+    finally:
+        s.close()
+        d.close()
+    print(f"Exported '{repo}' → {dst}", file=out_stream)
+    print(f"Recipient: metatron --db {dst} ui", file=out_stream)
     return 0
 
 
@@ -523,6 +554,17 @@ def _build_parser() -> argparse.ArgumentParser:
     approve_p.add_argument("id")
     reject_p = cand_sub.add_parser("reject", help="reject a candidate")
     reject_p.add_argument("id")
+
+    export_p = sub.add_parser(
+        "export", help="copy a repo's self-contained DB out for hand-off"
+    )
+    export_p.add_argument(
+        "--repo", default=None,
+        help="repo id to export (defaults to METATRON_REPO, else the sole/current repo)",
+    )
+    export_p.add_argument(
+        "--out", default=None, help="destination path (default ./<repo-name>.db)"
+    )
 
     return parser
 

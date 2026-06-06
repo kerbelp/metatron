@@ -161,9 +161,16 @@ ANTHROPIC_API_KEY=sk-ant-...
 
 ```toml
 [metatron]
-db_path = "metatron.db"        # one SQLite file holds many repos
+db_path = "~/.metatron"        # catalog dir: one self-contained .db file per repo
 model   = "claude-sonnet-4-6"  # default extraction model
 ```
+
+Each repo gets its own SQLite file under the catalog directory, so a repo's priors
+are a single, shippable artifact (see [`export`](#export--share-a-repos-priors-no-mcp-setup)).
+Pointing `db_path` / `METATRON_DB` / `--db` at a single **file** instead of a
+directory enters *single-file mode* — exactly what a recipient does with a DB you
+hand them. An existing single `metatron.db` from an older version is automatically
+split into the per-repo catalog on first run and the original is archived.
 
 ## Quick start
 
@@ -302,6 +309,24 @@ priors. `--repo` is optional — it [resolves from context](#choosing-the-repo)
 explicitly so the launched server is unambiguous. It also records usage events (queries,
 coverage) to the same DB for the UI. Normally you don't run this by hand — an
 MCP-capable agent launches it (see below).
+
+### `export` — share a repo's priors (no MCP setup)
+
+```bash
+metatron export --repo github.com/acme/app --out app.db
+```
+
+Copies that repo's self-contained DB to `app.db` (a consistent snapshot, vacuumed
+compact). `--repo` is optional — it [resolves from context](#choosing-the-repo);
+`--out` defaults to `./<repo-name>.db`. Hand the file to a teammate who doesn't want
+to wire up MCP — they just point Metatron at it:
+
+```bash
+metatron --db app.db ui      # browse the priors locally, or
+metatron --db app.db serve   # serve them to their own agent
+```
+
+In single-file mode the repo is inferred from the file, so no `--repo` is needed.
 
 ### `ui` — local curation web UI
 
