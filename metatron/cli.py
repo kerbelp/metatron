@@ -91,6 +91,46 @@ def _resolve_and_announce(explicit, store, settings, out) -> str:
     return repo
 
 
+_HOME_ART = r"""
+     +--------------+
+    /              /|
+   +--------------+ |
+   |              | |
+   |   METATRON   | |
+   |              | +
+   |              |/
+   +--------------+
+"""
+
+_TAGLINE = "Capture your team's engineering decisions and serve them to AI coding agents over MCP."
+
+
+def _subcommands(parser):
+    """Yield (name, help) for each registered subcommand, in definition order."""
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for choice in action._choices_actions:
+                yield choice.dest, (choice.help or "")
+            return
+
+
+def _render_home(parser, out) -> int:
+    """The branded landing screen shown for a bare ``metatron`` invocation."""
+    is_tty = bool(getattr(out, "isatty", lambda: False)())
+
+    def style(text: str, code: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if is_tty else text
+
+    print(style(_HOME_ART, "36"), file=out)  # cyan cube
+    print(f"{style('metatron', '1')} · {_TAGLINE}", file=out)
+    print(f"\nUsage:\n  metatron [--db PATH] <command> [flags]\n", file=out)
+    print("Available commands:", file=out)
+    for name, help_text in _subcommands(parser):
+        print(f"  {name:<17} {help_text}", file=out)
+    print('\nRun "metatron <command> --help" for more about a command.', file=out)
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -109,7 +149,13 @@ def main(
     if dotenv_path:
         load_dotenv(dotenv_path)
 
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    # Bare `metatron` (no subcommand): show the branded home screen and stop —
+    # before touching the catalog, so it has no side effects.
+    if args.command is None:
+        return _render_home(parser, out)
 
     settings = load_settings()
     if args.db:
