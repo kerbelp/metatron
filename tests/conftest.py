@@ -54,5 +54,6 @@ def _isolate_metatron_store(tmp_path_factory, monkeypatch):
     """
     home = tmp_path_factory.mktemp("metatron-home")
     monkeypatch.setenv("METATRON_DB", str(home / "catalog"))
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(home / "home"))  # identity config isolation
     monkeypatch.delenv("METATRON_REPO", raising=False)
     monkeypatch.chdir(home)

@@ -310,6 +310,20 @@ explicitly so the launched server is unambiguous. It also records usage events (
 coverage) to the same DB for the UI. Normally you don't run this by hand — an
 MCP-capable agent launches it (see below).
 
+### `whoami` — the identity stamped onto served events
+
+```bash
+metatron whoami                                            # show current identity
+metatron whoami --set-email you@corp.com --set-name "You"  # set it
+```
+
+Metatron serves agents across an org, so every event `serve` records (queries,
+submissions, feedback) is stamped with *who* was running Metatron — an `actor_id`,
+email, and display name. It's local metadata (no login/auth): stored in
+`~/.metatron/config.toml` and seeded automatically from your `git config` on first
+use. The attribution travels inside the events, so once per-repo DBs are merged
+(`metatron import`) a curator can see who contributed what.
+
 ### `export` — share a repo's priors (no MCP setup)
 
 ```bash
