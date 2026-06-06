@@ -39,6 +39,34 @@ def test_every_tool_parameter_carries_a_schema_description():
             )
 
 
+def test_events_are_stamped_with_the_local_identity():
+    from metatron.identity import Identity
+
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    ident = Identity(actor_id="a1", email="dev@corp.com", display_name="Dev")
+    server = build_server(store, REPO, events, identity=ident)
+    asyncio.run(server.call_tool(
+        "get_priors_for_context",
+        {"file_path_or_area": "app", "task_description": "x"},
+    ))
+    e = events.list_events()[0]
+    assert e.actor_id == "a1"
+    assert e.actor_email == "dev@corp.com"
+    assert e.actor_name == "Dev"
+
+
+def test_events_are_anonymous_without_identity():
+    store = SQLitePriorStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    server = build_server(store, REPO, events)  # no identity
+    asyncio.run(server.call_tool(
+        "get_priors_for_context",
+        {"file_path_or_area": "app", "task_description": "x"},
+    ))
+    assert events.list_events()[0].actor_id == ""
+
+
 def test_get_priors_output_carries_query_token_and_revision():
     store = SQLitePriorStore(":memory:")
     store.add(Prior(repo=REPO, pattern="a canonical rule", scope="app",

@@ -14,20 +14,34 @@ from pydantic import Field
 
 from metatron.events import Event, EventKind
 from metatron.feedback_score import helpfulness_scores
+from metatron.identity import Identity
 from metatron.mcp_server import service
 from metatron.storage.base import EventStore, PriorStore
 from metatron.version import current_version
 
 
 def build_server(
-    store: PriorStore, repo: str, event_store: EventStore | None = None
+    store: PriorStore,
+    repo: str,
+    event_store: EventStore | None = None,
+    identity: Identity | None = None,
 ) -> FastMCP:
-    """Build an MCP server bound to a single ``repo`` (agents see only its priors)."""
+    """Build an MCP server bound to a single ``repo`` (agents see only its priors).
+
+    ``identity`` is the local employee running this server; when provided, every
+    recorded event is stamped with it so feedback/queries are attributable.
+    """
     server = FastMCP("metatron")
 
     def _record(event: Event) -> None:
-        if event_store is not None:
-            event_store.record(event)
+        if event_store is None:
+            return
+        if identity is not None:
+            # Stamp who produced this event (the agent never sends it).
+            event.actor_id = identity.actor_id
+            event.actor_email = identity.email
+            event.actor_name = identity.display_name
+        event_store.record(event)
 
     def _helpfulness() -> dict[str, float]:
         # Centered helpfulness signal per prior, from this repo's feedback ratings.
