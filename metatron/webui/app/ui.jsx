@@ -155,6 +155,22 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
               <button className="btn danger lg" disabled={busy} onClick={() => onReject(decision)}><Icon name="x" size={16} />Reject</button>
             </div>
           )}
+
+          {decision.status === "canonical" && onReject && (
+            <div style={{ position: "sticky", bottom: 0 }}>
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 11, lineHeight: 1.55 }}>
+                Knowledge changes. <b style={{ color: "var(--text-2)" }}>Retiring</b> removes this from the canonical set, so agents are no longer served it. You can restore it later from the <b style={{ color: "var(--text-2)" }}>rejected</b> filter.
+              </div>
+              <button className="btn danger lg" style={{ width: "100%" }} disabled={busy} onClick={() => onReject(decision)}><Icon name="x" size={16} />Retire decision</button>
+            </div>
+          )}
+
+          {decision.status === "rejected" && onApprove && (
+            <div style={{ position: "sticky", bottom: 0 }}>
+              <div className="muted" style={{ fontSize: 12.5, marginBottom: 11, lineHeight: 1.55 }}>This decision is retired and not served to agents.</div>
+              <button className="btn primary lg" style={{ width: "100%" }} disabled={busy} onClick={() => onApprove(decision)}><Icon name="check" size={16} />Restore → Canonical</button>
+            </div>
+          )}
         </div>
       </aside>
     </div>
