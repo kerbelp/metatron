@@ -44,27 +44,39 @@ function Icon({ name, size = 18, className = "", style }) {
    ============================================================ */
 function MetatronEmblem({ size = 40, glow = true, animate = true, stroke = "var(--teal)" }) {
   const id = useMemo(() => "me" + Math.random().toString(36).slice(2, 7), []);
+  // Metatron's Cube: center + inner hexagon + outer hexagon (collinear spokes).
+  const pt = (r, i) => { const a = (60 * i - 90) * Math.PI / 180; return [50 + r * Math.cos(a), 50 + r * Math.sin(a)]; };
+  const inner = [0, 1, 2, 3, 4, 5].map((i) => pt(18, i));
+  const outer = [0, 1, 2, 3, 4, 5].map((i) => pt(36, i));
+  const nodes = [[50, 50], ...inner, ...outer];
   return (
     <svg viewBox="0 0 100 100" width={size} height={size} style={{ overflow: "visible" }}>
       <defs>
         <radialGradient id={id + "g"} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--emerald)" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="var(--teal)" stopOpacity="0.5" />
+          <stop offset="0%" stopColor="var(--emerald)" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="var(--teal)" stopOpacity="0.55" />
         </radialGradient>
-        {glow && <filter id={id + "f"} x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>}
+        {glow && <filter id={id + "f"} x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.2" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>}
       </defs>
-      <g filter={glow ? `url(#${id}f)` : undefined} stroke={stroke} fill="none" strokeWidth="1.3" strokeLinejoin="round">
-        <circle cx="50" cy="50" r="40" strokeOpacity="0.32" className={animate ? "spin-slow" : ""} strokeDasharray="2 5" />
-        <circle cx="50" cy="50" r="33" strokeOpacity="0.5" />
-        {/* upward triangle */}
-        <polygon points="50,14 81,68 19,68" strokeOpacity="0.92" />
-        {/* downward triangle */}
-        <polygon points="50,86 81,32 19,32" strokeOpacity="0.92" />
-        {/* inner hexagon ring */}
-        <polygon points="50,28 69,39 69,61 50,72 31,61 31,39" strokeOpacity="0.45" />
-        {/* core */}
-        <circle cx="50" cy="50" r="7.5" fill={`url(#${id}g)`} stroke="none" className={animate ? "" : ""} />
-        <circle cx="50" cy="50" r="11" strokeOpacity="0.6" className={animate ? "" : ""} style={animate ? { animation: "glow-breathe 3.4s ease-in-out infinite" } : undefined} />
+      <g filter={glow ? `url(#${id}f)` : undefined} stroke={stroke} fill="none" strokeWidth="1.1" strokeLinejoin="round" strokeLinecap="round">
+        {/* rotating outer ring */}
+        <circle cx="50" cy="50" r="44" strokeOpacity="0.28" className={animate ? "spin-slow" : ""} strokeDasharray="2 5" />
+        {/* outer hexagon */}
+        <g strokeOpacity="0.6">
+          {outer.map((p, i) => { const q = outer[(i + 1) % 6]; return <line key={"o" + i} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} />; })}
+        </g>
+        {/* inner hexagon + spokes */}
+        <g strokeOpacity="0.4">
+          {inner.map((p, i) => { const q = inner[(i + 1) % 6]; return <line key={"i" + i} x1={p[0]} y1={p[1]} x2={q[0]} y2={q[1]} />; })}
+          {outer.map((p, i) => <line key={"s" + i} x1="50" y1="50" x2={p[0]} y2={p[1]} />)}
+        </g>
+        {/* 13 nodes */}
+        <g fill={stroke} stroke="none">
+          {inner.concat(outer).map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2" />)}
+        </g>
+        {/* glowing core */}
+        <circle cx="50" cy="50" r="4.6" fill={`url(#${id}g)`} stroke="none" />
+        <circle cx="50" cy="50" r="8" strokeOpacity="0.55" style={animate ? { animation: "glow-breathe 3.4s ease-in-out infinite" } : undefined} />
       </g>
     </svg>
   );
