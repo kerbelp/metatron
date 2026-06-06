@@ -31,12 +31,19 @@ def migrate_legacy_db(legacy_path: str | Path, catalog: Catalog) -> bool:
     try:
         for repo in priors.list_repos():
             dst = catalog.open(repo)
+            # Skip rows already present so an interrupted run (rows copied but the
+            # archive rename below not yet reached) re-runs cleanly instead of
+            # tripping a PRIMARY KEY conflict on the second pass.
             for p in priors.list(repo=repo):
-                dst.priors.add(p)
+                if dst.priors.get(p.id) is None:
+                    dst.priors.add(p)
             for e in events.list_events(repo=repo):
-                dst.events.record(e)
+                if dst.events.get(e.id) is None:
+                    dst.events.record(e)
+            existing_runs = {r.id for r in dst.runs.list_for_repo(repo)}
             for r in runs.list_for_repo(repo):
-                dst.runs.record(r)
+                if r.id not in existing_runs:
+                    dst.runs.record(r)
     finally:
         priors.close()
         events.close()

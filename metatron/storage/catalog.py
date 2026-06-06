@@ -75,6 +75,11 @@ class Catalog:
         p = Path(path).expanduser()
         # Single-file mode: an existing regular file is treated as the whole world
         # (the recipient's handed-off DB). Otherwise ``path`` is a catalog directory.
+        # A *missing* path that names a file (``.db`` suffix) is almost certainly a
+        # mistyped or not-yet-copied hand-off file — fail loudly rather than silently
+        # materializing a directory named ``received.db``.
+        if not p.exists() and p.suffix == ".db":
+            raise FileNotFoundError(f"no such database file: {p}")
         self._single_file = p.is_file()
         if self._single_file:
             self._file = p
@@ -145,7 +150,10 @@ class CatalogPriorStore(PriorStore):
         merged: list[Prior] = []
         for rid in self._cat.list_repos():
             merged.extend(self._p(rid).list(repo=rid, **kw))
-        merged.sort(key=lambda p: (p.created_at, p.id), reverse=True)
+        # Match the per-file SQL order (created_at DESC, id ASC) via a stable two-pass
+        # sort, so repo-scoped and fan-out results tie-break identically.
+        merged.sort(key=lambda p: p.id)
+        merged.sort(key=lambda p: p.created_at, reverse=True)
         if limit is not None:
             return merged[offset:offset + limit]
         return merged[offset:]
@@ -213,6 +221,9 @@ class CatalogEventStore(EventStore):
             if self._e(rid).get(event_id) is not None:
                 self._e(rid).mark_handled(event_id, produced_ids)
                 return
+        # Surface a miss rather than silently dropping it: an unmarked feedback event
+        # would be re-refined and double-produce candidates.
+        raise KeyError(event_id)
 
     def list_events(self, *, repo=None, limit=None, offset=0) -> list[Event]:
         if repo is not None:
@@ -220,7 +231,8 @@ class CatalogEventStore(EventStore):
         merged: list[Event] = []
         for rid in self._cat.list_repos():
             merged.extend(self._e(rid).list_events(repo=rid))
-        merged.sort(key=lambda e: (e.timestamp, e.id), reverse=True)
+        merged.sort(key=lambda e: e.id)
+        merged.sort(key=lambda e: e.timestamp, reverse=True)
         return merged[offset:offset + limit] if limit is not None else merged[offset:]
 
     def count_events(self, *, repo=None) -> int:
@@ -244,5 +256,6 @@ class CatalogIngestRunStore:
         out: list[IngestRun] = []
         for rid in self._cat.list_repos():
             out.extend(self._cat.open(rid).runs.list_for_repo(rid))
-        out.sort(key=lambda r: (r.timestamp, r.id), reverse=True)
+        out.sort(key=lambda r: r.id)
+        out.sort(key=lambda r: r.timestamp, reverse=True)
         return out

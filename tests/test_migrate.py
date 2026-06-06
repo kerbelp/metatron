@@ -43,3 +43,23 @@ def test_migrate_is_idempotent(tmp_path):
 def test_migrate_no_legacy_file_is_noop(tmp_path):
     cat = Catalog(str(tmp_path / "data"))
     assert migrate_legacy_db(tmp_path / "metatron.db", cat) is False
+
+
+def test_migrate_recovers_from_a_partially_copied_destination(tmp_path):
+    # Simulate a crash AFTER some rows were copied but BEFORE the legacy archive
+    # rename: the destination already holds rows with the same primary keys. The
+    # re-run must converge (no UNIQUE-constraint crash, no duplicates).
+    legacy = tmp_path / "metatron.db"
+    _seed_legacy(legacy)
+    cat = Catalog(str(tmp_path / "data"))
+
+    src = SQLitePriorStore(str(legacy))
+    pa = src.list(repo="repoA")[0]
+    src.close()
+    cat.open("repoA").priors.add(pa)  # pre-existing duplicate-id row
+
+    assert migrate_legacy_db(legacy, cat) is True
+    store = CatalogPriorStore(cat)
+    assert store.count(repo="repoA") == 1  # no duplicate
+    assert [p.pattern for p in store.list(repo="repoB")] == ["p-repoB"]
+    assert not legacy.exists()
