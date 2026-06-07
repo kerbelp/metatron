@@ -84,8 +84,15 @@ function App() {
   const [view, setView] = useState("impact");
   const [drawer, setDrawer] = useState(null);
   const [drawerBusy, setDrawerBusy] = useState(false);
+  const [panel, setPanel] = useState(null);  // agent/query drill-down side drawer
   const [statsV, setStatsV] = useState(0);
   const [dataV, setDataV] = useState(0);
+
+  // From a drill-down drawer, follow a decision: close the panel, open the decision drawer.
+  const openPanelDecision = useCallback((id) => {
+    setPanel(null);
+    MetatronAPI.getDecision(id).then((d) => d && d.id && setDrawer(d));
+  }, []);
 
   const repos = useApi(() => MetatronAPI.getRepos(), []);
   const ver = useApi(() => MetatronAPI.getVersion(), []);
@@ -205,7 +212,7 @@ function App() {
             <RepoSelect repo={repo} repos={repos.data.repos} onPick={pickRepo} />
           </header>
           <div className="stage-scroll" ref={scrollRef} key={view + repo + dataV}>
-            <Router view={view} repo={repo} openDecision={setDrawer} goto={setView} refreshStats={refreshStats} dataV={dataV} />
+            <Router view={view} repo={repo} openDecision={setDrawer} openPanel={setPanel} goto={setView} refreshStats={refreshStats} dataV={dataV} />
           </div>
         </div>
       </div>
@@ -213,13 +220,16 @@ function App() {
       <DecisionDrawer decision={drawer} busy={drawerBusy} onClose={() => setDrawer(null)}
         onApprove={async (p) => { setDrawerBusy(true); await MetatronAPI.approveDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
         onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }} />
+
+      {panel && panel.type === "agent" && <AgentActivityDrawer agent={panel.agent} focus={panel.focus} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}
+      {panel && panel.type === "query" && <QueryDrawer query={panel.query} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}
     </ToastHost>
   );
 }
 
-function Router({ view, repo, openDecision, goto, refreshStats }) {
+function Router({ view, repo, openDecision, openPanel, goto, refreshStats }) {
   switch (view) {
-    case "impact": return <AgentImpactView repo={repo} />;
+    case "impact": return <AgentImpactView repo={repo} openPanel={openPanel} />;
     case "helpfulness": return <HelpfulnessView repo={repo} openDecision={openDecision} />;
     case "loop": return <FeedbackLoopView repo={repo} refresh={refreshStats} openDecision={openDecision} />;
     case "overview": return <OverviewView repo={repo} openDecision={openDecision} goto={goto} />;

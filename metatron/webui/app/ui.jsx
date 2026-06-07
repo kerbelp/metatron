@@ -199,6 +199,31 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
   );
 }
 
+/* ---------- generic right-side drawer shell (overlay + slide-in + Esc) ---------- */
+function SideDrawer({ title, eyebrow, onClose, width = 560, children }) {
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 130, display: "flex", justifyContent: "flex-end" }}>
+      <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(2,6,8,.6)", backdropFilter: "blur(3px)", animation: "fadeup .3s" }} />
+      <aside style={{ position: "relative", width: `min(${width}px, 92vw)`, height: "100%", background: "linear-gradient(180deg,#081512,#060f0d)", borderLeft: "1px solid var(--line-2)", boxShadow: "var(--shadow-deep)", overflowY: "auto", animation: "slidein .36s cubic-bezier(.2,.8,.3,1)" }}>
+        <style>{`@keyframes slidein{from{transform:translateX(40px);opacity:.4}}`}</style>
+        <div style={{ position: "sticky", top: 0, zIndex: 2, padding: "20px 26px", background: "linear-gradient(180deg,#081512,rgba(8,21,18,.7))", backdropFilter: "blur(8px)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            {eyebrow && <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 4 }}>{eyebrow}</div>}
+            <div style={{ fontSize: 15, color: "#eafff8", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title}</div>
+          </div>
+          <div className="spacer" style={{ flex: 1 }} />
+          <button className="icon-btn" onClick={onClose}><Icon name="x" size={16} /></button>
+        </div>
+        <div style={{ padding: "20px 28px 40px" }}>{children}</div>
+      </aside>
+    </div>
+  );
+}
+
 /* ---------- section header ---------- */
 function SectionTitle({ eyebrow, title, right }) {
   return (
@@ -240,5 +265,5 @@ const useToast = () => React.useContext(ToastCtx);
 
 Object.assign(window, {
   StatusBadge, Confidence, ScopeTag, OriginTag, OriginLabel: ORIGIN_LABEL, OriginDesc: ORIGIN_DESC,
-  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, DecisionRow, DecisionDrawer, SectionTitle, ToastHost, useToast,
+  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, DecisionRow, DecisionDrawer, SideDrawer, SectionTitle, ToastHost, useToast,
 });

@@ -27,7 +27,7 @@ function StatCard({ label, value, decimals, suffix, prefix, series, color = "var
 /* ============================================================
    AGENT IMPACT — hero view
    ============================================================ */
-function AgentImpactView({ repo }) {
+function AgentImpactView({ repo, openPanel }) {
   const usage = useApi(() => MetatronAPI.getUsage(repo), [repo]);
   const fb = useApi(() => MetatronAPI.getFeedback(repo), [repo]);
   const [active, setActive] = useState(0);
@@ -119,7 +119,7 @@ function AgentImpactView({ repo }) {
                     <AgentConstellation data={act.data} focusedIdx={fIdx} onFocus={(i) => setFocusIdx(i)} paused={false} height={392} />
                   </div>
                   <div style={{ padding: "20px 24px", minWidth: 0 }}>
-                    <AgentDetailPanel node={agNodes[fIdx]} />
+                    <AgentDetailPanel node={agNodes[fIdx]} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
                   </div>
                 </div>
               )}
@@ -132,6 +132,7 @@ function AgentImpactView({ repo }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {queries.map((q, i) => (
             <div key={i} onMouseEnter={() => { setPaused(true); setActive(i); }} onMouseLeave={() => setPaused(false)}
+              onClick={() => openPanel && openPanel({ type: "query", query: q })} title="View this query's decisions"
               style={{ display: "grid", gridTemplateColumns: "auto 1fr auto", gap: 16, alignItems: "center", padding: "13px 16px", borderRadius: 10, cursor: "pointer",
                 border: "1px solid " + (i === active ? "rgba(45,212,191,.35)" : "var(--line)"), background: i === active ? "rgba(45,212,191,.07)" : "rgba(8,18,16,.3)", transition: "all .25s" }}>
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, width: 44 }}>
@@ -328,4 +329,31 @@ function GapCard({ e, delay, onRefine, refining, onOpenDecision }) {
   );
 }
 
-Object.assign(window, { AgentImpactView, HelpfulnessView, FeedbackLoopView, StatCard });
+/* ---------- drill-down: a single agent query and the decisions it returned ---------- */
+function QueryDrawer({ query, onOpenDecision, onClose }) {
+  if (!query) return null;
+  const decisions = query.decisions || [];
+  const miss = query.result_count === 0;
+  return (
+    <SideDrawer eyebrow="AGENT QUERY" title={query.task || query.area || "Query"} onClose={onClose}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        {(query.actor_name || query.actor_email) && <span className="mono" style={{ fontSize: 11, color: "var(--text-2)" }}>{query.actor_name || query.actor_email}</span>}
+        <span className="mono dim" style={{ fontSize: 10.5 }} title={new Date(query.timestamp).toLocaleString()}>{timeAgo(query.timestamp)}</span>
+      </div>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>AREA</div>
+      <div className="mono" style={{ fontSize: 11.5, color: "var(--cyan)", marginBottom: 16, lineHeight: 1.5, wordBreak: "break-word" }}>{query.area || "—"}</div>
+      {query.task && <>
+        <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>TASK</div>
+        <div style={{ fontSize: 14, lineHeight: 1.5, color: "var(--text)", marginBottom: 18, textWrap: "pretty" }}>{query.task}</div>
+      </>}
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 12 }}>
+        <span style={{ color: miss ? "var(--rose)" : "var(--emerald)" }}>DECISIONS RETURNED</span> <span style={{ color: "var(--dim)" }}>· {query.result_count}</span>
+      </div>
+      {decisions.length
+        ? <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{decisions.map((d) => <AgentDecisionRow key={d.id} d={d} onOpenDecision={onOpenDecision} />)}</div>
+        : <div className="dim mono" style={{ fontSize: 12 }}>{miss ? "No decisions matched — logged as a coverage miss." : "No decisions recorded for this query."}</div>}
+    </SideDrawer>
+  );
+}
+
+Object.assign(window, { AgentImpactView, HelpfulnessView, FeedbackLoopView, StatCard, QueryDrawer });

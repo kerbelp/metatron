@@ -192,6 +192,12 @@ def agent_activity(
         queries = [e for e in evs if e.kind is EventKind.QUERY]
         feedback = [e for e in evs if e.kind is EventKind.FEEDBACK]
         sample = next((e for e in queries if e.area), latest)  # a query with context
+        # Deduped decisions served across all of this agent's queries (drawer drill-down).
+        received_ids: list[str] = []
+        for q in queries:
+            for did in q.decision_ids:
+                if did not in received_ids:
+                    received_ids.append(did)
         agents.append({
             "id": key,
             "name": latest.actor_name or latest.actor_email or "anonymous",
@@ -205,6 +211,8 @@ def agent_activity(
             "feedback_sent": len(feedback),
             "decisions_received": sum(e.result_count for e in queries),
             "served": _served_decisions(store, sample.decision_ids),
+            "received": _served_decisions(store, received_ids),
+            "feedback": [_feedback_detail(store, f) for f in feedback],
         })
 
     agents.sort(key=lambda a: a["mins"])  # most recent first
@@ -229,8 +237,24 @@ def _served_decisions(store: DecisionStore, decision_ids: list[str]) -> list[dic
         decision = store.get(pid)
         if decision is not None:
             out.append({"id": decision.id, "pattern": decision.pattern,
-                        "scope": decision.scope, "confidence": decision.confidence.value})
+                        "scope": decision.scope, "confidence": decision.confidence.value,
+                        "status": decision.status.value})
     return out
+
+
+def _feedback_detail(store: DecisionStore, event) -> dict:
+    """A feedback event flattened for the drill-down drawer: the gap text, the
+    1–10 ratings, and the decisions it cited (resolved to patterns)."""
+    return {
+        "id": event.id,
+        "area": event.area,
+        "task": event.task,
+        "missing": event.missing,
+        "ratings": event.ratings,
+        "decisions": _served_decisions(store, event.decision_ids),
+        "timestamp": event.timestamp.isoformat(),
+        "handled": event.handled,
+    }
 
 
 def origin_breakdown(store: DecisionStore, *, repo: str | None = None) -> dict:

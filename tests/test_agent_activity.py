@@ -68,6 +68,43 @@ def test_reports_last_active_timestamp_of_most_recent_event():
     assert result["agents"][0]["last_active"] == newest.isoformat()
 
 
+def test_agent_entry_includes_received_decisions_and_feedback_detail():
+    # Powers the drill-down drawers: clicking an agent's stats shows the actual
+    # decisions it received and the feedback it sent.
+    store = SQLiteDecisionStore(":memory:")
+    d1 = Decision(repo=REPO, pattern="use zod", scope="src/api", rationale="r",
+                  origin=Origin.BOOTSTRAP, status=Status.CANONICAL)
+    d2 = Decision(repo=REPO, pattern="pin deps", scope="src", rationale="r2",
+                  origin=Origin.BOOTSTRAP, status=Status.CANONICAL)
+    store.add(d1)
+    store.add(d2)
+    events = SQLiteEventStore(":memory:")
+    # Two queries (d1+d2, then d1 again) prove received is deduped across queries.
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="src/api", task="add webhook",
+                        result_count=2, decision_ids=[d1.id, d2.id],
+                        actor_id="n1", actor_name="Nova", timestamp=_now()))
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="src/api", task="retry logic",
+                        result_count=1, decision_ids=[d1.id],
+                        actor_id="n1", actor_name="Nova", timestamp=_now()))
+    events.record(Event(repo=REPO, kind=EventKind.FEEDBACK, area="src/api", task="add webhook",
+                        missing="No guidance on webhook retries", ratings={d1.id: 8},
+                        decision_ids=[d1.id], actor_id="n1", actor_name="Nova", timestamp=_now()))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+    nova = next(a for a in result["agents"] if a["name"] == "Nova")
+
+    received_ids = [r["id"] for r in nova["received"]]
+    assert received_ids == [d1.id, d2.id]  # deduped, in first-seen order
+    assert nova["received"][0]["pattern"] == "use zod"
+    assert nova["received"][0]["status"] == "canonical"
+
+    assert len(nova["feedback"]) == 1
+    fb = nova["feedback"][0]
+    assert fb["missing"] == "No guidance on webhook retries"
+    assert fb["ratings"] == {d1.id: 8}
+    assert [d["id"] for d in fb["decisions"]] == [d1.id]
+
+
 def test_anonymous_events_group_under_a_single_bucket():
     store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
