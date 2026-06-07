@@ -365,6 +365,8 @@ merging several employees' DBs you can see who contributed what across the team.
 
 ### `ui` — local curation web UI
 
+![Metatron curation UI — the Agent Impact view, showing live agent activity and decision coverage](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-ui.png)
+
 ```text
 $ metatron ui
 Metatron curation UI on http://127.0.0.1:1337  (Ctrl-C to stop)
