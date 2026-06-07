@@ -1,14 +1,22 @@
-name: Publish to PyPI
+name: Publish
 
 # Releases are cut by pushing a version tag, e.g.:
 #   git tag v0.2.0 && git push origin v0.2.0
-# The job builds the sdist + wheel and publishes the `getmetatron` distribution to
-# PyPI using Trusted Publishing (OIDC) — no API token is stored in the repo.
+# This publishes two artifacts for the tag:
+#   1. The `getmetatron` distribution (sdist + wheel) to PyPI via Trusted
+#      Publishing (OIDC) — no API token is stored in the repo.
+#   2. A multi-arch container image to Docker Hub.
 #
 # One-time PyPI setup (web UI): on the `getmetatron` project →
 # Settings → Publishing → add a GitHub trusted publisher with
 #   owner: kerbelp · repository: metatron · workflow: publish.yml · environment: pypi
 # and create a GitHub Environment named `pypi` in this repo's settings.
+#
+# One-time Docker Hub setup: create a Docker Hub access token (Read & Write) and
+# add two repository secrets under Settings → Secrets and variables → Actions:
+#   DOCKERHUB_USERNAME · DOCKERHUB_TOKEN
+# The image is pushed to ${DOCKERHUB_USERNAME}/getmetatron with both the version
+# tags (e.g. 0.3.0, 0.3) and `latest`.
 
 on:
   push:
@@ -16,8 +24,8 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  publish:
-    name: Build and publish getmetatron
+  pypi:
+    name: Build and publish to PyPI
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -33,3 +41,35 @@ jobs:
         run: uv build
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+
+  docker:
+    name: Build and publish to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Derive image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/getmetatron
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
