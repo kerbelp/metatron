@@ -12,7 +12,7 @@ function Icon({ name, size = 18, className = "", style }) {
   const paths = {
     impact: <><circle cx="12" cy="12" r="3" {...p} /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" {...p} /></>,
     pulse: <path d="M2 12h4l2-7 4 14 2-7h8" {...p} />,
-    star: <><path d="M12 3l8 14H4z" {...p} /><path d="M12 21L4 7h16z" {...p} /></>,
+    star: <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z" {...p} />,
     loop: <><path d="M3 12a9 9 0 0 1 15-6.7L21 8" {...p} /><path d="M21 4v4h-4" {...p} /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" {...p} /><path d="M3 20v-4h4" {...p} /></>,
     grid: <><rect x="3" y="3" width="7" height="7" rx="1" {...p} /><rect x="14" y="3" width="7" height="7" rx="1" {...p} /><rect x="3" y="14" width="7" height="7" rx="1" {...p} /><rect x="14" y="14" width="7" height="7" rx="1" {...p} /></>,
     list: <><path d="M8 6h13M8 12h13M8 18h13" {...p} /><circle cx="3.5" cy="6" r="1" fill="currentColor" stroke="none" /><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="3.5" cy="18" r="1" fill="currentColor" stroke="none" /></>,
