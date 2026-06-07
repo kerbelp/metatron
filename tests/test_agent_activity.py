@@ -52,6 +52,22 @@ def test_groups_recent_events_by_actor_within_window():
     assert "Ghost" not in {a["name"] for a in result["agents"]}
 
 
+def test_reports_last_active_timestamp_of_most_recent_event():
+    # The UI renders "last active <relative time>" from this ISO timestamp.
+    store = SQLiteDecisionStore(":memory:")
+    events = SQLiteEventStore(":memory:")
+    older = _now() - timedelta(minutes=5)
+    newest = _now() - timedelta(minutes=1)
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="a", actor_id="n1",
+                        actor_name="Nova", timestamp=older))
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="b", actor_id="n1",
+                        actor_name="Nova", timestamp=newest))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+
+    assert result["agents"][0]["last_active"] == newest.isoformat()
+
+
 def test_anonymous_events_group_under_a_single_bucket():
     store = SQLiteDecisionStore(":memory:")
     events = SQLiteEventStore(":memory:")
