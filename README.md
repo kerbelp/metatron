@@ -6,6 +6,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/getmetatron/"><img src="https://img.shields.io/pypi/v/getmetatron.svg?color=2b7de9" alt="PyPI version" /></a>
+  <a href="https://hub.docker.com/r/kerbelp/getmetatron"><img src="https://img.shields.io/docker/v/kerbelp/getmetatron?sort=semver&label=docker&color=2496ed" alt="Docker image version" /></a>
   <img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+" />
   <a href="https://github.com/kerbelp/metatron/actions/workflows/ci.yml"><img src="https://github.com/kerbelp/metatron/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
@@ -88,12 +89,20 @@ uv tool install .
 
 ## Run with Docker
 
-A `Dockerfile` is included (it's also what the [Glama.ai](https://glama.ai) listing
-builds). The image's entrypoint is the `metatron` CLI and its default command serves
-the MCP server over stdio, so `docker run` with no arguments starts the server.
+A prebuilt multi-arch image (`linux/amd64`, `linux/arm64`) is published to Docker Hub
+as [`kerbelp/getmetatron`](https://hub.docker.com/r/kerbelp/getmetatron). The image's
+entrypoint is the `metatron` CLI and its default command serves the MCP server over
+stdio, so `docker run` with no arguments starts the server.
 
 ```bash
-docker build -t getmetatron .
+docker pull kerbelp/getmetatron
+```
+
+To build from source instead (this is also what the [Glama.ai](https://glama.ai)
+listing builds):
+
+```bash
+docker build -t kerbelp/getmetatron .
 ```
 
 Decisions live in a SQLite database, so mount a volume to persist it across runs.
@@ -105,17 +114,17 @@ docker run --rm \
   -e ANTHROPIC_API_KEY \
   -v metatron-data:/data -e METATRON_DB=/data/metatron.db \
   -v /path/to/your/repo:/repo:ro \
-  getmetatron ingest /repo
+  kerbelp/getmetatron ingest /repo
 
 # 2. serve the curated decisions over stdio (no API key needed)
 docker run -i --rm \
   -v metatron-data:/data -e METATRON_DB=/data/metatron.db \
-  getmetatron serve --repo <id>
+  kerbelp/getmetatron serve --repo <id>
 ```
 
 `ingest` prints the `<id>` to pass to `serve`. Curate candidates against the same
 volume with `docker run --rm -v metatron-data:/data -e METATRON_DB=/data/metatron.db
-getmetatron candidates list` (then `… candidates approve <decision-id>`). The `-i` flag
+kerbelp/getmetatron candidates list` (then `… candidates approve <decision-id>`). The `-i` flag
 on `serve` is required — stdio needs an open stdin. To point a coding agent at the
 container, use it as the MCP command:
 
@@ -127,7 +136,7 @@ container, use it as the MCP command:
       "args": ["run", "-i", "--rm",
                "-v", "metatron-data:/data",
                "-e", "METATRON_DB=/data/metatron.db",
-               "getmetatron", "serve", "--repo", "<id>"]
+               "kerbelp/getmetatron", "serve", "--repo", "<id>"]
     }
   }
 }
