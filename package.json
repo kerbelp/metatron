@@ -1,0 +1,9 @@
+{
+  "name": "metatron-webui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Front-end unit tests for the Metatron curation web UI (pure logic only; no build step).",
+  "scripts": {
+    "test": "node --test 'metatron/webui/app/**/*.test.js'"
+  }
+}

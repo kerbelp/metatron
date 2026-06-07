@@ -113,7 +113,46 @@ function App() {
     return () => clearTimeout(t);
   }, [view, repo, dataV]);
 
-  if (repos.loading || !repo) return (
+  // Boot watchdog: tick elapsed time while the repo list is loading so the splash
+  // can give up and surface an error instead of spinning forever (e.g. the local
+  // server died mid-request).
+  const [bootElapsed, setBootElapsed] = useState(0);
+  useEffect(() => {
+    if (!repos.loading) { setBootElapsed(0); return; }
+    const t0 = Date.now();
+    const id = setInterval(() => setBootElapsed(Date.now() - t0), 500);
+    return () => clearInterval(id);
+  }, [repos.loading]);
+
+  const boot = MetatronBoot.bootScreenState({
+    loading: repos.loading,
+    error: repos.error,
+    repos: repos.data ? repos.data.repos : null,
+    elapsedMs: bootElapsed,
+    timeoutMs: 10000,
+  });
+
+  if (boot === "error" || boot === "timeout") return (
+    <div style={{ height: "100vh", display: "grid", placeItems: "center" }}>
+      <ErrorState
+        onRetry={repos.reload}
+        detail={boot === "timeout"
+          ? "The Metatron API stopped responding. Is the local server still running?"
+          : "Could not reach the Metatron API to list repositories."}
+      />
+    </div>
+  );
+  if (boot === "empty") return (
+    <div style={{ height: "100vh", display: "grid", placeItems: "center" }}>
+      <div className="state-box">
+        <div className="dim"><Icon name="spark" size={26} /></div>
+        <div className="t">No repositories yet</div>
+        <div className="d">This catalog has no repositories. Run an ingest, or — if you set <span className="mono">METATRON_DB</span> — confirm it points at the right directory.</div>
+        <button className="btn" onClick={repos.reload}>Retry</button>
+      </div>
+    </div>
+  );
+  if (boot === "loading" || !repo) return (
     <div style={{ height: "100vh", display: "grid", placeItems: "center" }}>
       <div style={{ textAlign: "center" }}>
         <div style={{ animation: "float-y 3s ease-in-out infinite" }}><MetatronEmblem size={88} /></div>
@@ -122,7 +161,6 @@ function App() {
       </div>
     </div>
   );
-  if (repos.error) return <div style={{ height: "100vh", display: "grid", placeItems: "center" }}><ErrorState onRetry={repos.reload} detail="Could not reach the Metatron API to list repositories." /></div>;
 
   const cur = NAV_FLAT.find((n) => n.id === view);
 
