@@ -209,7 +209,7 @@ function CurationView({ repo, openDecision, refresh }) {
   return (
     <div className="view">
       {burst && <ApproveBurst key={burst.id} x={burst.x} y={burst.y} big={burst.big} onDone={() => setBurst(null)} />}
-      <SectionTitle eyebrow="Human curation" title="Candidate review"
+      <SectionTitle eyebrow="Human curation · newest first" title="Candidate decision review"
         right={recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
           {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
         </button>} />
@@ -250,6 +250,10 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen })
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 11, flexWrap: "wrap" }}>
             <TriageTag triage={p.triage} />
             <Confidence level={p.confidence} showLabel />
+            {p.created_at && (
+              <span className="mono dim" style={{ fontSize: 10.5, marginLeft: "auto" }}
+                title={new Date(p.created_at).toLocaleString()}>{timeAgo(p.created_at)}</span>
+            )}
           </div>
           <div style={{ fontSize: 15.5, lineHeight: 1.45, color: "#eafff8", marginBottom: 10, textWrap: "pretty" }}>{p.pattern}</div>
           <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>

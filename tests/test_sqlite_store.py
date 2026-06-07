@@ -4,6 +4,8 @@ These exercise the behaviour through the ``DecisionStore`` interface so the same
 suite would apply to a future Postgres implementation.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from metatron.models import (
@@ -95,6 +97,21 @@ def test_list_returns_all_added(store):
     store.add(b)
     ids = {p.id for p in store.list()}
     assert ids == {a.id, b.id}
+
+
+def test_list_returns_newest_first(store):
+    # The curation UI relies on this order to show candidates newest-first.
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    old = _decision(status=Status.CANDIDATE, created_at=base)
+    mid = _decision(status=Status.CANDIDATE, created_at=base + timedelta(hours=1))
+    new = _decision(status=Status.CANDIDATE, created_at=base + timedelta(hours=2))
+    # Insert out of chronological order to prove ordering is by created_at, not insertion.
+    store.add(mid)
+    store.add(old)
+    store.add(new)
+
+    result = store.list(status=Status.CANDIDATE)
+    assert [p.id for p in result] == [new.id, mid.id, old.id]
 
 
 def test_list_filters_by_status(store):
