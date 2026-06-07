@@ -141,7 +141,7 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
 }
 
 /* right-hand detail for the focused node */
-function AgentDetailPanel({ node }) {
+function AgentDetailPanel({ node, onDrill }) {
   if (!node) return null;
   if (node.kind === "group") {
     return (
@@ -189,12 +189,14 @@ function AgentDetailPanel({ node }) {
       <div style={{ fontSize: 14.5, lineHeight: 1.45, color: "var(--text)", marginBottom: 16, textWrap: "pretty" }}>{a.task}</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
-        <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(52,211,153,.2)", background: "rgba(52,211,153,.05)" }}>
-          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--emerald)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="down" size={13} />DECISIONS RECEIVED</div>
+        <div onClick={() => onDrill && onDrill(a, "received")} title="View the decisions this agent received"
+          className="drill-stat" style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(52,211,153,.2)", background: "rgba(52,211,153,.05)", cursor: onDrill ? "pointer" : "default" }}>
+          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--emerald)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="down" size={13} />DECISIONS RECEIVED{onDrill && <span style={{ marginLeft: "auto", opacity: .6 }}><Icon name="chevron" size={12} /></span>}</div>
           <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color: "var(--emerald)" }}>{a.decisions_received}</div>
         </div>
-        <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(34,211,238,.2)", background: "rgba(34,211,238,.05)" }}>
-          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--cyan)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="up" size={13} />FEEDBACK SENT</div>
+        <div onClick={() => onDrill && onDrill(a, "feedback")} title="View the feedback this agent sent"
+          className="drill-stat" style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid rgba(34,211,238,.2)", background: "rgba(34,211,238,.05)", cursor: onDrill ? "pointer" : "default" }}>
+          <div className="mono" style={{ fontSize: 9.5, letterSpacing: ".12em", color: "var(--cyan)", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}><Icon name="up" size={13} />FEEDBACK SENT{onDrill && <span style={{ marginLeft: "auto", opacity: .6 }}><Icon name="chevron" size={12} /></span>}</div>
           <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color: "var(--cyan)" }}>{a.feedback_sent}</div>
         </div>
       </div>
@@ -214,4 +216,79 @@ function AgentDetailPanel({ node }) {
   );
 }
 
-Object.assign(window, { AgentConstellation, AgentDetailPanel, buildNodes, AGENT_STATUS });
+/* ---------- drill-down: an agent's received decisions + feedback sent ---------- */
+function AgentDecisionRow({ d, onOpenDecision }) {
+  return (
+    <div onClick={() => onOpenDecision(d.id)} style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)", cursor: "pointer" }}>
+      <span style={{ color: "var(--teal)", marginTop: 1 }}><Icon name="spark" size={13} /></span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, lineHeight: 1.4, color: "var(--text-2)" }}>{d.pattern}</div>
+        <div style={{ display: "flex", gap: 10, marginTop: 6, alignItems: "center", flexWrap: "wrap" }}>
+          <ScopeTag scope={d.scope} />{d.status && <StatusBadge status={d.status} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackDetailCard({ f, onOpenDecision }) {
+  const ratings = Object.entries(f.ratings || {});
+  return (
+    <div className="panel pad" style={{ background: "rgba(8,18,16,.4)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
+        <span className="mono" style={{ fontSize: 11, color: "var(--cyan)" }}>{f.area || "—"}</span>
+        <div style={{ flex: 1 }} />
+        <span className="mono dim" style={{ fontSize: 10.5 }} title={new Date(f.timestamp).toLocaleString()}>{timeAgo(f.timestamp)}</span>
+        {f.handled ? <span className="badge canonical"><span className="pip" />Refined</span> : <span className="badge candidate"><span className="pip" />Open gap</span>}
+      </div>
+      {f.task && <div style={{ fontSize: 12.5, color: "var(--text-2)", marginBottom: 8 }}>{f.task}</div>}
+      {f.missing && <div style={{ fontSize: 13, lineHeight: 1.55, color: "var(--text)", padding: "10px 12px", borderRadius: 9, border: "1px solid rgba(245,193,107,.18)", background: "rgba(245,193,107,.04)", marginBottom: ratings.length ? 10 : 0, textWrap: "pretty" }}>{f.missing}</div>}
+      {ratings.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {ratings.map(([id, score]) => (
+            <div key={id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span className="mono" onClick={() => onOpenDecision(id)} title={"Open decision " + id}
+                style={{ fontSize: 11, color: "var(--cyan)", width: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer", textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{id}</span>
+              <div style={{ flex: 1 }}><Meter value={score} max={10} color={score >= 6 ? "var(--emerald)" : score >= 4 ? "var(--amber)" : "var(--rose)"} height={6} /></div>
+              <span className="mono tnum" style={{ fontSize: 12, width: 18, textAlign: "right", color: score >= 6 ? "var(--emerald)" : score >= 4 ? "var(--amber)" : "var(--rose)" }}>{score}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentActivityDrawer({ agent, focus, onOpenDecision, onClose }) {
+  if (!agent) return null;
+  const received = agent.received || [];
+  const feedback = agent.feedback || [];
+  const header = (title, count, color) => (
+    <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 12 }}>
+      <span style={{ color }}>{title}</span> <span style={{ color: "var(--dim)" }}>· {count}</span>
+    </div>
+  );
+  const receivedBlock = (
+    <div style={{ marginBottom: 26 }}>
+      {header("DECISIONS RECEIVED", received.length, "var(--emerald)")}
+      {received.length
+        ? <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{received.map((d) => <AgentDecisionRow key={d.id} d={d} onOpenDecision={onOpenDecision} />)}</div>
+        : <div className="dim mono" style={{ fontSize: 12 }}>No decisions served in this window.</div>}
+    </div>
+  );
+  const feedbackBlock = (
+    <div style={{ marginBottom: 26 }}>
+      {header("FEEDBACK SENT", feedback.length, "var(--cyan)")}
+      {feedback.length
+        ? <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>{feedback.map((f) => <FeedbackDetailCard key={f.id} f={f} onOpenDecision={onOpenDecision} />)}</div>
+        : <div className="dim mono" style={{ fontSize: 12 }}>No feedback sent in this window.</div>}
+    </div>
+  );
+  return (
+    <SideDrawer eyebrow="AGENT ACTIVITY" title={agent.name} onClose={onClose}>
+      {focus === "feedback" ? <>{feedbackBlock}{receivedBlock}</> : <>{receivedBlock}{feedbackBlock}</>}
+    </SideDrawer>
+  );
+}
+
+Object.assign(window, { AgentConstellation, AgentDetailPanel, AgentActivityDrawer, buildNodes, AGENT_STATUS });
