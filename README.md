@@ -373,17 +373,31 @@ Metatron curation UI on http://127.0.0.1:1337  (Ctrl-C to stop)
 ```
 
 Binds to `localhost` (bumping to the next free port if taken) and reads/writes the
-same store as the CLI. Tabs:
+same store as the CLI. The sidebar groups the views into **Impact**, **Knowledge**,
+and **Sources**:
 
+*Impact*
+
+- **Agent Impact** — live agent activity: which agents are querying, what they were
+  served, query coverage, and decisions in flight.
+- **Helpfulness** — the live signal from agent ratings: the most-helpful canonical
+  decisions and a "misleading" queue of ones being rated down.
+- **Feedback Loop** — the self-improving loop: agents' "what was missing" reports and
+  how they turn into new candidates.
+
+*Knowledge*
+
+- **Overview** — the knowledge base at a glance.
 - **Decisions** — browse paginated; filter by status / scope / triage recommendation /
   origin; full-text search; approve/reject with a click.
-- **Usage** — how often agents query, coverage (share of queries that returned a
-  decision), most-queried scopes, recent queries.
-- **Quality** — decision quality by origin (ingest vs feedback) and one-time ingest cost.
-- **Feedback** — the agent feedback stream, filterable **All / Unhandled / Handled**.
-  Handled reports expand to show the candidate decisions they were refined into, each
-  with its curation status and usefulness (served / 👍 / 👎). Unhandled reports get a
-  **Refine into decisions** button to run the refiner on that one report on the spot.
+- **Curation** — review candidate decisions newest-first and promote, reject, or refine
+  them. The human gate — nothing becomes canonical here without a click.
+
+*Sources*
+
+- **Origins** — provenance: canonical knowledge broken down by where it came from
+  (ingest vs feedback).
+- **Ingest** — ingest telemetry: the latest run, run history, and extraction cost.
 
 Flag: `--port N` (starting port, default `1337`).
 
