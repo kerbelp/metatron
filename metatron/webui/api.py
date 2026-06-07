@@ -197,7 +197,7 @@ def agent_activity(
             "name": latest.actor_name or latest.actor_email or "anonymous",
             "email": latest.actor_email,
             "mins": round((now - latest.timestamp).total_seconds() / 60, 1),
-            "status": "feedback" if latest.kind is EventKind.FEEDBACK else "active",
+            "status": "feedback" if latest.kind is EventKind.FEEDBACK else "serving",
             "area": sample.area,
             "task": sample.task,
             "queries": len(queries),
