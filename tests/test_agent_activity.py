@@ -46,6 +46,8 @@ def test_groups_recent_events_by_actor_within_window():
     assert nova["feedback_sent"] == 1
     assert nova["decisions_received"] == 1  # summed over the actor's queries
     assert nova["status"] == "feedback"  # most recent event was feedback
+    andromeda = next(a for a in result["agents"] if a["name"] == "Andromeda")
+    assert andromeda["status"] == "serving"  # most recent event was a query
     assert result["total_feedback"] == 1
     assert "Ghost" not in {a["name"] for a in result["agents"]}
 

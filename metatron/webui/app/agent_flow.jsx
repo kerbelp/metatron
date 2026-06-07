@@ -11,6 +11,9 @@ const AGENT_STATUS = {
   feedback: { c: "var(--cyan)",    label: "sending feedback" },
   idle:     { c: "var(--muted)",   label: "idle" },
 };
+// Never crash on an unrecognised status: fall back to a neutral style so a new
+// backend status value degrades gracefully instead of breaking the whole panel.
+const statusStyle = (s) => AGENT_STATUS[s] || { c: "var(--muted)", label: s || "unknown" };
 const initials = (name) => name.slice(0, 1).toUpperCase();
 
 /* build the node list (agents + optional group) from activity data */
@@ -65,7 +68,7 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
 
         {placed.map((p, i) => {
           const focused = i === focusedIdx;
-          const sc = AGENT_STATUS[p.status]?.c || "var(--muted)";
+          const sc = statusStyle(p.status).c;
           const d = conduit(p, i);
           const fb = p.kind === "agent" ? p.agent.feedback_sent : p.feedback;
           const pid = "agc" + i;
@@ -101,7 +104,7 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
       {/* agent nodes */}
       {placed.map((p, i) => {
         const focused = i === focusedIdx;
-        const sc = AGENT_STATUS[p.status]?.c || "var(--muted)";
+        const sc = statusStyle(p.status).c;
         const right = p.x >= cx;
         return (
           <div key={p.key} onMouseEnter={() => onFocus(i)} onClick={() => onFocus(i)}
@@ -153,7 +156,7 @@ function AgentDetailPanel({ node }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 220, overflowY: "auto", paddingRight: 4 }}>
           {node.members.map((a) => (
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 9, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
-              <div style={{ width: 24, height: 24, borderRadius: "50%", display: "grid", placeItems: "center", border: "1.5px solid " + AGENT_STATUS[a.status].c, color: AGENT_STATUS[a.status].c, fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600 }}>{initials(a.name)}</div>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", display: "grid", placeItems: "center", border: "1.5px solid " + statusStyle(a.status).c, color: statusStyle(a.status).c, fontFamily: "var(--mono)", fontSize: 11, fontWeight: 600 }}>{initials(a.name)}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, color: "var(--text)" }}>{a.name}</div>
                 <div className="mono" style={{ fontSize: 9.5, color: "var(--dim)" }}>{a.id}</div>
@@ -169,7 +172,7 @@ function AgentDetailPanel({ node }) {
     );
   }
   const a = node.agent;
-  const sc = AGENT_STATUS[a.status].c;
+  const sc = statusStyle(a.status).c;
   return (
     <div key={a.id} className="enter" style={{ minWidth: 0 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
@@ -178,7 +181,7 @@ function AgentDetailPanel({ node }) {
           <div style={{ fontSize: 16, color: "#eafff8", fontWeight: 500 }}>{a.name}</div>
           <div className="mono" style={{ fontSize: 10.5, color: "var(--dim)" }}>{a.id}</div>
         </div>
-        <span className="badge" style={{ marginLeft: "auto", color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{AGENT_STATUS[a.status].label}</span>
+        <span className="badge" style={{ marginLeft: "auto", color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{statusStyle(a.status).label}</span>
       </div>
 
       <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>NOW WORKING ON</div>
