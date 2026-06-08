@@ -112,3 +112,90 @@ def test_anonymous_events_group_under_a_single_bucket():
     result = agent_activity(events, store, repo=REPO, window_mins=30)
     assert result["total_agents"] == 1
     assert result["agents"][0]["name"]  # has a display fallback, not empty
+
+
+def _refined_decision(store):
+    """A decision born from agent feedback, registered in the store."""
+    d = Decision(repo=REPO, pattern="use this.helpers.httpRequest", scope="nodes",
+                 rationale="r", origin=Origin.AGENT_FEEDBACK, status=Status.CANONICAL)
+    store.add(d)
+    return d
+
+
+def test_emits_trace_when_one_actors_refined_feedback_is_served_to_another():
+    # The headline relationship: Maya's "what was missing" feedback was refined into
+    # a decision that Metatron later served to Daniel. That A -> decision -> B chain
+    # is surfaced as a trace.
+    store = SQLiteDecisionStore(":memory:")
+    d = _refined_decision(store)
+    events = SQLiteEventStore(":memory:")
+    fb = Event(repo=REPO, kind=EventKind.FEEDBACK, area="nodes", task="add node",
+               missing="No guidance on outbound HTTP in nodes",
+               actor_id="a1", actor_name="Maya", timestamp=_now())
+    events.record(fb)
+    events.mark_handled(fb.id, [d.id])  # the real refinement link
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="nodes", task="add slack node",
+                        result_count=1, decision_ids=[d.id],
+                        actor_id="b1", actor_name="Daniel", timestamp=_now()))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+
+    assert "traces" in result
+    assert len(result["traces"]) == 1
+    t = result["traces"][0]
+    assert t["from"] == "a1" and t["from_name"] == "Maya"
+    assert t["to"] == "b1" and t["to_name"] == "Daniel"
+    assert t["decision_id"] == d.id
+    assert t["pattern"] == "use this.helpers.httpRequest"
+    assert t["missing"] == "No guidance on outbound HTTP in nodes"
+
+
+def test_no_self_trace_when_an_actor_is_served_a_decision_their_own_feedback_produced():
+    store = SQLiteDecisionStore(":memory:")
+    d = _refined_decision(store)
+    events = SQLiteEventStore(":memory:")
+    fb = Event(repo=REPO, kind=EventKind.FEEDBACK, area="nodes", missing="gap",
+               actor_id="a1", actor_name="Maya", timestamp=_now())
+    events.record(fb)
+    events.mark_handled(fb.id, [d.id])
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="nodes", result_count=1,
+                        decision_ids=[d.id], actor_id="a1", actor_name="Maya",
+                        timestamp=_now()))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+
+    assert result["traces"] == []
+
+
+def test_no_trace_for_a_served_decision_that_did_not_come_from_feedback():
+    store = SQLiteDecisionStore(":memory:")
+    d = Decision(repo=REPO, pattern="use zod", scope="src/api", rationale="r",
+                 origin=Origin.BOOTSTRAP, status=Status.CANONICAL)
+    store.add(d)
+    events = SQLiteEventStore(":memory:")
+    events.record(Event(repo=REPO, kind=EventKind.QUERY, area="src/api", result_count=1,
+                        decision_ids=[d.id], actor_id="b1", actor_name="Daniel",
+                        timestamp=_now()))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+
+    assert result["traces"] == []
+
+
+def test_traces_dedupe_on_from_to_and_decision():
+    store = SQLiteDecisionStore(":memory:")
+    d = _refined_decision(store)
+    events = SQLiteEventStore(":memory:")
+    fb = Event(repo=REPO, kind=EventKind.FEEDBACK, area="nodes", missing="gap",
+               actor_id="a1", actor_name="Maya", timestamp=_now())
+    events.record(fb)
+    events.mark_handled(fb.id, [d.id])
+    # Daniel is served the same refined decision across two separate queries.
+    for task in ("add slack node", "add stripe node"):
+        events.record(Event(repo=REPO, kind=EventKind.QUERY, area="nodes", task=task,
+                            result_count=1, decision_ids=[d.id], actor_id="b1",
+                            actor_name="Daniel", timestamp=_now()))
+
+    result = agent_activity(events, store, repo=REPO, window_mins=30)
+
+    assert len(result["traces"]) == 1

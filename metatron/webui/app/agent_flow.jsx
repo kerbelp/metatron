@@ -48,6 +48,13 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
     return { ...n, ang, x: cx + rx * Math.cos(ang), y: cy + ry * Math.sin(ang) };
   });
 
+  // Refinement-to-serve highlight: when the focused node is the target of a trace
+  // (its decision was refined from another engineer's feedback), light up the path.
+  const traces = data.traces || [];
+  const active = (typeof MetatronTrace !== "undefined")
+    ? MetatronTrace.activeTraceForFocus(placed, traces, focusedIdx)
+    : null;
+
   const conduit = (p, i) => {
     const mx = (cx + p.x) / 2, my = (cy + p.y) / 2;
     let dx = p.x - cx, dy = p.y - cy; const len = Math.hypot(dx, dy) || 1;
@@ -93,6 +100,32 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
 
         {/* center pulse */}
         {!paused && <circle cx={cx} cy={cy} r="40" fill="none" stroke="var(--teal)" strokeWidth="1" opacity="0" style={{ transformOrigin: `${cx}px ${cy}px`, animation: "pulse-ring 3.4s ease-out infinite" }} />}
+
+        {/* refinement-to-serve trace: A's feedback → refined decision → served to B */}
+        {active && !paused && (() => {
+          const B = placed[active.toIdx];
+          const A = active.fromIdx >= 0 ? placed[active.fromIdx] : null;
+          const dB = conduit(B, active.toIdx);
+          const dA = A ? conduit(A, active.fromIdx) : null;
+          return (
+            <g className="enter">
+              {dA && <path d={dA} fill="none" stroke="var(--cyan)" strokeOpacity="0.65" strokeWidth="2.2" />}
+              <path d={dB} fill="none" stroke="var(--emerald)" strokeOpacity="0.85" strokeWidth="2.2" />
+              {/* the originating feedback relays in along A's conduit … */}
+              {dA && (
+                <circle r="4.4" fill="var(--cyan)" filter="url(#agcGlow)">
+                  <animateMotion dur="1.25s" repeatCount="indefinite" path={dA} keyPoints="1;0" keyTimes="0;1" calcMode="linear" />
+                </circle>
+              )}
+              {/* … then the refined decision relays out along B's conduit */}
+              <circle r="4.4" fill="var(--emerald)" filter="url(#agcGlow)">
+                <animateMotion dur="1.25s" repeatCount="indefinite" path={dB} begin="1.25s" />
+              </circle>
+              {/* emphasised pulse at the refined node (the center) */}
+              <circle cx={cx} cy={cy} r="30" fill="none" stroke="var(--emerald)" strokeWidth="1.5" opacity="0" style={{ transformOrigin: `${cx}px ${cy}px`, animation: "pulse-ring 2.5s ease-out infinite" }} />
+            </g>
+          );
+        })()}
       </svg>
 
       {/* Metatron core */}
@@ -136,6 +169,20 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
           </div>
         );
       })}
+
+      {/* trace caption — names the refinement-to-serve relationship being highlighted */}
+      {active && (
+        <div className="mono enter" title={active.trace.pattern}
+          style={{ position: "absolute", left: "50%", bottom: 6, transform: "translateX(-50%)",
+            display: "flex", alignItems: "center", gap: 8, padding: "6px 11px", borderRadius: 999,
+            border: "1px solid rgba(52,211,153,.3)", background: "rgba(6,16,14,.86)", backdropFilter: "blur(6px)",
+            whiteSpace: "nowrap", maxWidth: "94%", overflow: "hidden", textOverflow: "ellipsis", zIndex: 7 }}>
+          <span className="badge canonical" style={{ flex: "0 0 auto" }}><span className="pip" />Refined</span>
+          <span style={{ fontSize: 11, color: "var(--text-2)" }}>
+            from <b style={{ color: "var(--cyan)" }}>{active.trace.from_name}</b>’s feedback · served to <b style={{ color: "var(--emerald)" }}>{active.trace.to_name}</b>
+          </span>
+        </div>
+      )}
     </div>
   );
 }
