@@ -28,8 +28,11 @@ function StatCard({ label, value, decimals, suffix, prefix, series, color = "var
    AGENT IMPACT — hero view
    ============================================================ */
 function AgentImpactView({ repo, openPanel }) {
-  const usage = useApi(() => MetatronAPI.getUsage(repo), [repo]);
-  const fb = useApi(() => MetatronAPI.getFeedback(repo), [repo]);
+  // Poll usage + feedback alongside the constellation so the headline stat cards
+  // (queries answered, decisions in flight, helpful rate) tick up live as activity
+  // arrives, instead of freezing at their first-load values.
+  const usage = usePolledApi(() => MetatronAPI.getUsage(repo), 4000, null, [repo]);
+  const fb = usePolledApi(() => MetatronAPI.getFeedback(repo), 4000, null, [repo]);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
 
