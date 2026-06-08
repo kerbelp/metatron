@@ -337,6 +337,30 @@ function useApi(fn, deps) {
   return { ...state, reload };
 }
 
+/* Like useApi, but quietly re-fetches every intervalMs and only updates when the
+   data's substantive signature changes (so the live view refreshes itself without
+   flashing the loading state or re-rendering on every poll). The initial fetch
+   still shows loading; background polls never do. */
+function usePolledApi(fn, intervalMs, signatureFn, deps) {
+  const [state, setState] = useState({ loading: true, error: null, data: null });
+  const sigRef = useRef(null);
+  const load = useCallback((silent) => {
+    if (!silent) setState((s) => ({ ...s, loading: true, error: null }));
+    let live = true;
+    Promise.resolve().then(fn).then((data) => {
+      if (!live) return;
+      const sig = signatureFn ? signatureFn(data) : JSON.stringify(data);
+      if (silent && sig === sigRef.current) return;  // nothing substantive changed
+      sigRef.current = sig;
+      setState({ loading: false, error: null, data });
+    }).catch((e) => { if (live && !silent) setState({ loading: false, error: e, data: null }); });
+    return () => { live = false; };
+  }, deps);
+  useEffect(() => load(false), deps);
+  useEffect(() => { const t = setInterval(() => load(true), intervalMs); return () => clearInterval(t); }, deps);
+  return { ...state, reload: () => load(false) };
+}
+
 /* ---------- relative time ---------- */
 function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -348,5 +372,5 @@ function timeAgo(iso) {
 
 Object.assign(window, {
   Icon, MetatronEmblem, MetatronCube, CountUp, Donut, Meter, Spark, KnowledgeFlow,
-  Spinner, Loading, ErrorState, Empty, useApi, timeAgo,
+  Spinner, Loading, ErrorState, Empty, useApi, usePolledApi, timeAgo,
 });

@@ -38,7 +38,10 @@ function AgentImpactView({ repo, openPanel }) {
   // aggregate team view. Hovering an engineer focuses them.
   const [windowMins, setWindowMins] = useState(30);
   const [focusIdx, setFocusIdx] = useState(-1);
-  const act = useApi(() => MetatronAPI.getAgentActivity(repo, windowMins), [repo, windowMins]);
+  // Poll every 4s so newly-recorded activity appears live without a manual reload;
+  // the signature guard keeps the constellation stable between real changes.
+  const act = usePolledApi(() => MetatronAPI.getAgentActivity(repo, windowMins), 4000,
+    MetatronActivitySig.activitySignature, [repo, windowMins]);
 
   const queries = usage.data ? usage.data.recent_queries : [];
   useEffect(() => { setActive(0); }, [repo]);
