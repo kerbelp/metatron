@@ -48,6 +48,13 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
     return { ...n, ang, x: cx + rx * Math.cos(ang), y: cy + ry * Math.sin(ang) };
   });
 
+  // Refinement-to-serve highlight: when the focused node is the target of a trace
+  // (its decision was refined from another engineer's feedback), light up the path.
+  const traces = data.traces || [];
+  const active = (typeof MetatronTrace !== "undefined")
+    ? MetatronTrace.activeTraceForFocus(placed, traces, focusedIdx)
+    : null;
+
   const conduit = (p, i) => {
     const mx = (cx + p.x) / 2, my = (cy + p.y) / 2;
     let dx = p.x - cx, dy = p.y - cy; const len = Math.hypot(dx, dy) || 1;
@@ -93,6 +100,32 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
 
         {/* center pulse */}
         {!paused && <circle cx={cx} cy={cy} r="40" fill="none" stroke="var(--teal)" strokeWidth="1" opacity="0" style={{ transformOrigin: `${cx}px ${cy}px`, animation: "pulse-ring 3.4s ease-out infinite" }} />}
+
+        {/* refinement-to-serve trace: A's feedback → refined decision → served to B */}
+        {active && !paused && (() => {
+          const B = placed[active.toIdx];
+          const A = active.fromIdx >= 0 ? placed[active.fromIdx] : null;
+          const dB = conduit(B, active.toIdx);
+          const dA = A ? conduit(A, active.fromIdx) : null;
+          return (
+            <g className="enter">
+              {dA && <path d={dA} fill="none" stroke="var(--cyan)" strokeOpacity="0.65" strokeWidth="2.2" />}
+              <path d={dB} fill="none" stroke="var(--emerald)" strokeOpacity="0.85" strokeWidth="2.2" />
+              {/* the originating feedback relays in along A's conduit … */}
+              {dA && (
+                <circle r="4.4" fill="var(--cyan)" filter="url(#agcGlow)">
+                  <animateMotion dur="1.25s" repeatCount="indefinite" path={dA} keyPoints="1;0" keyTimes="0;1" calcMode="linear" />
+                </circle>
+              )}
+              {/* … then the refined decision relays out along B's conduit */}
+              <circle r="4.4" fill="var(--emerald)" filter="url(#agcGlow)">
+                <animateMotion dur="1.25s" repeatCount="indefinite" path={dB} begin="1.25s" />
+              </circle>
+              {/* emphasised pulse at the refined node (the center) */}
+              <circle cx={cx} cy={cy} r="30" fill="none" stroke="var(--emerald)" strokeWidth="1.5" opacity="0" style={{ transformOrigin: `${cx}px ${cy}px`, animation: "pulse-ring 2.5s ease-out infinite" }} />
+            </g>
+          );
+        })()}
       </svg>
 
       {/* Metatron core */}
@@ -136,6 +169,65 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
           </div>
         );
       })}
+
+      {/* trace caption — names the refinement-to-serve relationship being highlighted */}
+      {active && (
+        <div className="mono enter" title={active.trace.pattern}
+          style={{ position: "absolute", left: "50%", bottom: 6, transform: "translateX(-50%)",
+            display: "flex", alignItems: "center", gap: 8, padding: "6px 11px", borderRadius: 999,
+            border: "1px solid rgba(52,211,153,.3)", background: "rgba(6,16,14,.86)", backdropFilter: "blur(6px)",
+            whiteSpace: "nowrap", maxWidth: "94%", overflow: "hidden", textOverflow: "ellipsis", zIndex: 7 }}>
+          <span className="badge canonical" style={{ flex: "0 0 auto" }}><span className="pip" />Refined</span>
+          <span style={{ fontSize: 11, color: "var(--text-2)" }}>
+            from <b style={{ color: "var(--cyan)" }}>{active.trace.from_name}</b>’s feedback · served to <b style={{ color: "var(--emerald)" }}>{active.trace.to_name}</b>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* aggregate panel — shown when no single engineer is focused: team totals plus the
+   live refinement-to-serve lineage across everyone. */
+function AgentAggregatePanel({ data }) {
+  const traces = data.traces || [];
+  const tile = (label, value, color) => (
+    <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: ".12em", color, marginBottom: 6 }}>{label}</div>
+      <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color }}>{value}</div>
+    </div>
+  );
+  return (
+    <div className="enter" style={{ minWidth: 0 }}>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 14 }}>TEAM ACTIVITY</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
+        {tile("ENGINEERS", data.total_agents, "#eafff8")}
+        {tile("SERVED", data.total_served, "var(--emerald)")}
+        {tile("FEEDBACK", data.total_feedback, "var(--cyan)")}
+      </div>
+      {traces.length > 0 ? (
+        <>
+          <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>KNOWLEDGE REFINED &amp; RESHARED</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 196, overflowY: "auto", paddingRight: 4 }}>
+            {traces.map((t, i) => (
+              <div key={i} className="decision-flit" style={{ animationDelay: (0.05 + i * 0.06) + "s", padding: "9px 11px", borderRadius: 9, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: "var(--cyan)" }}>{t.from_name}</span>
+                  <span className="mono dim" style={{ fontSize: 12 }}>→</span>
+                  <span style={{ fontSize: 12, color: "var(--emerald)" }}>{t.to_name}</span>
+                  <span className="badge canonical" style={{ marginLeft: "auto" }}><span className="pip" />Refined</span>
+                </div>
+                <div style={{ fontSize: 11.5, lineHeight: 1.4, color: "var(--text-2)" }}>{t.pattern}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+          No feedback has been refined and reshared in this window yet.
+        </div>
+      )}
+      <div className="mono dim" style={{ fontSize: 10.5, marginTop: 14, letterSpacing: ".04em" }}>Hover an engineer to see their decisions.</div>
     </div>
   );
 }
@@ -291,4 +383,4 @@ function AgentActivityDrawer({ agent, focus, onOpenDecision, onClose }) {
   );
 }
 
-Object.assign(window, { AgentConstellation, AgentDetailPanel, AgentActivityDrawer, buildNodes, AGENT_STATUS });
+Object.assign(window, { AgentConstellation, AgentDetailPanel, AgentAggregatePanel, AgentActivityDrawer, buildNodes, AGENT_STATUS });

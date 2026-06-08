@@ -164,7 +164,7 @@ function App() {
       <div style={{ textAlign: "center" }}>
         <div style={{ animation: "float-y 3s ease-in-out infinite" }}><MetatronEmblem size={88} /></div>
         <div className="mono" style={{ marginTop: 24, letterSpacing: ".3em", fontSize: 12, color: "var(--teal)" }}>METATRON</div>
-        <div className="mono dim" style={{ marginTop: 10, letterSpacing: ".14em", fontSize: 11 }}>initializing knowledge lattice…</div>
+        <div className="mono dim" style={{ marginTop: 10, letterSpacing: ".14em", fontSize: 11 }}>initializing knowledge base…</div>
       </div>
     </div>
   );
@@ -179,7 +179,7 @@ function App() {
           <div style={{ position: "absolute", bottom: -90, left: -90, opacity: .6, pointerEvents: "none" }}><MetatronCube size={280} opacity={0.08} /></div>
           <div className="rail-brand">
             <MetatronEmblem size={38} />
-            <div className="wordmark">METATRON<small>KNOWLEDGE LATTICE</small></div>
+            <div className="wordmark">METATRON<small>KNOWLEDGE BASE</small></div>
           </div>
           {NAV.map((g) => (
             <div className="rail-group" key={g.group}>
@@ -251,7 +251,7 @@ function MobileNotice() {
         <h2 style={{ margin: "16px 0 10px", fontSize: 18, fontWeight: 500 }}>Best on desktop</h2>
         <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.6 }}>
           The Metatron console is built for a wide screen — dense decision tables,
-          side-by-side panels, and the live agent lattice. Open it on a desktop to
+          side-by-side panels, and the live agent constellation. Open it on a desktop to
           curate and explore your knowledge base.
         </p>
       </div>

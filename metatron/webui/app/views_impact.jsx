@@ -28,16 +28,23 @@ function StatCard({ label, value, decimals, suffix, prefix, series, color = "var
    AGENT IMPACT — hero view
    ============================================================ */
 function AgentImpactView({ repo, openPanel }) {
-  const usage = useApi(() => MetatronAPI.getUsage(repo), [repo]);
-  const fb = useApi(() => MetatronAPI.getFeedback(repo), [repo]);
+  // Poll usage + feedback alongside the constellation so the headline stat cards
+  // (queries answered, decisions in flight, helpful rate) tick up live as activity
+  // arrives, instead of freezing at their first-load values.
+  const usage = usePolledApi(() => MetatronAPI.getUsage(repo), 4000, null, [repo]);
+  const fb = usePolledApi(() => MetatronAPI.getFeedback(repo), 4000, null, [repo]);
   const [active, setActive] = useState(0);
   const [paused, setPaused] = useState(false);
 
-  // bidirectional agent constellation state
+  // bidirectional agent constellation state. focusIdx === -1 means "no engineer
+  // focused": the constellation highlights nothing and the side panel shows the
+  // aggregate team view. Hovering an engineer focuses them.
   const [windowMins, setWindowMins] = useState(30);
-  const [focusIdx, setFocusIdx] = useState(0);
-  const [cyclePaused, setCyclePaused] = useState(false);
-  const act = useApi(() => MetatronAPI.getAgentActivity(repo, windowMins), [repo, windowMins]);
+  const [focusIdx, setFocusIdx] = useState(-1);
+  // Poll every 4s so newly-recorded activity appears live without a manual reload;
+  // the signature guard keeps the constellation stable between real changes.
+  const act = usePolledApi(() => MetatronAPI.getAgentActivity(repo, windowMins), 4000,
+    MetatronActivitySig.activitySignature, [repo, windowMins]);
 
   const queries = usage.data ? usage.data.recent_queries : [];
   useEffect(() => { setActive(0); }, [repo]);
@@ -46,14 +53,7 @@ function AgentImpactView({ repo, openPanel }) {
     const t = setInterval(() => setActive((a) => (a + 1) % queries.length), 4200);
     return () => clearInterval(t);
   }, [paused, queries.length]);
-  useEffect(() => { setFocusIdx(0); }, [repo, windowMins]);
-  useEffect(() => {
-    if (cyclePaused) return;
-    const n = act.data ? buildNodes(act.data.agents).length : 0;
-    if (n <= 1) return;
-    const t = setInterval(() => setFocusIdx((i) => (i + 1) % n), 4400);
-    return () => clearInterval(t);
-  }, [cyclePaused, act.data]);
+  useEffect(() => { setFocusIdx(-1); }, [repo, windowMins]);
 
   if (usage.loading) return <Loading label="Tracing agent activity…" />;
   if (usage.error) return <ErrorState onRetry={usage.reload} />;
@@ -80,8 +80,7 @@ function AgentImpactView({ repo, openPanel }) {
       </div>
 
       {/* knowledge in flight — bidirectional agent constellation */}
-      <div className="panel enter enter-2" style={{ padding: 0, overflow: "hidden", marginBottom: 18 }}
-        onMouseEnter={() => setCyclePaused(true)} onMouseLeave={() => setCyclePaused(false)}>
+      <div className="panel enter enter-2" style={{ padding: 0, overflow: "hidden", marginBottom: 18 }}>
         <div style={{ padding: "20px 24px 4px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 14, fontWeight: 500, letterSpacing: ".03em" }}>Knowledge in flight</h3>
@@ -110,7 +109,7 @@ function AgentImpactView({ repo, openPanel }) {
               )
               : (
                 <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr" }}>
-                  <div style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
+                  <div onMouseLeave={() => setFocusIdx(-1)} style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
                     <div style={{ position: "absolute", top: 14, left: 18, display: "flex", gap: 9, zIndex: 8, flexWrap: "wrap" }}>
                       <span className="badge ghost mono"><b style={{ color: "var(--text)" }}>{act.data.total_agents}</b>&nbsp;agents</span>
                       <span className="badge mono" style={{ color: "var(--emerald)", borderColor: "rgba(52,211,153,.28)", background: "rgba(52,211,153,.08)" }}>↓ {act.data.total_served} served</span>
@@ -119,7 +118,9 @@ function AgentImpactView({ repo, openPanel }) {
                     <AgentConstellation data={act.data} focusedIdx={fIdx} onFocus={(i) => setFocusIdx(i)} paused={false} height={392} />
                   </div>
                   <div style={{ padding: "20px 24px", minWidth: 0 }}>
-                    <AgentDetailPanel node={agNodes[fIdx]} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
+                    {agNodes[fIdx]
+                      ? <AgentDetailPanel node={agNodes[fIdx]} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
+                      : <AgentAggregatePanel data={act.data} />}
                   </div>
                 </div>
               )}

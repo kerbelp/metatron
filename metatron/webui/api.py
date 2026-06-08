@@ -222,7 +222,53 @@ def agent_activity(
         "total_served": sum(a["decisions_received"] for a in agents),
         "total_feedback": sum(a["feedback_sent"] for a in agents),
         "agents": agents,
+        "traces": _refinement_traces(recent, store),
     }
+
+
+def _refinement_traces(recent, store: DecisionStore) -> list[dict]:
+    """Reconstruct ``A's feedback -> refined decision -> served to B`` links.
+
+    Read-only lineage over the windowed events: a handled feedback event records
+    the decisions it produced (``decision_ids``); a later query records the
+    decisions served to its actor. Where a produced decision is served to a
+    *different* actor, that is one trace. Self-serves are skipped and links are
+    de-duplicated on ``(from, to, decision)``.
+    """
+    produced_by: dict[str, object] = {}
+    for e in recent:
+        if e.kind is EventKind.FEEDBACK and e.handled:
+            for did in e.decision_ids:
+                produced_by.setdefault(did, e)
+
+    traces: list[dict] = []
+    seen: set = set()
+    for e in recent:
+        if e.kind is not EventKind.QUERY:
+            continue
+        to_key = e.actor_id or e.actor_email or "anonymous"
+        for did in e.decision_ids:
+            src = produced_by.get(did)
+            if src is None:
+                continue
+            from_key = src.actor_id or src.actor_email or "anonymous"
+            if from_key == to_key:
+                continue
+            dedupe = (from_key, to_key, did)
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            decision = store.get(did)
+            traces.append({
+                "from": from_key,
+                "from_name": src.actor_name or src.actor_email or "anonymous",
+                "to": to_key,
+                "to_name": e.actor_name or e.actor_email or "anonymous",
+                "decision_id": did,
+                "pattern": decision.pattern if decision is not None else "",
+                "missing": src.missing,
+            })
+    return traces
 
 
 def _timedelta_mins(mins: int):

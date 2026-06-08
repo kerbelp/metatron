@@ -227,3 +227,6 @@ __marimo__/
 
 # Local curation artifacts (e.g. bulk-approve reversal lists) — operational, not source
 bulk_approve_*.json
+
+# Git worktrees (local isolated workspaces)
+.worktrees/
