@@ -314,7 +314,7 @@ function Spinner({ size = 34 }) {
     </svg>
   );
 }
-function Loading({ label = "Reading the lattice…" }) {
+function Loading({ label = "Reading the knowledge base…" }) {
   return <div className="state-box"><Spinner /><div className="mono dim" style={{ fontSize: 12, letterSpacing: ".14em" }}>{label}</div></div>;
 }
 function ErrorState({ onRetry, detail }) {
