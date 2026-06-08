@@ -1,11 +1,6 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-logo.png" alt="Metatron" width="180" height="180" />
+  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner.png" alt="Metatron — your codebase's conventions, served to coding agents over MCP" width="100%" />
 </p>
-
-# Metatron
-
-<p align="center"><b>The missing layer of agentic coding.</b><br/>
-<sub>Your codebase's decisions, captured once — and served to every coding agent over MCP.</sub></p>
 
 <p align="center">
   <a href="https://pypi.org/project/getmetatron/"><img src="https://img.shields.io/pypi/v/getmetatron.svg?color=2b7de9" alt="PyPI version" /></a>
