@@ -4,6 +4,9 @@
 
 # Metatron
 
+<p align="center"><b>The missing layer of agentic coding.</b><br/>
+<sub>Your codebase's decisions, captured once — and served to every coding agent over MCP.</sub></p>
+
 <p align="center">
   <a href="https://pypi.org/project/getmetatron/"><img src="https://img.shields.io/pypi/v/getmetatron.svg?color=2b7de9" alt="PyPI version" /></a>
   <a href="https://hub.docker.com/r/kerbelp/getmetatron"><img src="https://img.shields.io/docker/pulls/kerbelp/getmetatron?color=2496ed&label=docker" alt="Docker Hub pulls" /></a>
