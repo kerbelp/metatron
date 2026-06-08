@@ -187,6 +187,51 @@ function AgentConstellation({ data, focusedIdx, onFocus, paused, height = 392 })
   );
 }
 
+/* aggregate panel — shown when no single engineer is focused: team totals plus the
+   live refinement-to-serve lineage across everyone. */
+function AgentAggregatePanel({ data }) {
+  const traces = data.traces || [];
+  const tile = (label, value, color) => (
+    <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: ".12em", color, marginBottom: 6 }}>{label}</div>
+      <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color }}>{value}</div>
+    </div>
+  );
+  return (
+    <div className="enter" style={{ minWidth: 0 }}>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 14 }}>TEAM ACTIVITY</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
+        {tile("ENGINEERS", data.total_agents, "#eafff8")}
+        {tile("SERVED", data.total_served, "var(--emerald)")}
+        {tile("FEEDBACK", data.total_feedback, "var(--cyan)")}
+      </div>
+      {traces.length > 0 ? (
+        <>
+          <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>KNOWLEDGE REFINED &amp; RESHARED</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 196, overflowY: "auto", paddingRight: 4 }}>
+            {traces.map((t, i) => (
+              <div key={i} className="decision-flit" style={{ animationDelay: (0.05 + i * 0.06) + "s", padding: "9px 11px", borderRadius: 9, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, color: "var(--cyan)" }}>{t.from_name}</span>
+                  <span className="mono dim" style={{ fontSize: 12 }}>→</span>
+                  <span style={{ fontSize: 12, color: "var(--emerald)" }}>{t.to_name}</span>
+                  <span className="badge canonical" style={{ marginLeft: "auto" }}><span className="pip" />Refined</span>
+                </div>
+                <div style={{ fontSize: 11.5, lineHeight: 1.4, color: "var(--text-2)" }}>{t.pattern}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+          No feedback has been refined and reshared in this window yet.
+        </div>
+      )}
+      <div className="mono dim" style={{ fontSize: 10.5, marginTop: 14, letterSpacing: ".04em" }}>Hover an engineer to see their decisions.</div>
+    </div>
+  );
+}
+
 /* right-hand detail for the focused node */
 function AgentDetailPanel({ node, onDrill }) {
   if (!node) return null;
@@ -338,4 +383,4 @@ function AgentActivityDrawer({ agent, focus, onOpenDecision, onClose }) {
   );
 }
 
-Object.assign(window, { AgentConstellation, AgentDetailPanel, AgentActivityDrawer, buildNodes, AGENT_STATUS });
+Object.assign(window, { AgentConstellation, AgentDetailPanel, AgentAggregatePanel, AgentActivityDrawer, buildNodes, AGENT_STATUS });
