@@ -13,6 +13,14 @@
   <a href="https://glama.ai/mcp/servers/kerbelp/metatron"><img src="https://glama.ai/mcp/servers/kerbelp/metatron/badges/score.svg?v=2" alt="Metatron MCP server" /></a>
 </p>
 
+<p align="center">
+  <a href="https://youtu.be/VoWp6jH4VLM">
+    <img src="https://github.com/kerbelp/metatron/releases/download/hero-demo/thumbnail.png" alt="Watch the Metatron demo (2 min)" width="720" />
+  </a>
+  <br />
+  <a href="https://youtu.be/VoWp6jH4VLM"><b>▶ Watch the 2-minute demo</b></a>
+</p>
+
 Metatron is a self-hosted system that captures a codebase's real implementation
 decisions — preferred patterns, rejected approaches, edge cases, internal
 conventions — as structured **decisions**, and serves them to coding agents over
