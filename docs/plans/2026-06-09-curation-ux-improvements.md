@@ -129,7 +129,7 @@ Adds a per-candidate `valuate_one` endpoint and wires both the existing queue-le
 - Modify: `metatron/webui/api.py` (add `valuate_one`, near `refine_one` ~line 513)
 - Test: `tests/test_web_api.py`
 
-The judge is built the way `TriageJob` builds it: from a provider factory via `DecisionJudge(provider)` (`webui/jobs.py:113-116`). `DecisionJudge.evaluate(candidates)` takes a list and returns per-decision verdicts; mirror how `TriageJob` consumes it (read `extraction/triage.py` `DecisionJudge.evaluate` for the exact return shape and adapt — it yields `(decision_id, verdict, reason)` per item or an indexed map; follow the job's usage).
+The judge is built the way `TriageJob` builds it: from a provider factory via `DecisionJudge(provider)` (`webui/jobs.py:113-116`). `DecisionJudge.evaluate(decisions)` (confirmed at `extraction/triage.py:42`) takes a list and returns a **dict** `{decision_id: (verdict, reason)}` (a candidate the judge skips simply won't appear as a key).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -141,12 +141,12 @@ from metatron.webui.api import valuate_one
 
 
 class _StubJudge:
-    """Stands in for DecisionJudge: returns a fixed verdict for each candidate."""
+    """Stands in for DecisionJudge: returns a fixed verdict for each candidate.
+    Matches the real contract: dict {decision_id: (verdict, reason)}."""
     def __init__(self, verdict=TriageVerdict.APPROVE, reason="looks canonical"):
         self.verdict, self.reason = verdict, reason
-    def evaluate(self, candidates, **kw):
-        # match DecisionJudge.evaluate's contract (see extraction/triage.py)
-        return [(c.id, self.verdict, self.reason) for c in candidates]
+    def evaluate(self, decisions, **kw):
+        return {c.id: (self.verdict, self.reason) for c in decisions}
 
 
 def test_valuate_one_sets_triage(store):
@@ -197,17 +197,16 @@ def valuate_one(store, provider_factory, decision_id, *, judge_factory=None):
         from metatron.webui.jobs import _default_judge_factory as judge_factory
     try:
         judge = judge_factory(provider_factory())
-        results = judge.evaluate([decision])
+        results = judge.evaluate([decision])  # {decision_id: (verdict, reason)}
     except Exception as exc:  # provider/network/parse — message, not a crash
         return {"ok": False, "error": str(exc)}
-    # results map 1:1 to the single candidate we passed
-    _id, verdict, reason = list(results)[0]
+    if decision.id not in results:
+        return {"ok": False, "error": "The judge returned no verdict for this decision."}
+    verdict, reason = results[decision.id]
     updated = store.set_triage(decision.id, verdict, reason)
     return {"ok": True, "id": updated.id, "triage": updated.triage.value,
             "triage_reason": updated.triage_reason}
 ```
-
-Adjust the `results` unpacking to match `DecisionJudge.evaluate`'s real return shape (confirm against `extraction/triage.py`; if it returns an index→verdict map like `TriageJob` consumes, adapt accordingly and keep the test's `_StubJudge` in sync).
 
 - [ ] **Step 4: Run the tests — expect pass**
 
@@ -445,7 +444,7 @@ git commit -m "feat: return produced candidate ids from single-event refinement"
 **Files:**
 - Modify: `metatron/webui/app/views_impact.jsx` (`FeedbackLoopView` ~line 229–279 and `GapCard` ~line 287–331)
 
-The handled-event read path: `feedback-events` items already expose the produced candidate ids (confirm the field name on `e` — e.g. `e.decision_ids` — by inspecting an event in the running `/api/feedback-events` response; the backend records them via `mark_handled`).
+The handled-event read path already exists: `feedback-events` items expose the produced candidates under **`e.produced`** — a list of full decision objects (`{id, pattern, scope, status, rationale, ...}` with stats), populated only when `e.handled` (confirmed at `webui/api.py:506`). So on reload, `GapCard` can render inline review directly from `e.produced` **without** re-fetching each decision. The `decision_ids` returned by `refineFeedback` (Task C1) are only needed for the immediate post-refine response, before the event list reloads.
 
 - [ ] **Step 1: Capture produced ids on refine**
 
@@ -472,15 +471,15 @@ Replace the static handled text:
 <span className="mono dim" style={{ fontSize: 11 }}>{e.handled ? "A candidate decision was distilled from this gap." : "Distill this gap into a new candidate decision for human review."}</span>
 ```
 
-When `e.handled` (or freshly refined), resolve the produced ids (`e.decision_ids` on reload, or the ids returned from `doRefine`) and render a compact inline review for each — load each with `MetatronAPI.getDecision(id)` and show pattern + **Approve / Reject / Inspect**:
+On reload, render one inline review per object in `e.produced` (already full decisions — no fetch). For a *just-refined* gap, you only have ids from `doRefine`'s return, so fetch those with `MetatronAPI.getDecision(id)`. `InlineCandidate` accepts either: a `decision` object (reload path) or an `id` to fetch (fresh-refine path). Show pattern + **Approve / Reject / Inspect**:
 
 ```jsx
-function InlineCandidate({ id, onOpenDecision, onChanged }) {
-  const [d, setD] = useState(null);
+function InlineCandidate({ decision, id, onOpenDecision, onChanged }) {
+  const [d, setD] = useState(decision || null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { MetatronAPI.getDecision(id).then(setD); }, [id]);
+  useEffect(() => { if (!decision && id) MetatronAPI.getDecision(id).then(setD); }, [id, decision]);
   if (!d || !d.id) return null;
-  const act = (fn) => async () => { setBusy(true); await fn(d.id); const fresh = await MetatronAPI.getDecision(id); setD(fresh); setBusy(false); onChanged && onChanged(); };
+  const act = (fn) => async () => { setBusy(true); await fn(d.id); const fresh = await MetatronAPI.getDecision(d.id); setD(fresh); setBusy(false); onChanged && onChanged(); };
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
       <StatusBadge status={d.status} />
@@ -495,7 +494,7 @@ function InlineCandidate({ id, onOpenDecision, onChanged }) {
 }
 ```
 
-Render one `InlineCandidate` per produced id in place of the old text, keeping the "Refine into candidate" button for the unhandled state. `StatusBadge` and `getDecision`/`approveDecision`/`rejectDecision` already exist.
+In place of the old text: when handled, map `e.produced` → `<InlineCandidate decision={obj} .../>`; for a gap just refined this session, map the ids from `doRefine` → `<InlineCandidate id={id} .../>`. Keep the "Refine into candidate" button for the unhandled state. `StatusBadge` and `getDecision`/`approveDecision`/`rejectDecision` already exist.
 
 - [ ] **Step 3: Verify in the running UI**
 
@@ -562,11 +561,14 @@ git commit -m "feat(models): add a human origin for curator-authored decisions"
 **Files:**
 - Modify: `metatron/storage/base.py` (add abstract `update_fields`, ~after `set_status` line 73)
 - Modify: `metatron/storage/sqlite.py` (implement, near `set_status` line 198)
-- Test: `tests/test_catalog_stores.py` (or wherever store contract tests live — confirm)
+- Modify: `metatron/storage/catalog.py` (implement delegating `update_fields` on `CatalogDecisionStore`, near `set_triage` line 185)
+- Test: `tests/test_sqlite_store.py` (direct SQLite contract) **and** `tests/test_catalog_stores.py` (catalog delegation)
+
+> **Critical:** `DecisionStore` has **two** concrete implementations — `SQLiteDecisionStore` *and* `CatalogDecisionStore` (`storage/catalog.py:126`, the real catalog-backed store, routed per repo). Adding an `@abstractmethod` to the base makes *both* abstract; if `CatalogDecisionStore` doesn't implement `update_fields`, the entire store suite fails to import. There is no in-memory store.
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to the store test suite (mirror its existing fixture/setup):
+Add to `tests/test_sqlite_store.py` (mirror its existing fixture/setup):
 
 ```python
 def test_update_fields_edits_content_only(store):
@@ -585,7 +587,7 @@ def test_update_fields_rejects_unknown_id(store):
 
 - [ ] **Step 2: Run — expect failure**
 
-Run: `uv run pytest <store-test-file> -k update_fields -v` → FAIL (`AttributeError`/abstract).
+Run: `uv run pytest tests/test_sqlite_store.py -k update_fields -v` → FAIL (`AttributeError`/abstract).
 
 - [ ] **Step 3: Declare the abstract method**
 
@@ -628,16 +630,25 @@ def update_fields(self, decision_id, *, pattern=None, scope=None, rationale=None
     return updated
 ```
 
-(If there are other `DecisionStore` implementations beyond SQLite, implement there too — check `storage/` for any in-memory store used in tests.)
+- [ ] **Step 5: Implement the delegating method on `CatalogDecisionStore`**
 
-- [ ] **Step 5: Run — expect pass**
+In `storage/catalog.py`, next to `set_triage` (line 185), mirror its routing:
 
-Run: `uv run pytest <store-test-file> -k update_fields -v` → PASS. Then the whole store suite to confirm the new abstract method didn't break another implementation.
+```python
+def update_fields(self, decision_id, *, pattern=None, scope=None, rationale=None, confidence=None):
+    return self._p(self._owner(decision_id)).update_fields(
+        decision_id, pattern=pattern, scope=scope, rationale=rationale, confidence=confidence,
+    )
+```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run — expect pass**
+
+Run: `uv run pytest tests/test_sqlite_store.py tests/test_catalog_stores.py -k update_fields -v` → PASS. Then `uv run pytest -q` to confirm the new abstract method didn't break import of either store.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add metatron/storage/base.py metatron/storage/sqlite.py tests/<store-test-file>
+git add metatron/storage/base.py metatron/storage/sqlite.py metatron/storage/catalog.py tests/test_sqlite_store.py tests/test_catalog_stores.py
 git commit -m "feat(storage): add update_fields to edit a decision's content"
 ```
 
@@ -817,13 +828,15 @@ Run: `node --test metatron/webui/app/decision_editor.test.js` → FAIL (module n
 
 `decision_editor.js`:
 
+Match `activity_signature.js`'s exact UMD idiom (`storage` global attached as `root.<Name>`):
+
 ```javascript
 "use strict";
 (function (root, factory) {
   const api = factory();
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  if (typeof window !== "undefined") window.DecisionEditorLogic = api;
-})(this, function () {
+  else root.MetatronDecisionEditor = api;
+})(typeof self !== "undefined" ? self : this, function () {
   function validateDecisionForm(f) {
     const need = ["pattern", "scope", "rationale"];
     const missing = need.filter((k) => !((f[k] || "").trim()));
@@ -833,7 +846,7 @@ Run: `node --test metatron/webui/app/decision_editor.test.js` → FAIL (module n
 });
 ```
 
-(Confirm the UMD shape against `activity_signature.js`'s actual export idiom and match it exactly — that file is the canonical pattern in this app.)
+The browser global is `MetatronDecisionEditor` — use that name in Task D6 (`MetatronDecisionEditor.validateDecisionForm(...)`). Update the test's `require` target accordingly (it imports from `./decision_editor.js`, which works via `module.exports`).
 
 - [ ] **Step 4: Run — expect pass**
 
@@ -841,7 +854,7 @@ Run: `node --test metatron/webui/app/decision_editor.test.js` → PASS.
 
 - [ ] **Step 5: Wire it into `index.html`**
 
-Add `<script src="decision_editor.js"></script>` alongside the other app scripts in `index.html`, before `views_knowledge.jsx`.
+Add `<script src="decision_editor.js"></script>` in the plain-`.js` script block of `index.html` (with `activity_signature.js` / `agent_trace.js`, ~line 29) — *not* among the `text/babel` JSX scripts. Plain scripts load before the babel-compiled JSX, so the `MetatronDecisionEditor` global is available to `views_knowledge.jsx`.
 
 - [ ] **Step 6: Commit**
 
@@ -858,7 +871,7 @@ git commit -m "feat(webui): add validated decision-form logic for the shared edi
 
 - [ ] **Step 1: Build the `DecisionEditor` component**
 
-A controlled form with fields pattern (textarea), scope (input), rationale (textarea), confidence (select: low/medium/high), Save/Cancel. Gate Save on `DecisionEditorLogic.validateDecisionForm(form).ok`. On save: add-mode → `MetatronAPI.createDecision(repo, form)`; edit-mode → `MetatronAPI.updateDecision(id, form)`. Call a passed `onSaved` to reload the queue/drawer. Style with the existing panel/input classes — do not introduce a new visual language.
+A controlled form with fields pattern (textarea), scope (input), rationale (textarea), confidence (select: low/medium/high), Save/Cancel. Gate Save on `MetatronDecisionEditor.validateDecisionForm(form).ok`. On save: add-mode → `MetatronAPI.createDecision(repo, form)`; edit-mode → `MetatronAPI.updateDecision(id, form)`. Call a passed `onSaved` to reload the queue/drawer. Style with the existing panel/input classes — do not introduce a new visual language.
 
 - [ ] **Step 2: Add "+ Add decision" to the Curation header**
 
