@@ -242,14 +242,14 @@ function InlineCandidate({ decision, id, onOpenDecision, onChanged }) {
     onChanged && onChanged();
   };
   return (
-    <div style={{ display: “flex”, alignItems: “center”, gap: 12, padding: “10px 13px”, borderRadius: 10, border: “1px solid var(--line)”, background: “rgba(8,18,16,.4)” }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
       <StatusBadge status={d.status} />
-      <span style={{ flex: 1, fontSize: 13, color: “var(--text)” }}>{d.pattern}</span>
-      {d.status === “candidate” ? <>
-        <button className=”btn primary” disabled={busy} onClick={act(MetatronAPI.approveDecision)}><Icon name=”check” size={14} />Approve</button>
-        <button className=”btn danger” disabled={busy} onClick={act(MetatronAPI.rejectDecision)}><Icon name=”x” size={14} />Reject</button>
+      <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{d.pattern}</span>
+      {d.status === "candidate" ? <>
+        <button className="btn primary" disabled={busy} onClick={act(MetatronAPI.approveDecision)}><Icon name="check" size={14} />Approve</button>
+        <button className="btn danger" disabled={busy} onClick={act(MetatronAPI.rejectDecision)}><Icon name="x" size={14} />Reject</button>
       </> : null}
-      <button className=”btn” style={{ fontSize: 12 }} onClick={() => onOpenDecision && onOpenDecision(d.id)}>Inspect</button>
+      <button className="btn" style={{ fontSize: 12 }} onClick={() => onOpenDecision && onOpenDecision(d.id)}>Inspect</button>
     </div>
   );
 }
