@@ -56,7 +56,9 @@ In `AgentImpactView` (`views_impact.jsx`):
 - Remove the `onMouseLeave={() => setFocusIdx(-1)}` reset on the graph container so
   the side panel **holds** the last-hovered engineer instead of reverting.
 - Add an "All agents" control in the `AgentDetailPanel` header (`agent_flow.jsx`)
-  that sets `focusIdx = -1`, returning to the team-aggregate panel.
+  that returns to the team-aggregate panel. `AgentDetailPanel` has no access to
+  `setFocusIdx`, so thread a new `onClearFocus` callback prop from `AgentImpactView`
+  (which calls `setFocusIdx(-1)`).
 - Initial load stays aggregate (`focusIdx === -1`) until the first hover. Hover
   still previews; there is simply no auto-revert.
 
@@ -74,19 +76,21 @@ reasons refresh.
 
 **Per-candidate (new backend + UI).** Add `POST /api/decisions/{id}/valuate`:
 
-- `webui/api.py`: `valuate_one(store, judge_factory, decision_id)` — load the
-  decision, run `DecisionJudge.evaluate([decision])`, persist the verdict with
-  `store.set_triage(id, verdict, reason)`, return the updated decision. Mirror
-  `refine_one`'s defensive shape: if no judge provider is configured or the call
-  fails, return `{ "ok": False, "error": ... }` rather than a 500.
+- `webui/api.py`: `valuate_one(store, provider_factory, decision_id)` — load the
+  decision, build the judge as `TriageJob` does (`DecisionJudge(provider)` from a
+  lazily-built provider), run `DecisionJudge.evaluate([decision])`, persist the
+  verdict with `store.set_triage(id, verdict, reason)`, and return the updated
+  decision. Mirror `refine_one`'s defensive shape: if no provider is configured or
+  the call fails, return `{ "ok": False, "error": ... }` rather than a 500.
 - `webui/server.py`: route `POST /api/decisions/{id}/valuate` (alongside the
   existing `approve` / `reject` action routes).
 - `api.js`: `valuateDecision(id)`.
 - UI: an "Ask the judge" button on each `CandidateCard` that shows a spinner, then
   updates that card's `TriageTag` and reason in place from the returned decision.
 
-The judge factory is threaded into the handler the same way `refiner_factory`
-already is.
+The handler reuses the existing `ingest_provider_factory` plumbing that `TriageJob`
+already uses to construct `DecisionJudge(provider)` — there is no standalone judge
+factory to thread, only the provider factory.
 
 ### 4 — Review a refined gap in place (backend + frontend)
 
@@ -104,11 +108,12 @@ Feedback view.
   After approve/reject, reflect the new status inline. The static "A candidate
   decision was distilled from this gap." text is replaced by this inline review.
 
-A handled gap reloaded from scratch (no `decision_ids` in hand) still needs its
-candidates: `feedback-events` already marks the event handled; the gap card
-resolves the produced ids from the handled event so inline review survives a
-reload. (If the event store does not expose produced ids on read, add a read path
-for them; confirmed during implementation.)
+A handled gap reloaded from scratch still needs its candidates, and the read path
+already exists: handled feedback events carry `Event.decision_ids`, and the
+`feedback-events` API already resolves the produced candidates with their current
+status. So the gap card can render inline review on reload without a new backend
+read path — surfacing `decision_ids` from `refine_one` (above) is only needed for
+the immediate post-refine response.
 
 ### 5 — Editable & human-authored decisions (backend + frontend)
 
