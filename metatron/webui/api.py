@@ -537,6 +537,7 @@ def refine_one(store: DecisionStore, event_store, refiner_factory, event_id: str
         "ok": True,
         "events_processed": result.events_processed,
         "decisions_created": result.decisions_created,
+        "decision_ids": result.decision_ids,
     }
 
 

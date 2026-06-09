@@ -43,6 +43,7 @@ class IngestResult(BaseModel):
 class RefineResult(BaseModel):
     events_processed: int
     decisions_created: int
+    decision_ids: list[str] = []
 
 
 def refine_feedback(
@@ -100,7 +101,7 @@ def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineR
     if event is None or event.kind is not EventKind.FEEDBACK or event.handled:
         return RefineResult(events_processed=0, decisions_created=0)
     produced = _refine_one(store, event_store, refiner, event)
-    return RefineResult(events_processed=1, decisions_created=len(produced))
+    return RefineResult(events_processed=1, decisions_created=len(produced), decision_ids=produced)
 
 
 def _refine_one(store, event_store, refiner, event) -> list[str]:

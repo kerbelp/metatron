@@ -132,6 +132,16 @@ def test_refine_feedback_event_unknown_id_is_noop():
     assert (res.events_processed, res.decisions_created) == (0, 0)
 
 
+def test_refine_feedback_event_returns_produced_ids():
+    s, ev = SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:")
+    e1 = Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap one", area="src/a")
+    ev.record(e1)
+    res = refine_feedback_event(s, ev, FakeRefiner(2), e1.id)
+    assert res.decisions_created == 2
+    assert len(res.decision_ids) == 2
+    assert all(s.get(did) is not None for did in res.decision_ids)
+
+
 def test_ratings_only_feedback_is_marked_handled_without_candidates():
     s, ev = SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:")
     ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="", helpful_decision_ids=["x"]))
