@@ -242,7 +242,7 @@ function AgentDetailPanel({ node, onDrill, onClearFocus }) {
           <span className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>GROUPED AGENTS</span>
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
             {onClearFocus && (
-              <button className="chip" onClick={onClearFocus} title="Back to the team view"
+              <button className="chip" onClick={onClearFocus} title="Back to all agents"
                 style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                 <Icon name="arrow" size={13} style={{ transform: "rotate(180deg)" }} /> All agents
               </button>
@@ -283,7 +283,7 @@ function AgentDetailPanel({ node, onDrill, onClearFocus }) {
         </div>
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {onClearFocus && (
-            <button className="chip" onClick={onClearFocus} title="Back to the team view"
+            <button className="chip" onClick={onClearFocus} title="Back to all agents"
               style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
               <Icon name="arrow" size={13} style={{ transform: "rotate(180deg)" }} /> All agents
             </button>
