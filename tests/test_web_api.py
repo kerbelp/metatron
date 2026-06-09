@@ -9,12 +9,14 @@ from metatron.models import Origin, Decision, Status, TriageVerdict
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 from metatron.webui.api import (
     approve,
+    create_decision,
     feedback_events,
     ingest_cost,
     leaderboard,
     list_decisions,
     reject,
     stats,
+    update_decision,
     usage,
     valuate_one,
 )
@@ -370,3 +372,31 @@ def test_valuate_one_no_verdict_is_clean_error(store):
     out = valuate_one(store, lambda: object(), d.id, judge_factory=lambda _p: _StubJudge.empty())
     assert out["ok"] is False and "no verdict" in out["error"].lower()
     assert store.get(d.id).triage_reason == ""  # nothing persisted
+
+
+# ---------------------------------------------------------------------------
+# create_decision + update_decision
+# ---------------------------------------------------------------------------
+
+def test_create_decision_makes_a_human_candidate(store):
+    out = create_decision(store, {"repo": "r", "pattern": "p", "scope": "app", "rationale": "why"})
+    assert out["ok"] is True
+    d = store.get(out["id"])
+    assert d.status is Status.CANDIDATE and d.origin is Origin.HUMAN
+
+
+def test_create_decision_requires_pattern(store):
+    out = create_decision(store, {"repo": "r", "scope": "app", "rationale": "why"})
+    assert out["ok"] is False
+
+
+def test_update_decision_edits_candidate(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"pattern": "edited"})
+    assert out["ok"] is True and store.get(d.id).pattern == "edited"
+
+
+def test_update_decision_refuses_rejected(store):
+    [d] = _add(store, 1, status=Status.REJECTED)
+    out = update_decision(store, d.id, {"pattern": "x"})
+    assert out["ok"] is False and "reject" in out["error"].lower()

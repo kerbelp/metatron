@@ -211,6 +211,10 @@ def _build_handler(
                     origin=body.get("origin") or None,
                     approve_after=bool(body.get("approve")),
                 ))
+            # /api/decisions — create a human-authored candidate
+            if segments == ["api", "decisions"]:
+                body = self._read_json()
+                return self._send_json(api.create_decision(store, body))
             # /api/decisions/approve-recommended — one-click bulk approve of "approve" picks
             if segments == ["api", "decisions", "approve-recommended"]:
                 body = self._read_json()
@@ -228,6 +232,9 @@ def _build_handler(
                     return self._send_json(
                         api.valuate_one(store, ingest_provider_factory, decision_id)
                     )
+                if action == "update":
+                    body = self._read_json()
+                    return self._send_json(api.update_decision(store, decision_id, body))
             # /api/feedback/<id>/refine — run the LLM refiner on one feedback event
             if (
                 len(segments) == 4

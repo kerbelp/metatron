@@ -570,6 +570,38 @@ def valuate_one(store: DecisionStore, provider_factory, decision_id: str, *, jud
             "triage_reason": updated.triage_reason}
 
 
+def create_decision(store: DecisionStore, body: dict) -> dict:
+    """Create a human-authored candidate from the editor form. Candidate + human
+    origin; approval stays a separate human action."""
+    from metatron.models import Confidence, Decision, Origin, Status
+    pattern = (body.get("pattern") or "").strip()
+    scope = (body.get("scope") or "").strip()
+    rationale = (body.get("rationale") or "").strip()
+    repo = (body.get("repo") or "").strip()
+    if not (pattern and scope and rationale and repo):
+        return {"ok": False, "error": "pattern, scope, rationale and repo are required."}
+    conf = Confidence(body["confidence"]) if body.get("confidence") else Confidence.MEDIUM
+    d = Decision(repo=repo, pattern=pattern, scope=scope, rationale=rationale,
+                 origin=Origin.HUMAN, confidence=conf, status=Status.CANDIDATE)
+    store.add(d)
+    return {"ok": True, "id": d.id}
+
+
+def update_decision(store: DecisionStore, decision_id: str, body: dict) -> dict:
+    """Edit a decision's content. Allowed for candidate + canonical; rejected is read-only."""
+    from metatron.models import Confidence, Status
+    decision = store.get(decision_id)
+    if decision is None:
+        return {"ok": False, "error": f"No decision with id {decision_id!r} (not found)."}
+    if decision.status is Status.REJECTED:
+        return {"ok": False, "error": "A rejected decision is read-only."}
+    fields = {k: body[k] for k in ("pattern", "scope", "rationale") if body.get(k) is not None}
+    if body.get("confidence"):
+        fields["confidence"] = Confidence(body["confidence"])
+    updated = store.update_fields(decision_id, **fields)
+    return {"ok": True, "id": updated.id}
+
+
 def _set_status(store: DecisionStore, decision_id: str, status: Status) -> dict:
     try:
         decision = store.set_status(decision_id, status)
