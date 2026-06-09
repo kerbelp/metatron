@@ -233,7 +233,7 @@ function AgentAggregatePanel({ data }) {
 }
 
 /* right-hand detail for the focused node */
-function AgentDetailPanel({ node, onDrill }) {
+function AgentDetailPanel({ node, onDrill, onClearFocus }) {
   if (!node) return null;
   if (node.kind === "group") {
     return (
@@ -273,7 +273,15 @@ function AgentDetailPanel({ node, onDrill }) {
           <div style={{ fontSize: 16, color: "#eafff8", fontWeight: 500 }}>{a.name}</div>
           <div className="mono" style={{ fontSize: 10.5, color: "var(--dim)" }}>{a.id}</div>
         </div>
-        <span className="badge" style={{ marginLeft: "auto", color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{statusStyle(a.status).label}</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {onClearFocus && (
+            <button className="chip" onClick={onClearFocus} title="Back to the team view"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="arrow" size={13} style={{ transform: "rotate(180deg)" }} /> All agents
+            </button>
+          )}
+          <span className="badge" style={{ color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{statusStyle(a.status).label}</span>
+        </div>
       </div>
 
       <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>NOW WORKING ON</div>

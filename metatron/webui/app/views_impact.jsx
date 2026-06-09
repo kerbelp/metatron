@@ -109,7 +109,7 @@ function AgentImpactView({ repo, openPanel }) {
               )
               : (
                 <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr" }}>
-                  <div onMouseLeave={() => setFocusIdx(-1)} style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
+                  <div style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
                     <div style={{ position: "absolute", top: 14, left: 18, display: "flex", gap: 9, zIndex: 8, flexWrap: "wrap" }}>
                       <span className="badge ghost mono"><b style={{ color: "var(--text)" }}>{act.data.total_agents}</b>&nbsp;agents</span>
                       <span className="badge mono" style={{ color: "var(--emerald)", borderColor: "rgba(52,211,153,.28)", background: "rgba(52,211,153,.08)" }}>↓ {act.data.total_served} served</span>
@@ -119,7 +119,7 @@ function AgentImpactView({ repo, openPanel }) {
                   </div>
                   <div style={{ padding: "20px 24px", minWidth: 0 }}>
                     {agNodes[fIdx]
-                      ? <AgentDetailPanel node={agNodes[fIdx]} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
+                      ? <AgentDetailPanel node={agNodes[fIdx]} onClearFocus={() => setFocusIdx(-1)} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
                       : <AgentAggregatePanel data={act.data} />}
                   </div>
                 </div>
