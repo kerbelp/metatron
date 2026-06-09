@@ -33,6 +33,7 @@ class Origin(str, enum.Enum):
     BOOTSTRAP = "bootstrap"
     AGENT_SUBMITTED = "agent_submitted"
     AGENT_FEEDBACK = "agent_feedback"  # born from a "what was missing" feedback report
+    HUMAN = "human"  # authored directly by a human curator in the UI
 
 
 class SourceRefKind(str, enum.Enum):

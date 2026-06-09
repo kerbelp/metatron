@@ -70,3 +70,8 @@ def test_enum_values_are_lowercase_strings():
     assert Origin.AGENT_SUBMITTED.value == "agent_submitted"
     assert Confidence.HIGH.value == "high"
     assert SourceRefKind.FILE.value == "file"
+
+
+def test_origin_human_exists():
+    from metatron.models import Origin
+    assert Origin("human") is Origin.HUMAN
