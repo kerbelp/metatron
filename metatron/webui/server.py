@@ -224,6 +224,10 @@ def _build_handler(
                     return self._send_json(api.approve(store, decision_id))
                 if action == "reject":
                     return self._send_json(api.reject(store, decision_id))
+                if action == "valuate":
+                    return self._send_json(
+                        api.valuate_one(store, ingest_provider_factory, decision_id)
+                    )
             # /api/feedback/<id>/refine — run the LLM refiner on one feedback event
             if (
                 len(segments) == 4
