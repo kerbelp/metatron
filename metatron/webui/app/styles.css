@@ -252,6 +252,7 @@ body {
 .btn.danger:hover { border-color: rgba(251,113,133,.5); color: var(--rose); background: rgba(251,113,133,.07); }
 .btn.lg { padding: 12px 22px; font-size: 14px; }
 .btn:disabled { opacity: .5; cursor: default; }
+.btn.fixed { min-width: 188px; justify-content: center; }
 .btn .ico { width: 16px; height: 16px; }
 
 .icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-sm); border: 1px solid var(--line-2); background: rgba(8,20,17,.5); color: var(--muted); cursor: pointer; transition: all .18s; }

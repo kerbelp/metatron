@@ -322,7 +322,7 @@ function GapCard({ e, delay, onRefine, refining, onOpenDecision }) {
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
         <span className="mono dim" style={{ fontSize: 11 }}>{e.handled ? "A candidate decision was distilled from this gap." : "Distill this gap into a new candidate decision for human review."}</span>
         <div style={{ flex: 1 }} />
-        <button className="btn primary" disabled={e.handled || refining} onClick={onRefine}>
+        <button className="btn primary fixed" disabled={e.handled || refining} onClick={onRefine}>
           {refining ? <><Spinner size={15} /> Refining…</> : e.handled ? <><Icon name="check" size={15} /> Refined</> : <><Icon name="loop" size={15} /> Refine into candidate</>}
         </button>
       </div>
