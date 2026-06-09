@@ -400,3 +400,22 @@ def test_update_decision_refuses_rejected(store):
     [d] = _add(store, 1, status=Status.REJECTED)
     out = update_decision(store, d.id, {"pattern": "x"})
     assert out["ok"] is False and "reject" in out["error"].lower()
+
+
+def test_update_decision_rejects_blank_field(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"pattern": "   "})
+    assert out["ok"] is False and "blank" in out["error"].lower()
+    assert store.get(d.id).pattern == d.pattern  # unchanged
+
+
+def test_create_decision_rejects_bad_confidence(store):
+    out = create_decision(store, {"repo": "r", "pattern": "p", "scope": "app",
+                                   "rationale": "why", "confidence": "ultra"})
+    assert out["ok"] is False and "confidence" in out["error"].lower()
+
+
+def test_update_decision_rejects_bad_confidence(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"confidence": "ultra"})
+    assert out["ok"] is False and "confidence" in out["error"].lower()

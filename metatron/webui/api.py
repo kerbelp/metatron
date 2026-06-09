@@ -580,11 +580,14 @@ def create_decision(store: DecisionStore, body: dict) -> dict:
     repo = (body.get("repo") or "").strip()
     if not (pattern and scope and rationale and repo):
         return {"ok": False, "error": "pattern, scope, rationale and repo are required."}
-    conf = Confidence(body["confidence"]) if body.get("confidence") else Confidence.MEDIUM
+    try:
+        conf = Confidence(body["confidence"]) if body.get("confidence") else Confidence.MEDIUM
+    except ValueError:
+        return {"ok": False, "error": f"confidence must be one of: {', '.join(c.value for c in Confidence)}."}
     d = Decision(repo=repo, pattern=pattern, scope=scope, rationale=rationale,
                  origin=Origin.HUMAN, confidence=conf, status=Status.CANDIDATE)
     store.add(d)
-    return {"ok": True, "id": d.id}
+    return {"ok": True, "id": d.id, "status": d.status.value, "origin": d.origin.value}
 
 
 def update_decision(store: DecisionStore, decision_id: str, body: dict) -> dict:
@@ -595,11 +598,20 @@ def update_decision(store: DecisionStore, decision_id: str, body: dict) -> dict:
         return {"ok": False, "error": f"No decision with id {decision_id!r} (not found)."}
     if decision.status is Status.REJECTED:
         return {"ok": False, "error": "A rejected decision is read-only."}
-    fields = {k: body[k] for k in ("pattern", "scope", "rationale") if body.get(k) is not None}
+    fields = {}
+    for k in ("pattern", "scope", "rationale"):
+        if k in body and body[k] is not None:
+            v = str(body[k]).strip()
+            if not v:
+                return {"ok": False, "error": f"{k!r} must not be blank."}
+            fields[k] = v
     if body.get("confidence"):
-        fields["confidence"] = Confidence(body["confidence"])
+        try:
+            fields["confidence"] = Confidence(body["confidence"])
+        except ValueError:
+            return {"ok": False, "error": f"confidence must be one of: {', '.join(c.value for c in Confidence)}."}
     updated = store.update_fields(decision_id, **fields)
-    return {"ok": True, "id": updated.id}
+    return {"ok": True, "id": updated.id, "status": updated.status.value}
 
 
 def _set_status(store: DecisionStore, decision_id: str, status: Status) -> dict:

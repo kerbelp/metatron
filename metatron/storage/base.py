@@ -75,7 +75,7 @@ class DecisionStore(ABC):
     @abstractmethod
     def update_fields(
         self, decision_id: str, *, pattern: str | None = None, scope: str | None = None,
-        rationale: str | None = None, confidence: "Confidence | None" = None,
+        rationale: str | None = None, confidence: Confidence | None = None,
     ) -> Decision:
         """Update a decision's *content* fields (only the ones provided), bump
         ``updated_at``, and return it. Never touches ``status``/``triage``/``origin``.
