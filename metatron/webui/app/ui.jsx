@@ -122,6 +122,7 @@ const INPUT_STYLE = {
 };
 function DecisionEditor({ repo, decision, onSaved, onCancel }) {
   const editing = !!decision;
+  const [idPrefix] = useState(() => "de-" + Math.random().toString(36).slice(2));
   const [form, setForm] = useState({
     pattern: decision ? decision.pattern : "",
     scope: decision ? decision.scope : "",
@@ -145,14 +146,14 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
   return (
     <div className="panel pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 2 }}>{editing ? "EDIT DECISION" : "NEW DECISION"}</div>
-      <label className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>PATTERN</label>
-      <textarea value={form.pattern} onChange={set("pattern")} rows={2} style={INPUT_STYLE} />
-      <label className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>SCOPE</label>
-      <input value={form.scope} onChange={set("scope")} style={INPUT_STYLE} />
-      <label className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RATIONALE</label>
-      <textarea value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE} />
-      <label className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONFIDENCE</label>
-      <select value={form.confidence} onChange={set("confidence")} style={{ ...INPUT_STYLE, resize: "none" }}>
+      <label htmlFor={idPrefix + "-pattern"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>PATTERN</label>
+      <textarea id={idPrefix + "-pattern"} value={form.pattern} onChange={set("pattern")} rows={2} style={INPUT_STYLE} />
+      <label htmlFor={idPrefix + "-scope"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>SCOPE</label>
+      <input id={idPrefix + "-scope"} value={form.scope} onChange={set("scope")} style={INPUT_STYLE} />
+      <label htmlFor={idPrefix + "-rationale"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RATIONALE</label>
+      <textarea id={idPrefix + "-rationale"} value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE} />
+      <label htmlFor={idPrefix + "-confidence"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONFIDENCE</label>
+      <select id={idPrefix + "-confidence"} value={form.confidence} onChange={set("confidence")} style={{ ...INPUT_STYLE, resize: "none" }}>
         <option value="low">low</option>
         <option value="medium">medium</option>
         <option value="high">high</option>
@@ -170,6 +171,7 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
 /* ---------- decision detail drawer ---------- */
 function DecisionDrawer({ decision, onClose, onApprove, onReject, busy, onEdited }) {
   const [editing, setEditing] = useState(false);
+  useEffect(() => { setEditing(false); }, [decision && decision.id]);
   useEffect(() => {
     const k = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
