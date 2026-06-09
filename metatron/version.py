@@ -137,3 +137,81 @@ def upgrade_command() -> str:
     except OSError:
         pass
     return cmd
+
+
+# ---------------------------------------------------------------------------
+# Update-check core (latest_version, check_for_update, UpdateInfo, throttle,
+# format_update_notice)
+# ---------------------------------------------------------------------------
+
+_THROTTLE = timedelta(hours=24)
+
+
+@dataclass(frozen=True)
+class UpdateInfo:
+    current: str
+    latest: str | None
+    available: bool
+    command: str
+
+
+def _fetch_pypi(timeout: float) -> dict:
+    import urllib.request
+    with urllib.request.urlopen(
+        "https://pypi.org/pypi/getmetatron/json", timeout=timeout
+    ) as resp:
+        return json.loads(resp.read().decode())
+
+
+def latest_version(timeout: float = 1.5, *, fetch=None) -> str | None:
+    """Latest released version on PyPI, or None on any error/timeout. Never raises."""
+    fetch = fetch or _fetch_pypi
+    try:
+        return fetch(timeout)["info"]["version"]
+    except Exception:  # noqa: BLE001 - network/parse/whatever -> no notice
+        return None
+
+
+def _read_cache(path: Path):
+    try:
+        data = json.loads(path.read_text())
+        return datetime.fromisoformat(data["checked_at"]), data.get("latest")
+    except (OSError, ValueError, KeyError):
+        return None
+
+
+def _write_cache(path: Path, when: datetime, latest: str | None) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"checked_at": when.isoformat(), "latest": latest}))
+    except OSError:
+        pass
+
+
+def check_for_update(*, force: bool = False, fetch=None, now: datetime | None = None) -> "UpdateInfo | None":
+    """Throttled, fail-silent update check. Returns None when disabled, a dev build,
+    or anything goes wrong; otherwise an UpdateInfo (available may be False)."""
+    try:
+        if os.environ.get("METATRON_NO_UPDATE_CHECK"):
+            return None
+        current = package_version()
+        if current == "dev":
+            return None
+        now = now or datetime.now(timezone.utc)
+        cache = _state_dir() / "update_check.json"
+        cached = _read_cache(cache)
+        if cached and not force and (now - cached[0]) < _THROTTLE:
+            latest = cached[1]
+        else:
+            latest = latest_version(fetch=fetch)
+            _write_cache(cache, now, latest)
+        available = bool(latest) and _is_newer(latest, current)
+        return UpdateInfo(current=current, latest=latest, available=available, command=upgrade_command())
+    except Exception:  # noqa: BLE001 - never let the check break a caller
+        return None
+
+
+def format_update_notice(info: "UpdateInfo | None") -> str | None:
+    if not (info and info.available):
+        return None
+    return f"→ update available: {info.latest}  (run: {info.command})"

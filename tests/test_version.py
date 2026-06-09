@@ -72,3 +72,63 @@ def test_upgrade_command_detects_and_persists_once(monkeypatch, tmp_path):
     assert (tmp_path / "install.json").exists()
     assert V.upgrade_command() == "pip install -U getmetatron"
     assert calls["n"] == 1
+
+
+def _info_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("METATRON_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.setenv("METATRON_INSTALL_CMD", "pip install -U getmetatron")
+    monkeypatch.setattr(V, "package_version", lambda: "0.2.1")
+
+
+def test_check_for_update_reports_available(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    info = V.check_for_update(fetch=lambda timeout: {"info": {"version": "0.3.0"}})
+    assert info.available is True and info.latest == "0.3.0" and info.current == "0.2.1"
+    assert info.command == "pip install -U getmetatron"
+
+
+def test_check_for_update_not_available_when_current(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    info = V.check_for_update(fetch=lambda timeout: {"info": {"version": "0.2.1"}})
+    assert info.available is False
+
+
+def test_check_for_update_skips_dev_build(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    monkeypatch.setattr(V, "package_version", lambda: "dev")
+    assert V.check_for_update(fetch=lambda timeout: {"info": {"version": "9.9.9"}}) is None
+
+
+def test_check_for_update_disabled_by_env(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("METATRON_NO_UPDATE_CHECK", "1")
+    assert V.check_for_update(fetch=lambda timeout: {"info": {"version": "9.9.9"}}) is None
+
+
+def test_check_for_update_throttles(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    calls = {"n": 0}
+    def fetch(timeout):
+        calls["n"] += 1
+        return {"info": {"version": "0.3.0"}}
+    V.check_for_update(fetch=fetch)
+    V.check_for_update(fetch=fetch)
+    assert calls["n"] == 1
+    V.check_for_update(fetch=fetch, force=True)
+    assert calls["n"] == 2
+
+
+def test_check_for_update_fail_silent_on_fetch_error(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    def boom(timeout):
+        raise OSError("offline")
+    info = V.check_for_update(fetch=boom)
+    assert info is not None and info.available is False and info.latest is None
+
+
+def test_format_update_notice():
+    assert V.format_update_notice(None) is None
+    assert V.format_update_notice(V.UpdateInfo("0.2.1", "0.2.1", False, "x")) is None
+    msg = V.format_update_notice(V.UpdateInfo("0.2.1", "0.3.0", True, "brew upgrade metatron"))
+    assert "0.3.0" in msg and "brew upgrade metatron" in msg
