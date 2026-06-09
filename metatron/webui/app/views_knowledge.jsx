@@ -179,18 +179,32 @@ function CurationView({ repo, openDecision, refresh }) {
 
   const recommended = res.data ? res.data.items.filter((p) => p.triage === "approve") : [];
 
+  const tickRef = useRef(null);
+  useEffect(() => () => { if (tickRef.current) clearInterval(tickRef.current); }, []);
+
   const runJudge = async () => {
     setValuating(true);
     const started = await MetatronAPI.startValuate(repo);
     if (!started.ok) { setValuating(false); toast(started.error || "Could not start the judge"); return; }
-    const tick = setInterval(async () => {
-      const s = await MetatronAPI.getValuateStatus();
-      if (s.state !== "running") {
-        clearInterval(tick);
-        setValuating(false);
-        if (s.state === "error") toast(s.error || "The judge hit an error");
-        else toast("The judge finished triaging the queue", { icon: "spark" });
-        res.reload(); refresh && refresh();
+    if (started.total === 0) { setValuating(false); toast("No untriaged candidates to judge"); res.reload(); return; }
+    let failures = 0;
+    tickRef.current = setInterval(async () => {
+      try {
+        const s = await MetatronAPI.getValuateStatus();
+        failures = 0;
+        if (s.state !== "running") {
+          clearInterval(tickRef.current); tickRef.current = null;
+          setValuating(false);
+          if (s.state === "error") toast(s.error || "The judge hit an error");
+          else toast("The judge finished triaging the queue", { icon: "spark" });
+          res.reload(); refresh && refresh();
+        }
+      } catch {
+        if (++failures >= 3) {
+          clearInterval(tickRef.current); tickRef.current = null;
+          setValuating(false);
+          toast("Lost contact with the server while the judge ran");
+        }
       }
     }, 1200);
   };
@@ -255,7 +269,7 @@ function CurationView({ repo, openDecision, refresh }) {
           : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
-                  onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) toast(r.error || "The judge could not evaluate this"); res.reload(); }} />)}
+                  onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "The judge could not evaluate this"); return; } res.reload(); }} />)}
             </div>}
     </div>
   );
