@@ -175,8 +175,25 @@ function CurationView({ repo, openDecision, refresh }) {
   const [leaving, setLeaving] = useState({});
   const [burst, setBurst] = useState(null);
   const [approvingAll, setApprovingAll] = useState(false);
+  const [valuating, setValuating] = useState(false);
 
   const recommended = res.data ? res.data.items.filter((p) => p.triage === "approve") : [];
+
+  const runJudge = async () => {
+    setValuating(true);
+    const started = await MetatronAPI.startValuate(repo);
+    if (!started.ok) { setValuating(false); toast(started.error || "Could not start the judge"); return; }
+    const tick = setInterval(async () => {
+      const s = await MetatronAPI.getValuateStatus();
+      if (s.state !== "running") {
+        clearInterval(tick);
+        setValuating(false);
+        if (s.state === "error") toast(s.error || "The judge hit an error");
+        else toast("The judge finished triaging the queue", { icon: "spark" });
+        res.reload(); refresh && refresh();
+      }
+    }, 1200);
+  };
 
   const animateOut = (id) => new Promise((r) => { setLeaving((l) => ({ ...l, [id]: true })); setTimeout(r, 480); });
 
@@ -210,9 +227,14 @@ function CurationView({ repo, openDecision, refresh }) {
     <div className="view">
       {burst && <ApproveBurst key={burst.id} x={burst.x} y={burst.y} big={burst.big} onDone={() => setBurst(null)} />}
       <SectionTitle eyebrow="Human curation · newest first" title="Candidate decision review"
-        right={recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
-          {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
-        </button>} />
+        right={<div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="btn fixed" disabled={valuating} onClick={runJudge}>
+            {valuating ? <><Spinner size={15} /> Running the judge…</> : <><Icon name="spark" size={15} /> Run the judge</>}
+          </button>
+          {recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
+            {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
+          </button>}
+        </div>} />
 
       {/* judge summary banner */}
       <div className="panel pad enter" style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 18, background: "linear-gradient(100deg, rgba(45,212,191,.06), rgba(7,17,15,.5))" }}>
