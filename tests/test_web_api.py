@@ -331,8 +331,17 @@ def test_leaderboard_ignores_ratings_for_non_canonical_decisions():
 class _StubJudge:
     """Stands in for DecisionJudge: returns a fixed verdict for each candidate.
     Matches the real contract: dict {decision_id: (verdict, reason)}."""
+
     def __init__(self, verdict=TriageVerdict.APPROVE, reason="looks canonical"):
         self.verdict, self.reason = verdict, reason
+
+    @classmethod
+    def empty(cls):
+        """Returns an instance whose evaluate always returns {} (no verdicts)."""
+        instance = cls.__new__(cls)
+        instance.evaluate = lambda decisions, **kw: {}
+        return instance
+
     def evaluate(self, decisions, **kw):
         return {c.id: (self.verdict, self.reason) for c in decisions}
 
@@ -347,11 +356,17 @@ def test_valuate_one_sets_triage(store):
 
 
 def test_valuate_one_unconfigured_provider_is_clean_error(store):
-    [d] = _add(store, 1)
-    out = valuate_one(store, None, d.id)
+    out = valuate_one(store, None, "irrelevant-id")
     assert out["ok"] is False and "provider" in out["error"].lower()
 
 
 def test_valuate_one_unknown_id(store):
     out = valuate_one(store, lambda: object(), "nope", judge_factory=lambda _p: _StubJudge())
     assert out["ok"] is False and "not found" in out["error"].lower()
+
+
+def test_valuate_one_no_verdict_is_clean_error(store):
+    [d] = _add(store, 1)
+    out = valuate_one(store, lambda: object(), d.id, judge_factory=lambda _p: _StubJudge.empty())
+    assert out["ok"] is False and "no verdict" in out["error"].lower()
+    assert store.get(d.id).triage_reason == ""  # nothing persisted
