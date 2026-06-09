@@ -197,6 +197,12 @@ function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", boxShadow: "0 0 8px var(--emerald-glow)" }} />
               <span className="mono dim" style={{ fontSize: 10.5, letterSpacing: ".1em" }} title={ver.data ? `revision ${ver.data.revision}` : ""}>API connected{ver.data ? ` · v${ver.data.version}` : ""}</span>
+              {ver.data && ver.data.update_available && (
+                <span className="chip" title={"v" + ver.data.latest + " · run: " + ver.data.upgrade_command}
+                  style={{ marginLeft: 8, fontSize: 9, color: "var(--amber)", borderColor: "rgba(245,193,107,.3)" }}>
+                  update available
+                </span>
+              )}
             </div>
           </div>
         </nav>
@@ -219,7 +225,8 @@ function App() {
 
       <DecisionDrawer decision={drawer} busy={drawerBusy} onClose={() => setDrawer(null)}
         onApprove={async (p) => { setDrawerBusy(true); await MetatronAPI.approveDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
-        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }} />
+        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
+        onEdited={async () => { if (drawer) { const fresh = await MetatronAPI.getDecision(drawer.id); setDrawer(fresh); } refreshAll(); }} />
 
       {panel && panel.type === "agent" && <AgentActivityDrawer agent={panel.agent} focus={panel.focus} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}
       {panel && panel.type === "query" && <QueryDrawer query={panel.query} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}

@@ -97,8 +97,28 @@
       return P("/api/decisions/approve-recommended", { repo });
     },
 
+    startValuate(repo) {
+      return P("/api/valuate/start", { repo });
+    },
+
+    getValuateStatus() {
+      return J("/api/valuate/status");
+    },
+
+    valuateDecision(id) {
+      return P(`/api/decisions/${id}/valuate`);
+    },
+
     refineFeedback(eventId) {
       return P(`/api/feedback/${eventId}/refine`);
+    },
+
+    createDecision(repo, fields) {
+      return P("/api/decisions", { repo, ...fields });
+    },
+
+    updateDecision(id, fields) {
+      return P(`/api/decisions/${id}/update`, fields);
     },
   };
 

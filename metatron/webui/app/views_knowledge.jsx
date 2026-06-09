@@ -102,7 +102,7 @@ function OverviewView({ repo, openDecision, goto }) {
    DECISIONS — browse with search + filters
    ============================================================ */
 const STATUS_OPTS = ["", "canonical", "candidate", "rejected"];
-const ORIGIN_OPTS = ["", "bootstrap", "agent_submitted", "agent_feedback"];
+const ORIGIN_OPTS = ["", "bootstrap", "agent_submitted", "agent_feedback", "human"];
 const CONF_OPTS = ["", "high", "medium", "low"];
 
 function DecisionsView({ repo, openDecision }) {
@@ -175,8 +175,51 @@ function CurationView({ repo, openDecision, refresh }) {
   const [leaving, setLeaving] = useState({});
   const [burst, setBurst] = useState(null);
   const [approvingAll, setApprovingAll] = useState(false);
+  const [valuating, setValuating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+
+  const [verdict, setVerdict] = useState("");
+  const [scopeF, setScopeF] = useState("");
+  const [query, setQuery] = useState("");
+
+  const all = res.data ? res.data.items : [];
+  const scopes = MetatronCandidateFilter.scopesOf(all);
+  const filtered = MetatronCandidateFilter.filterCandidates(all, { verdict, scope: scopeF, query });
+  const visible = MetatronCandidatePriority.prioritizeCandidates(filtered);
+  const hasFilter = verdict || scopeF || query;
 
   const recommended = res.data ? res.data.items.filter((p) => p.triage === "approve") : [];
+
+  const tickRef = useRef(null);
+  useEffect(() => () => { if (tickRef.current) clearInterval(tickRef.current); }, []);
+
+  const runJudge = async () => {
+    setValuating(true);
+    const started = await MetatronAPI.startValuate(repo);
+    if (!started.ok) { setValuating(false); toast(started.error || "Could not start prioritization"); return; }
+    if (started.total === 0) { setValuating(false); toast("No new candidates to prioritize"); res.reload(); return; }
+    let failures = 0;
+    tickRef.current = setInterval(async () => {
+      try {
+        const s = await MetatronAPI.getValuateStatus();
+        failures = 0;
+        if (s.state !== "running") {
+          clearInterval(tickRef.current); tickRef.current = null;
+          setValuating(false);
+          if (s.state === "error") toast(s.error || "The judge hit an error");
+          else toast("Candidates prioritized by AI", { icon: "spark" });
+          res.reload(); refresh && refresh();
+        }
+      } catch {
+        if (++failures >= 3) {
+          clearInterval(tickRef.current); tickRef.current = null;
+          setValuating(false);
+          toast("Lost contact with the server while prioritizing");
+        }
+      }
+    }, 1200);
+  };
 
   const animateOut = (id) => new Promise((r) => { setLeaving((l) => ({ ...l, [id]: true })); setTimeout(r, 480); });
 
@@ -210,15 +253,23 @@ function CurationView({ repo, openDecision, refresh }) {
     <div className="view">
       {burst && <ApproveBurst key={burst.id} x={burst.x} y={burst.y} big={burst.big} onDone={() => setBurst(null)} />}
       <SectionTitle eyebrow="Human curation · newest first" title="Candidate decision review"
-        right={recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
-          {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
-        </button>} />
+        right={<div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="btn" onClick={() => { setAdding((a) => !a); setEditingId(null); }}>
+            + Add decision
+          </button>
+          <button className="btn fixed" disabled={valuating} onClick={runJudge}>
+            {valuating ? <><Spinner size={15} /> Prioritizing…</> : <><Icon name="spark" size={15} /> Prioritize with AI</>}
+          </button>
+          {recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
+            {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
+          </button>}
+        </div>} />
 
       {/* judge summary banner */}
       <div className="panel pad enter" style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 18, background: "linear-gradient(100deg, rgba(45,212,191,.06), rgba(7,17,15,.5))" }}>
         <MetatronEmblem size={44} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, color: "#eafff8", marginBottom: 4 }}>The advisory judge has triaged this queue</div>
+          <div style={{ fontSize: 14, color: "#eafff8", marginBottom: 4 }}>AI has prioritized this queue</div>
           <div className="muted" style={{ fontSize: 12.5 }}>Recommendations are guidance only — <b style={{ color: "var(--text-2)" }}>nothing becomes canonical without you</b>. Review each, or batch-approve the judge's picks.</div>
         </div>
         {res.data && <div style={{ display: "flex", gap: 18 }}>
@@ -228,12 +279,48 @@ function CurationView({ repo, openDecision, refresh }) {
         </div>}
       </div>
 
+      {adding && (
+        <div style={{ marginBottom: 18 }}>
+          <DecisionEditor repo={repo} onSaved={() => { setAdding(false); res.reload(); refresh && refresh(); }} onCancel={() => setAdding(false)} />
+        </div>
+      )}
+
       {res.loading ? <Loading label="Loading the review queue…" />
         : res.error ? <ErrorState onRetry={res.reload} />
-          : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
-            : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)} />)}
-            </div>}
+          : all.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
+            : <>
+              {/* filter rail */}
+              <div className="panel pad enter" style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
+                <FilterGroup label="AI VERDICT" opts={["", "approve", "borderline", "reject"]} value={verdict} onPick={(v) => setVerdict(verdict === v ? "" : v)} render={(v) => v || "all"} />
+                <span style={{ width: 1, height: 24, background: "var(--line)" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".18em" }}>SCOPE</span>
+                  <select value={scopeF} onChange={(e) => setScopeF(e.target.value)} style={{ background: "rgba(8,18,16,.7)", border: "1px solid var(--line)", borderRadius: 8, padding: "4px 10px", color: "#eafff8", fontSize: 12.5, fontFamily: "inherit" }}>
+                    <option value="">all scopes</option>
+                    {scopes.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <span style={{ width: 1, height: 24, background: "var(--line)" }} />
+                <div className="search"><Icon name="search" size={16} className="dim" /><input placeholder="search pattern, scope, rationale..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+                {hasFilter && <button className="chip" onClick={() => { setVerdict(""); setScopeF(""); setQuery(""); }}>&#x2715; clear</button>}
+              </div>
+
+              {visible.length === 0
+                ? <Empty title="No candidates match these filters" detail="Clear or adjust the filters to see more." icon="search" />
+                : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {visible.map((p, i) => (
+                    <React.Fragment key={p.id}>
+                      <CandidateCard p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id}
+                        onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
+                        onEdit={() => { setEditingId((id) => id === p.id ? null : p.id); setAdding(false); }}
+                        onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "AI could not score this candidate"); return; } res.reload(); }} />
+                      {editingId === p.id && (
+                        <DecisionEditor decision={p} onSaved={() => { setEditingId(null); res.reload(); refresh && refresh(); }} onCancel={() => setEditingId(null)} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>}
+            </>}
     </div>
   );
 }
@@ -242,7 +329,8 @@ function TriageCount({ label, n, c }) {
   return <div style={{ textAlign: "center" }}><div className="mono tnum" style={{ fontSize: 22, fontWeight: 600, color: c }}>{n}</div><div className="mono" style={{ fontSize: 9, letterSpacing: ".14em", color: "var(--muted)", textTransform: "uppercase" }}>{label}</div></div>;
 }
 
-function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen }) {
+function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, onValuate, onEdit }) {
+  const [asking, setAsking] = useState(false);
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s", transition: "all .48s cubic-bezier(.4,0,.2,1)", ...(leaving ? { opacity: 0, transform: "translateX(60px) scale(.97)", filter: "blur(2px)" } : {}) }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
@@ -270,6 +358,11 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen })
           <button className="btn primary" disabled={busy} onClick={onApprove}><Icon name="check" size={15} />Approve</button>
           <button className="btn danger" disabled={busy} onClick={onReject}><Icon name="x" size={15} />Reject</button>
           <button className="btn" onClick={onOpen} style={{ fontSize: 12 }}>Inspect</button>
+          {onEdit && <button className="btn" onClick={onEdit} style={{ fontSize: 12 }}>Edit</button>}
+          <button className="btn" disabled={asking} style={{ fontSize: 12 }}
+            onClick={async () => { setAsking(true); try { await onValuate(); } finally { setAsking(false); } }}>
+            {asking ? <><Spinner size={13} /> Scoring…</> : <><Icon name="spark" size={13} /> Score with AI</>}
+          </button>
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ from dotenv import find_dotenv, load_dotenv
 
 from metatron import identity
 from metatron.config import load_settings
+from metatron.version import package_version, version_string, check_for_update, format_update_notice
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.repo_identity import repo_id
 
@@ -144,6 +145,13 @@ def main(
     # before touching the catalog, so it has no side effects.
     if args.command is None:
         return _render_home(parser, out)
+
+    if args.command == "version":
+        print(f"metatron {package_version()} (rev {version_string()})", file=out)
+        notice = format_update_notice(check_for_update())
+        if notice:
+            print(notice, file=out)
+        return 0
 
     settings = load_settings()
     if args.db:
@@ -364,6 +372,12 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
             return AnthropicProvider(
                 model=settings.model, api_key=settings.anthropic_api_key
             )
+
+    # Warn about an available update before the server takes over the terminal.
+    # On a cache hit this is one file read; on a miss it is a 1.5s-timeout, fail-silent check.
+    notice = format_update_notice(check_for_update())
+    if notice:
+        print(notice, file=sys.stderr)
 
     serve(
         store, event_store, start_port=port, run_store=run_store,
@@ -611,6 +625,8 @@ def _build_parser() -> argparse.ArgumentParser:
     ui_p.add_argument(
         "--port", type=int, default=1337, help="starting port (bumps if taken)"
     )
+
+    sub.add_parser("version", help="show the installed version and check for updates")
 
     whoami_p = sub.add_parser(
         "whoami", help="show or set the local identity stamped onto served events"

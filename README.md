@@ -93,6 +93,15 @@ To install from your local clone as a global tool:
 uv tool install .
 ```
 
+### Update notices
+
+`metatron version` and the curation UI check PyPI at most once a day for a newer
+`getmetatron` release and print a passive notice with the upgrade command. The check
+is a read-only request to pypi.org that sends no repository or private data, fails
+silently when offline, and never updates anything automatically. Disable it with
+`METATRON_NO_UPDATE_CHECK=1`. Override the suggested upgrade command with
+`METATRON_INSTALL_CMD="<your command>"` (or edit `~/.metatron/install.json`).
+
 ## Run with Docker
 
 A prebuilt multi-arch image (`linux/amd64`, `linux/arm64`) is published to Docker Hub

@@ -220,6 +220,23 @@ class SQLiteDecisionStore(DecisionStore):
         self._conn.commit()
         return updated
 
+    def update_fields(self, decision_id, *, pattern=None, scope=None, rationale=None, confidence=None):
+        decision = self.get(decision_id)
+        if decision is None:
+            raise KeyError(decision_id)
+        changes = {k: v for k, v in
+                   {"pattern": pattern, "scope": scope, "rationale": rationale, "confidence": confidence}.items()
+                   if v is not None}
+        now = datetime.now(timezone.utc)
+        updated = decision.model_copy(update={**changes, "updated_at": now})
+        self._conn.execute(
+            "UPDATE decisions SET pattern = ?, scope = ?, rationale = ?, confidence = ?, updated_at = ? WHERE id = ?",
+            (updated.pattern, updated.scope, updated.rationale, updated.confidence.value,
+             updated.updated_at.isoformat(), decision_id),
+        )
+        self._conn.commit()
+        return updated
+
     def close(self) -> None:
         self._conn.close()
 

@@ -233,14 +233,22 @@ function AgentAggregatePanel({ data }) {
 }
 
 /* right-hand detail for the focused node */
-function AgentDetailPanel({ node, onDrill }) {
+function AgentDetailPanel({ node, onDrill, onClearFocus }) {
   if (!node) return null;
   if (node.kind === "group") {
     return (
       <div className="enter" style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <span className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>GROUPED AGENTS</span>
-          <span className="badge ghost mono" style={{ marginLeft: "auto" }}>+{node.members.length}</span>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+            {onClearFocus && (
+              <button className="chip" onClick={onClearFocus} title="Back to all agents"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <Icon name="arrow" size={13} style={{ transform: "rotate(180deg)" }} /> All agents
+              </button>
+            )}
+            <span className="badge ghost mono">+{node.members.length}</span>
+          </div>
         </div>
         <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 }}>
           {node.members.length} agents with lower activity in this window. Together they received <b style={{ color: "var(--emerald)" }}>{node.received}</b> decisions and sent <b style={{ color: "var(--cyan)" }}>{node.feedback}</b> feedback signals.
@@ -273,7 +281,15 @@ function AgentDetailPanel({ node, onDrill }) {
           <div style={{ fontSize: 16, color: "#eafff8", fontWeight: 500 }}>{a.name}</div>
           <div className="mono" style={{ fontSize: 10.5, color: "var(--dim)" }}>{a.id}</div>
         </div>
-        <span className="badge" style={{ marginLeft: "auto", color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{statusStyle(a.status).label}</span>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {onClearFocus && (
+            <button className="chip" onClick={onClearFocus} title="Back to all agents"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+              <Icon name="arrow" size={13} style={{ transform: "rotate(180deg)" }} /> All agents
+            </button>
+          )}
+          <span className="badge" style={{ color: sc, borderColor: sc, background: "transparent" }}><span className="pip" style={{ background: sc }} />{statusStyle(a.status).label}</span>
+        </div>
       </div>
 
       <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 7 }}>NOW WORKING ON</div>

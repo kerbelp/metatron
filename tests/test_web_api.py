@@ -5,17 +5,20 @@ from datetime import datetime, timezone
 import pytest
 
 from metatron.events import Event, EventKind
-from metatron.models import Origin, Decision, Status
+from metatron.models import Origin, Decision, Status, TriageVerdict
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 from metatron.webui.api import (
     approve,
+    create_decision,
     feedback_events,
     ingest_cost,
     leaderboard,
     list_decisions,
     reject,
     stats,
+    update_decision,
     usage,
+    valuate_one,
 )
 
 
@@ -321,3 +324,123 @@ def test_leaderboard_ignores_ratings_for_non_canonical_decisions():
     lb = leaderboard(events, store, repo=REPO)
 
     assert lb["most_helpful"] == [] and lb["rated_total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# valuate_one — single-decision advisory judge
+# ---------------------------------------------------------------------------
+
+class _StubJudge:
+    """Stands in for DecisionJudge: returns a fixed verdict for each candidate.
+    Matches the real contract: dict {decision_id: (verdict, reason)}."""
+
+    def __init__(self, verdict=TriageVerdict.APPROVE, reason="looks canonical"):
+        self.verdict, self.reason = verdict, reason
+
+    @classmethod
+    def empty(cls):
+        """Returns an instance whose evaluate always returns {} (no verdicts)."""
+        instance = cls.__new__(cls)
+        instance.evaluate = lambda decisions, **kw: {}
+        return instance
+
+    def evaluate(self, decisions, **kw):
+        return {c.id: (self.verdict, self.reason) for c in decisions}
+
+
+def test_valuate_one_sets_triage(store):
+    [d] = _add(store, 1)
+    out = valuate_one(store, lambda: object(), d.id, judge_factory=lambda _p: _StubJudge())
+    assert out["ok"] is True
+    assert out["triage"] == "approve"
+    assert store.get(d.id).triage is TriageVerdict.APPROVE
+    assert store.get(d.id).triage_reason == "looks canonical"
+
+
+def test_valuate_one_unconfigured_provider_is_clean_error(store):
+    out = valuate_one(store, None, "irrelevant-id")
+    assert out["ok"] is False and "provider" in out["error"].lower()
+
+
+def test_valuate_one_unknown_id(store):
+    out = valuate_one(store, lambda: object(), "nope", judge_factory=lambda _p: _StubJudge())
+    assert out["ok"] is False and "not found" in out["error"].lower()
+
+
+def test_valuate_one_no_verdict_is_clean_error(store):
+    [d] = _add(store, 1)
+    out = valuate_one(store, lambda: object(), d.id, judge_factory=lambda _p: _StubJudge.empty())
+    assert out["ok"] is False and "no verdict" in out["error"].lower()
+    assert store.get(d.id).triage_reason == ""  # nothing persisted
+
+
+# ---------------------------------------------------------------------------
+# create_decision + update_decision
+# ---------------------------------------------------------------------------
+
+def test_create_decision_makes_a_human_candidate(store):
+    out = create_decision(store, {"repo": "r", "pattern": "p", "scope": "app", "rationale": "why"})
+    assert out["ok"] is True
+    d = store.get(out["id"])
+    assert d.status is Status.CANDIDATE and d.origin is Origin.HUMAN
+
+
+def test_create_decision_requires_pattern(store):
+    out = create_decision(store, {"repo": "r", "scope": "app", "rationale": "why"})
+    assert out["ok"] is False
+
+
+def test_update_decision_edits_candidate(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"pattern": "edited"})
+    assert out["ok"] is True and store.get(d.id).pattern == "edited"
+
+
+def test_update_decision_refuses_rejected(store):
+    [d] = _add(store, 1, status=Status.REJECTED)
+    out = update_decision(store, d.id, {"pattern": "x"})
+    assert out["ok"] is False and "reject" in out["error"].lower()
+
+
+def test_update_decision_rejects_blank_field(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"pattern": "   "})
+    assert out["ok"] is False and "blank" in out["error"].lower()
+    assert store.get(d.id).pattern == d.pattern  # unchanged
+
+
+def test_create_decision_rejects_bad_confidence(store):
+    out = create_decision(store, {"repo": "r", "pattern": "p", "scope": "app",
+                                   "rationale": "why", "confidence": "ultra"})
+    assert out["ok"] is False and "confidence" in out["error"].lower()
+
+
+def test_update_decision_rejects_bad_confidence(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"confidence": "ultra"})
+    assert out["ok"] is False and "confidence" in out["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# version endpoint — update-availability fields
+# ---------------------------------------------------------------------------
+
+from metatron import version as V
+
+
+def test_version_endpoint_includes_update_fields(monkeypatch):
+    from metatron.webui import api as webapi
+    monkeypatch.setattr(webapi, "check_for_update",
+                        lambda **kw: V.UpdateInfo("0.2.1", "0.3.0", True, "brew upgrade metatron"))
+    out = webapi.version()
+    assert out["update_available"] is True
+    assert out["latest"] == "0.3.0"
+    assert out["upgrade_command"] == "brew upgrade metatron"
+
+
+def test_version_endpoint_handles_no_check(monkeypatch):
+    from metatron.webui import api as webapi
+    monkeypatch.setattr(webapi, "check_for_update", lambda **kw: None)
+    out = webapi.version()
+    assert out["update_available"] is False
+    assert "version" in out and "revision" in out

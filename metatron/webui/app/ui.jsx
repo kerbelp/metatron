@@ -30,14 +30,15 @@ function ScopeTag({ scope }) {
   return <span className="scope-tag">{scope ? scope : "◇ global"}</span>;
 }
 
-const ORIGIN_LABEL = { bootstrap: "Bootstrap", agent_submitted: "Agent-submitted", agent_feedback: "Agent-feedback" };
+const ORIGIN_LABEL = { bootstrap: "Bootstrap", agent_submitted: "Agent-submitted", agent_feedback: "Agent-feedback", human: "Human-authored" };
 const ORIGIN_DESC = {
   bootstrap: "Mined from the codebase + git history",
   agent_submitted: "Proposed directly by a coding agent",
   agent_feedback: "Distilled from an agent's \u2018what was missing\u2019 report",
+  human: "Authored directly by a human curator",
 };
 function OriginTag({ origin }) {
-  const dot = { bootstrap: "var(--teal)", agent_submitted: "var(--violet)", agent_feedback: "var(--cyan)" }[origin];
+  const dot = { bootstrap: "var(--teal)", agent_submitted: "var(--violet)", agent_feedback: "var(--cyan)", human: "var(--emerald)" }[origin];
   return <span className="origin-tag" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 6, height: 6, borderRadius: 2, background: dot, transform: "rotate(45deg)" }} />{ORIGIN_LABEL[origin] || origin}</span>;
 }
 
@@ -105,8 +106,75 @@ function DecisionRow({ decision, onOpen, style, children, columns = "1fr auto" }
   );
 }
 
+/* ---------- shared decision editor (add + edit) ---------- */
+const INPUT_STYLE = {
+  width: "100%",
+  background: "rgba(8,18,16,.7)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: "9px 12px",
+  color: "#eafff8",
+  fontFamily: "var(--mono)",
+  fontSize: 13,
+  resize: "vertical",
+  boxSizing: "border-box",
+  outline: "none",
+};
+function DecisionEditor({ repo, decision, onSaved, onCancel }) {
+  const editing = !!decision;
+  const [idPrefix] = useState(() => "de-" + Math.random().toString(36).slice(2));
+  const [form, setForm] = useState({
+    pattern: decision ? decision.pattern : "",
+    scope: decision ? decision.scope : "",
+    rationale: decision ? decision.rationale : "",
+    confidence: decision ? (decision.confidence || "medium") : "medium",
+  });
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
+  const valid = MetatronDecisionEditor.validateDecisionForm(form).ok;
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const save = async () => {
+    if (!valid) return;
+    setBusy(true);
+    const r = editing
+      ? await MetatronAPI.updateDecision(decision.id, form)
+      : await MetatronAPI.createDecision(repo, form);
+    setBusy(false);
+    if (r && !r.ok) { toast(r.error || "Could not save the decision"); return; }
+    onSaved && onSaved();
+  };
+  return (
+    <div className="panel pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 2 }}>{editing ? "EDIT DECISION" : "NEW DECISION"}</div>
+      <label htmlFor={idPrefix + "-pattern"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>PATTERN</label>
+      <textarea id={idPrefix + "-pattern"} value={form.pattern} onChange={set("pattern")} rows={2} style={INPUT_STYLE}
+        placeholder="e.g. Use the repository pattern for DB access; never put raw SQL in callers" />
+      <label htmlFor={idPrefix + "-scope"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>SCOPE</label>
+      <input id={idPrefix + "-scope"} value={form.scope} onChange={set("scope")} style={INPUT_STYLE}
+        placeholder="e.g. src/storage  (the file path, module, or area this applies to)" />
+      <label htmlFor={idPrefix + "-rationale"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RATIONALE</label>
+      <textarea id={idPrefix + "-rationale"} value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE}
+        placeholder="e.g. Why it holds and what it prevents (keeps SQL out of callers so the store stays swappable)" />
+      <label htmlFor={idPrefix + "-confidence"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONFIDENCE</label>
+      <select id={idPrefix + "-confidence"} value={form.confidence} onChange={set("confidence")} style={{ ...INPUT_STYLE, resize: "none" }}>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 4 }}>
+        <button className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button className="btn primary" onClick={save} disabled={!valid || busy}>
+          {busy ? <><Spinner size={14} /> Saving…</> : (editing ? "Save changes" : "Add decision")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------- decision detail drawer ---------- */
-function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
+function DecisionDrawer({ decision, onClose, onApprove, onReject, busy, onEdited }) {
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setEditing(false); }, [decision && decision.id]);
   useEffect(() => {
     const k = (e) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k);
@@ -119,6 +187,7 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
     background: "linear-gradient(180deg, rgba(6,15,13,0), #070f0d 26%)",
     borderTop: "1px solid var(--line)",
   };
+  const canEdit = onEdited && decision.status !== "rejected";
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 120, display: "flex", justifyContent: "flex-end" }}>
       <div onClick={onClose} style={{ position: "absolute", inset: 0, background: "rgba(2,6,8,.6)", backdropFilter: "blur(3px)", animation: "fadeup .3s" }} />
@@ -128,9 +197,22 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
           <StatusBadge status={decision.status} />
           {decision.triage && decision.triage !== "none" && decision.status === "candidate" && <TriageTag triage={decision.triage} />}
           <div className="spacer" style={{ flex: 1 }} />
+          {canEdit && !editing && (
+            <button className="icon-btn" title="Edit decision" onClick={() => setEditing(true)}>
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+          )}
           <button className="icon-btn" onClick={onClose}><Icon name="x" size={16} /></button>
         </div>
         <div className="muted" style={{ fontSize: 11.5, padding: "11px 28px 0", lineHeight: 1.5 }}>{STATUS_DESC[decision.status]}</div>
+        {editing ? (
+          <div style={{ padding: "20px 28px 40px" }}>
+            <DecisionEditor decision={decision} onSaved={() => { setEditing(false); onEdited && onEdited(); }} onCancel={() => setEditing(false)} />
+          </div>
+        ) : (
         <div style={{ padding: "20px 28px 40px" }}>
           <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".24em", marginBottom: 10 }}>THE RULE</div>
           <div style={{ fontSize: 20, lineHeight: 1.4, fontWeight: 400, color: "#eafff8", textWrap: "pretty" }}>{decision.pattern}</div>
@@ -194,6 +276,7 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy }) {
             </div>
           )}
         </div>
+        )}
       </aside>
     </div>
   );
@@ -265,5 +348,5 @@ const useToast = () => React.useContext(ToastCtx);
 
 Object.assign(window, {
   StatusBadge, Confidence, ScopeTag, OriginTag, OriginLabel: ORIGIN_LABEL, OriginDesc: ORIGIN_DESC,
-  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, DecisionRow, DecisionDrawer, SideDrawer, SectionTitle, ToastHost, useToast,
+  TriageTag, TriageMeta: TRIAGE_META, EffectTag, ScoreRing, DecisionRow, DecisionEditor, DecisionDrawer, SideDrawer, SectionTitle, ToastHost, useToast,
 });

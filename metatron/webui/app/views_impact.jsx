@@ -109,7 +109,7 @@ function AgentImpactView({ repo, openPanel }) {
               )
               : (
                 <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr" }}>
-                  <div onMouseLeave={() => setFocusIdx(-1)} style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
+                  <div style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
                     <div style={{ position: "absolute", top: 14, left: 18, display: "flex", gap: 9, zIndex: 8, flexWrap: "wrap" }}>
                       <span className="badge ghost mono"><b style={{ color: "var(--text)" }}>{act.data.total_agents}</b>&nbsp;agents</span>
                       <span className="badge mono" style={{ color: "var(--emerald)", borderColor: "rgba(52,211,153,.28)", background: "rgba(52,211,153,.08)" }}>↓ {act.data.total_served} served</span>
@@ -119,7 +119,7 @@ function AgentImpactView({ repo, openPanel }) {
                   </div>
                   <div style={{ padding: "20px 24px", minWidth: 0 }}>
                     {agNodes[fIdx]
-                      ? <AgentDetailPanel node={agNodes[fIdx]} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
+                      ? <AgentDetailPanel node={agNodes[fIdx]} onClearFocus={() => setFocusIdx(-1)} onDrill={(a, focus) => openPanel && openPanel({ type: "agent", agent: a, focus })} />
                       : <AgentAggregatePanel data={act.data} />}
                   </div>
                 </div>
@@ -226,20 +226,54 @@ function LoopStage({ icon, label, n, color, active }) {
   );
 }
 
+function InlineCandidate({ decision, id, onOpenDecision, onChanged }) {
+  const [d, setD] = useState(decision || null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!decision && id) MetatronAPI.getDecision(id).then(setD);
+  }, [id, decision]);
+  if (!d || !d.id) return null;
+  const act = (fn) => async () => {
+    setBusy(true);
+    await fn(d.id);
+    const fresh = await MetatronAPI.getDecision(d.id);
+    setD(fresh);
+    setBusy(false);
+    onChanged && onChanged();
+  };
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 13px", borderRadius: 10, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+      <StatusBadge status={d.status} />
+      <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{d.pattern}</span>
+      {d.status === "candidate" ? <>
+        <button className="btn primary" disabled={busy} onClick={act(MetatronAPI.approveDecision)}><Icon name="check" size={14} />Approve</button>
+        <button className="btn danger" disabled={busy} onClick={act(MetatronAPI.rejectDecision)}><Icon name="x" size={14} />Reject</button>
+      </> : null}
+      <button className="btn" style={{ fontSize: 12 }} onClick={() => onOpenDecision && onOpenDecision(d.id)}>Inspect</button>
+    </div>
+  );
+}
+
 function FeedbackLoopView({ repo, refresh, openDecision }) {
   const [filter, setFilter] = useState("all");
   const ev = useApi(() => MetatronAPI.getFeedbackEvents(repo, filter), [repo, filter]);
   const toast = useToast();
   const [refining, setRefining] = useState(null);
+  // freshIds: map of event id → decision ids produced this session (before reload)
+  const [freshIds, setFreshIds] = useState({});
+  useEffect(() => { setFreshIds({}); }, [repo]);
   const openById = useCallback((id) => {
     MetatronAPI.getDecision(id).then((d) => d && d.id && openDecision && openDecision(d));
   }, [openDecision]);
 
   const doRefine = async (e) => {
     setRefining(e.id);
-    await MetatronAPI.refineFeedback(e.id);
+    const res = await MetatronAPI.refineFeedback(e.id);
     setRefining(null);
     toast("Gap refined into a new candidate decision", { icon: "loop" });
+    if (res && res.decision_ids && res.decision_ids.length) {
+      setFreshIds((prev) => ({ ...prev, [e.id]: res.decision_ids }));
+    }
     ev.reload(); refresh && refresh();
   };
 
@@ -272,7 +306,16 @@ function FeedbackLoopView({ repo, refresh, openDecision }) {
       {ev.loading ? <Loading label="Gathering feedback gaps…" /> : ev.error ? <ErrorState onRetry={ev.reload} /> :
         ev.data.events.length === 0 ? <Empty title="No gaps in this view" detail="Every reported gap has been refined into a candidate decision." icon="loop" /> :
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {ev.data.events.map((e, i) => <GapCard key={e.id} e={e} delay={i * 0.06} onRefine={() => doRefine(e)} refining={refining === e.id} onOpenDecision={openById} />)}
+            {ev.data.events.map((e, i) => (
+              <GapCard key={e.id} e={e} delay={i * 0.06}
+                onRefine={() => doRefine(e)} refining={refining === e.id}
+                onOpenDecision={openById}
+                freshIds={freshIds[e.id]}
+                onChanged={() => {
+                  setFreshIds((prev) => { const n = { ...prev }; delete n[e.id]; return n; });
+                  ev.reload(); refresh && refresh();
+                }} />
+            ))}
           </div>}
     </div>
   );
@@ -284,8 +327,15 @@ function LoopArrow() {
   </div>;
 }
 
-function GapCard({ e, delay, onRefine, refining, onOpenDecision }) {
+function GapCard({ e, delay, onRefine, refining, onOpenDecision, freshIds, onChanged }) {
   const ratings = Object.entries(e.ratings || {});
+  // Determine which candidates to render inline:
+  // 1. On reload, e.produced holds full decision objects (already-handled gaps).
+  // 2. Immediately after refining this session, freshIds holds the new decision ids.
+  const producedDecisions = (e.produced && e.produced.length) ? e.produced : null;
+  const producedIds = (!producedDecisions && freshIds && freshIds.length) ? freshIds : null;
+  const hasInlineCandidates = producedDecisions || producedIds;
+
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
@@ -319,12 +369,25 @@ function GapCard({ e, delay, onRefine, refining, onOpenDecision }) {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-        <span className="mono dim" style={{ fontSize: 11 }}>{e.handled ? "A candidate decision was distilled from this gap." : "Distill this gap into a new candidate decision for human review."}</span>
-        <div style={{ flex: 1 }} />
-        <button className="btn primary" disabled={e.handled || refining} onClick={onRefine}>
-          {refining ? <><Spinner size={15} /> Refining…</> : e.handled ? <><Icon name="check" size={15} /> Refined</> : <><Icon name="loop" size={15} /> Refine into candidate</>}
-        </button>
+      <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+        {hasInlineCandidates ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 4 }}>DISTILLED CANDIDATE{(producedDecisions || producedIds).length > 1 ? "S" : ""}</div>
+            {producedDecisions
+              ? producedDecisions.map((d) => <InlineCandidate key={d.id} decision={d} onOpenDecision={onOpenDecision} onChanged={onChanged} />)
+              : producedIds.map((id) => <InlineCandidate key={id} id={id} onOpenDecision={onOpenDecision} onChanged={onChanged} />)}
+          </div>
+        ) : e.handled ? (
+          <span className="mono dim" style={{ fontSize: 11 }}>Handled as ratings-only feedback — no candidate was distilled.</span>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span className="mono dim" style={{ fontSize: 11 }}>{"Distill this gap into a new candidate decision for human review."}</span>
+            <div style={{ flex: 1 }} />
+            <button className="btn primary fixed" disabled={refining} onClick={onRefine}>
+              {refining ? <><Spinner size={15} /> Refining…</> : <><Icon name="loop" size={15} /> Refine into candidate</>}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
