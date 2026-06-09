@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 from metatron.events import Event
-from metatron.models import Origin, Decision, Status, TriageVerdict
+from metatron.models import Confidence, Origin, Decision, Status, TriageVerdict
 
 
 class DecisionStore(ABC):
@@ -69,6 +69,16 @@ class DecisionStore(ABC):
     def set_status(self, decision_id: str, status: Status) -> Decision:
         """Set a decision's status (the curation primitive) and return it.
 
+        Raises ``KeyError`` if no decision has this id.
+        """
+
+    @abstractmethod
+    def update_fields(
+        self, decision_id: str, *, pattern: str | None = None, scope: str | None = None,
+        rationale: str | None = None, confidence: "Confidence | None" = None,
+    ) -> Decision:
+        """Update a decision's *content* fields (only the ones provided), bump
+        ``updated_at``, and return it. Never touches ``status``/``triage``/``origin``.
         Raises ``KeyError`` if no decision has this id.
         """
 

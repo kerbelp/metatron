@@ -45,6 +45,14 @@ def test_event_store_routes_and_resolves_by_id(tmp_path):
     assert [ev.repo for ev in es.list_events(repo="repoB")] == ["repoB"]
 
 
+def test_update_fields_routes_to_owning_file(tmp_path):
+    store = CatalogDecisionStore(Catalog(str(tmp_path)))
+    p = store.add(_decision("repoA", "old"))
+    out = store.update_fields(p.id, pattern="new")
+    assert out.pattern == "new"
+    assert store.get(p.id).pattern == "new"
+
+
 def test_ingest_run_store_routes_and_aggregates(tmp_path):
     rs = CatalogIngestRunStore(Catalog(str(tmp_path)))
 

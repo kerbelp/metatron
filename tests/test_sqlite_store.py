@@ -149,3 +149,18 @@ def test_set_status_updates_status_and_touches_updated_at(store):
 def test_set_status_on_missing_id_raises(store):
     with pytest.raises(KeyError):
         store.set_status("nope", Status.CANONICAL)
+
+
+def test_update_fields_edits_content_only(store):
+    d = store.add(_decision(pattern="old", rationale="why", status=Status.CANONICAL))
+    out = store.update_fields(d.id, pattern="new", rationale="better")
+    assert out.pattern == "new" and out.rationale == "better"
+    assert out.scope == d.scope            # untouched
+    assert out.status is Status.CANONICAL  # never changed by an edit
+    assert out.triage is d.triage          # untouched
+    assert out.updated_at >= d.updated_at
+
+
+def test_update_fields_rejects_unknown_id(store):
+    with pytest.raises(KeyError):
+        store.update_fields("nope", pattern="x")
