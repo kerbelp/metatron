@@ -273,6 +273,10 @@ def _build_handler(
             self.send_response(status)
             self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
+            # Single-user localhost dev server: never let the browser cache the app
+            # shell or its assets, so edits to the static files show up on reload
+            # without a manual hard-refresh.
+            self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(body)
 
