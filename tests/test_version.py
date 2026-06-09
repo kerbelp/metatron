@@ -143,6 +143,24 @@ def test_check_for_update_fail_silent_on_fetch_error(monkeypatch, tmp_path):
     assert info is not None and info.available is False and info.latest is None
 
 
+def test_check_for_update_cache_only_never_fetches(monkeypatch, tmp_path):
+    _info_env(monkeypatch, tmp_path)
+    calls = {"n": 0}
+    def fetch(timeout):
+        calls["n"] += 1
+        return {"info": {"version": "0.3.0"}}
+    # No cache yet + cache_only -> must NOT fetch; reports no update (latest None).
+    info = V.check_for_update(cache_only=True, fetch=fetch)
+    assert calls["n"] == 0
+    assert info is not None and info.available is False and info.latest is None
+    # Warm the cache via a normal (fetching) check, then cache_only reuses it without fetching.
+    V.check_for_update(fetch=fetch)
+    assert calls["n"] == 1
+    info2 = V.check_for_update(cache_only=True, fetch=fetch)
+    assert calls["n"] == 1                 # still no extra fetch
+    assert info2.latest == "0.3.0" and info2.available is True
+
+
 def test_format_update_notice():
     assert V.format_update_notice(None) is None
     assert V.format_update_notice(V.UpdateInfo("0.2.1", "0.2.1", False, "x")) is None

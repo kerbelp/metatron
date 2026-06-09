@@ -22,7 +22,7 @@ def version() -> dict:
     """The version + code revision this server is running (shown in the UI footer),
     plus whether a newer release is available on PyPI (passive notice only)."""
     out = {"version": package_version(), "revision": version_string()}
-    info = check_for_update()
+    info = check_for_update(cache_only=True)
     if info:
         out.update({"latest": info.latest, "update_available": info.available,
                     "upgrade_command": info.command})

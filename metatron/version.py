@@ -193,9 +193,15 @@ def _write_cache(path: Path, when: datetime, latest: str | None) -> None:
         pass
 
 
-def check_for_update(*, force: bool = False, fetch=None, now: datetime | None = None) -> "UpdateInfo | None":
+def check_for_update(*, force: bool = False, fetch=None, now: datetime | None = None, cache_only: bool = False) -> "UpdateInfo | None":
     """Throttled, fail-silent update check. Returns None when disabled, a dev build,
-    or anything goes wrong; otherwise an UpdateInfo (available may be False)."""
+    or anything goes wrong; otherwise an UpdateInfo (available may be False).
+
+    ``cache_only=True`` is for the request-serving path (e.g. the web API endpoint):
+    it reads the on-disk cache but never hits the network, so a single-threaded server
+    cannot block on a PyPI fetch. When the cache is absent it returns an UpdateInfo
+    with available=False and latest=None. CLI paths and startup should call without
+    this flag so they warm the cache that the server then reads."""
     try:
         if os.environ.get("METATRON_NO_UPDATE_CHECK"):
             return None
@@ -207,6 +213,8 @@ def check_for_update(*, force: bool = False, fetch=None, now: datetime | None = 
         cached = _read_cache(cache)
         if cached and not force and (now - cached[0]) < _THROTTLE:
             latest = cached[1]
+        elif cache_only:
+            latest = cached[1] if cached else None   # server path: never blocks on PyPI
         else:
             latest = latest_version(fetch=fetch)
             _write_cache(cache, now, latest)
