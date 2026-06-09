@@ -112,6 +112,14 @@
     refineFeedback(eventId) {
       return P(`/api/feedback/${eventId}/refine`);
     },
+
+    createDecision(repo, fields) {
+      return P("/api/decisions", { repo, ...fields });
+    },
+
+    updateDecision(id, fields) {
+      return P(`/api/decisions/${id}/update`, fields);
+    },
   };
 
   window.MetatronAPI = API;

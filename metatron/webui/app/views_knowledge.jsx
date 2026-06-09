@@ -102,7 +102,7 @@ function OverviewView({ repo, openDecision, goto }) {
    DECISIONS — browse with search + filters
    ============================================================ */
 const STATUS_OPTS = ["", "canonical", "candidate", "rejected"];
-const ORIGIN_OPTS = ["", "bootstrap", "agent_submitted", "agent_feedback"];
+const ORIGIN_OPTS = ["", "bootstrap", "agent_submitted", "agent_feedback", "human"];
 const CONF_OPTS = ["", "high", "medium", "low"];
 
 function DecisionsView({ repo, openDecision }) {
@@ -176,6 +176,8 @@ function CurationView({ repo, openDecision, refresh }) {
   const [burst, setBurst] = useState(null);
   const [approvingAll, setApprovingAll] = useState(false);
   const [valuating, setValuating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const recommended = res.data ? res.data.items.filter((p) => p.triage === "approve") : [];
 
@@ -242,6 +244,9 @@ function CurationView({ repo, openDecision, refresh }) {
       {burst && <ApproveBurst key={burst.id} x={burst.x} y={burst.y} big={burst.big} onDone={() => setBurst(null)} />}
       <SectionTitle eyebrow="Human curation · newest first" title="Candidate decision review"
         right={<div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button className="btn" onClick={() => { setAdding((a) => !a); setEditingId(null); }}>
+            + Add decision
+          </button>
           <button className="btn fixed" disabled={valuating} onClick={runJudge}>
             {valuating ? <><Spinner size={15} /> Running the judge…</> : <><Icon name="spark" size={15} /> Run the judge</>}
           </button>
@@ -264,12 +269,27 @@ function CurationView({ repo, openDecision, refresh }) {
         </div>}
       </div>
 
+      {adding && (
+        <div style={{ marginBottom: 18 }}>
+          <DecisionEditor repo={repo} onSaved={() => { setAdding(false); res.reload(); refresh && refresh(); }} onCancel={() => setAdding(false)} />
+        </div>
+      )}
+
       {res.loading ? <Loading label="Loading the review queue…" />
         : res.error ? <ErrorState onRetry={res.reload} />
           : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
-                  onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "The judge could not evaluate this"); return; } res.reload(); }} />)}
+              {res.data.items.map((p, i) => (
+                <React.Fragment key={p.id}>
+                  <CandidateCard p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id}
+                    onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
+                    onEdit={() => { setEditingId((id) => id === p.id ? null : p.id); setAdding(false); }}
+                    onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "The judge could not evaluate this"); return; } res.reload(); }} />
+                  {editingId === p.id && (
+                    <DecisionEditor decision={p} onSaved={() => { setEditingId(null); res.reload(); refresh && refresh(); }} onCancel={() => setEditingId(null)} />
+                  )}
+                </React.Fragment>
+              ))}
             </div>}
     </div>
   );
@@ -279,7 +299,7 @@ function TriageCount({ label, n, c }) {
   return <div style={{ textAlign: "center" }}><div className="mono tnum" style={{ fontSize: 22, fontWeight: 600, color: c }}>{n}</div><div className="mono" style={{ fontSize: 9, letterSpacing: ".14em", color: "var(--muted)", textTransform: "uppercase" }}>{label}</div></div>;
 }
 
-function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, onValuate }) {
+function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, onValuate, onEdit }) {
   const [asking, setAsking] = useState(false);
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s", transition: "all .48s cubic-bezier(.4,0,.2,1)", ...(leaving ? { opacity: 0, transform: "translateX(60px) scale(.97)", filter: "blur(2px)" } : {}) }}>
@@ -308,6 +328,7 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, o
           <button className="btn primary" disabled={busy} onClick={onApprove}><Icon name="check" size={15} />Approve</button>
           <button className="btn danger" disabled={busy} onClick={onReject}><Icon name="x" size={15} />Reject</button>
           <button className="btn" onClick={onOpen} style={{ fontSize: 12 }}>Inspect</button>
+          {onEdit && <button className="btn" onClick={onEdit} style={{ fontSize: 12 }}>Edit</button>}
           <button className="btn" disabled={asking} style={{ fontSize: 12 }}
             onClick={async () => { setAsking(true); try { await onValuate(); } finally { setAsking(false); } }}>
             {asking ? <><Spinner size={13} /> Asking…</> : <><Icon name="spark" size={13} /> Ask the judge</>}
