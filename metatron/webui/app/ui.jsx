@@ -147,11 +147,14 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
     <div className="panel pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 2 }}>{editing ? "EDIT DECISION" : "NEW DECISION"}</div>
       <label htmlFor={idPrefix + "-pattern"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>PATTERN</label>
-      <textarea id={idPrefix + "-pattern"} value={form.pattern} onChange={set("pattern")} rows={2} style={INPUT_STYLE} />
+      <textarea id={idPrefix + "-pattern"} value={form.pattern} onChange={set("pattern")} rows={2} style={INPUT_STYLE}
+        placeholder="e.g. Use the repository pattern for DB access; never put raw SQL in callers" />
       <label htmlFor={idPrefix + "-scope"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>SCOPE</label>
-      <input id={idPrefix + "-scope"} value={form.scope} onChange={set("scope")} style={INPUT_STYLE} />
+      <input id={idPrefix + "-scope"} value={form.scope} onChange={set("scope")} style={INPUT_STYLE}
+        placeholder="e.g. src/storage  (the file path, module, or area this applies to)" />
       <label htmlFor={idPrefix + "-rationale"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RATIONALE</label>
-      <textarea id={idPrefix + "-rationale"} value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE} />
+      <textarea id={idPrefix + "-rationale"} value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE}
+        placeholder="e.g. Why it holds and what it prevents (keeps SQL out of callers so the store stays swappable)" />
       <label htmlFor={idPrefix + "-confidence"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONFIDENCE</label>
       <select id={idPrefix + "-confidence"} value={form.confidence} onChange={set("confidence")} style={{ ...INPUT_STYLE, resize: "none" }}>
         <option value="low">low</option>

@@ -267,6 +267,8 @@ body {
 .search:focus-within { border-color: var(--teal); box-shadow: var(--glow-teal); }
 .search input { background: none; border: 0; outline: 0; color: var(--text); font-family: var(--mono); font-size: 13px; width: 100%; }
 .search input::placeholder { color: var(--dim); }
+/* editor fields use inline styles; keep their hint text dim like the search field */
+textarea::placeholder, input::placeholder { color: var(--dim); }
 
 /* ---------- stat / metric ---------- */
 .metric .big { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
