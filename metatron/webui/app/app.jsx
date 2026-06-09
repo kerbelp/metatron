@@ -219,7 +219,8 @@ function App() {
 
       <DecisionDrawer decision={drawer} busy={drawerBusy} onClose={() => setDrawer(null)}
         onApprove={async (p) => { setDrawerBusy(true); await MetatronAPI.approveDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
-        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }} />
+        onReject={async (p) => { setDrawerBusy(true); await MetatronAPI.rejectDecision(p.id); setDrawerBusy(false); setDrawer(null); refreshAll(); }}
+        onEdited={async () => { if (drawer) { const fresh = await MetatronAPI.getDecision(drawer.id); setDrawer(fresh); } refreshAll(); }} />
 
       {panel && panel.type === "agent" && <AgentActivityDrawer agent={panel.agent} focus={panel.focus} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}
       {panel && panel.type === "query" && <QueryDrawer query={panel.query} onOpenDecision={openPanelDecision} onClose={() => setPanel(null)} />}
