@@ -452,3 +452,30 @@ def test_ingest_stores_candidates_and_reports_summary(git_repo):
     assert code == 0
     assert store.list()  # decisions were persisted
     assert all(p.status is Status.CANDIDATE for p in store.list())
+
+
+# ---------------------------------------------------------------------------
+# version command
+# ---------------------------------------------------------------------------
+
+from metatron import version as V
+
+
+def test_version_command_prints_version_and_revision(monkeypatch):
+    monkeypatch.setattr("metatron.cli.package_version", lambda: "0.3.0")
+    monkeypatch.setattr("metatron.cli.version_string", lambda *a, **k: "abc1234")
+    monkeypatch.setattr("metatron.cli.check_for_update", lambda: None)
+    out = io.StringIO()
+    code = main(["version"], out=out)
+    assert code == 0
+    assert "metatron 0.3.0" in out.getvalue() and "abc1234" in out.getvalue()
+
+
+def test_version_command_shows_update_notice(monkeypatch):
+    monkeypatch.setattr("metatron.cli.package_version", lambda: "0.2.1")
+    monkeypatch.setattr("metatron.cli.version_string", lambda *a, **k: "abc1234")
+    monkeypatch.setattr("metatron.cli.check_for_update",
+                        lambda: V.UpdateInfo("0.2.1", "0.3.0", True, "pip install -U getmetatron"))
+    out = io.StringIO()
+    main(["version"], out=out)
+    assert "update available: 0.3.0" in out.getvalue()
