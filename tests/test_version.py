@@ -119,6 +119,22 @@ def test_check_for_update_throttles(monkeypatch, tmp_path):
     assert calls["n"] == 2
 
 
+def test_check_for_update_throttle_expires(monkeypatch, tmp_path):
+    from datetime import datetime, timedelta, timezone
+    _info_env(monkeypatch, tmp_path)
+    calls = {"n": 0}
+    def fetch(timeout):
+        calls["n"] += 1
+        return {"info": {"version": "0.3.0"}}
+    t0 = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    V.check_for_update(fetch=fetch, now=t0)
+    assert calls["n"] == 1
+    V.check_for_update(fetch=fetch, now=t0 + timedelta(hours=23))
+    assert calls["n"] == 1   # still within the 24h window -> cache hit
+    V.check_for_update(fetch=fetch, now=t0 + timedelta(hours=25))
+    assert calls["n"] == 2   # window expired -> refetch
+
+
 def test_check_for_update_fail_silent_on_fetch_error(monkeypatch, tmp_path):
     _info_env(monkeypatch, tmp_path)
     def boom(timeout):

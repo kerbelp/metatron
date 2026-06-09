@@ -63,7 +63,11 @@ def current_version() -> str:
 # ---------------------------------------------------------------------------
 
 def _parse_version(v: str) -> tuple[int, ...] | None:
-    """Leading-numeric dotted parse: '0.10.0' -> (0, 10, 0). None if not parseable."""
+    """Leading-numeric dotted parse: '0.10.0' -> (0, 10, 0). None if not parseable.
+
+    # Plain X.Y.Z only; PEP 440 pre/post suffixes (e.g. "1.2.3.post1") parse to None,
+    # which conservatively yields no update notice. This project ships plain releases.
+    """
     parts: list[int] = []
     for chunk in str(v).split("."):
         digits = ""
@@ -98,6 +102,7 @@ def _classify_install_path(path: str) -> tuple[str, str]:
 
 
 def detect_install_method() -> tuple[str, str]:
+    """(method, upgrade_command) for how this package appears to be installed."""
     return _classify_install_path(str(Path(__file__).resolve()))
 
 
@@ -172,7 +177,7 @@ def latest_version(timeout: float = 1.5, *, fetch=None) -> str | None:
         return None
 
 
-def _read_cache(path: Path):
+def _read_cache(path: Path) -> tuple[datetime, str | None] | None:
     try:
         data = json.loads(path.read_text())
         return datetime.fromisoformat(data["checked_at"]), data.get("latest")
