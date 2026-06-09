@@ -56,8 +56,11 @@ Functions:
   `https://pypi.org/pypi/getmetatron/json` via stdlib `urllib.request`, return
   `data["info"]["version"]`. No new dependency. Any error / timeout / non-200 →
   `None`.
-- `_is_newer(latest, current) -> bool` — compare with `packaging.version.parse` if
-  importable, else a dotted-int tuple fallback. Non-parseable → `False` (no notice).
+- `_is_newer(latest, current) -> bool` — self-contained comparison: split each
+  version on `.`, coerce the leading numeric components to ints, compare as tuples
+  (e.g. `0.10.0 > 0.9.0`). No `packaging` dependency (it is not declared in
+  `pyproject.toml`, and PyPI release versions here are standard dotted numerics).
+  Anything that doesn't parse cleanly → `False` (no notice). Equal → `False`.
 - `detect_install_method() -> tuple[str, str]` — best-effort `(method, command)` from
   the install path (`Path(__file__)` / `sys.prefix` / `sys.argv[0]`):
   - `/Cellar/` or `/opt/homebrew/` → `("homebrew", "brew upgrade metatron")`
@@ -82,15 +85,19 @@ Functions:
 
 ### `metatron version` CLI command (`cli.py`)
 
-`sub.add_parser("version", ...)`. Handler prints `metatron <version> (rev
-<revision>)`. Then `info = check_for_update()`; if `info and info.available`, print a
-second line: `→ update available: <latest>  (run: <command>)`. Fail-silent.
+`sub.add_parser("version", ...)`. Handler prints `metatron <package_version()> (rev
+<version_string()>)` — note `package_version()` is the installed semver (e.g. `0.3.0`,
+or `dev`) and `version_string()` is the git short hash (or `unknown`). Then `info =
+check_for_update()`; if `info and info.available`, print a second line: `→ update
+available: <latest>  (run: <command>)`. Fail-silent.
 
 ### `metatron ui` startup notice (`cli.py` `_cmd_ui`)
 
-As the server comes up, call `check_for_update()` and, if available, print the same
-one-line notice to **stderr**. Throttled + timeout-bounded, so no perceptible delay;
-never blocks the server.
+Just before `serve(...)` is invoked, call `check_for_update()` **synchronously** and,
+if available, print the same one-line notice to **stderr**. No threading: the common
+path is a cache read (no network), and the worst case is a single timeout-bounded
+(~1.5s) fetch at most once per ~24h — acceptable for a CLI startup. Fail-silent, so it
+never prevents the server from starting.
 
 ### Web UI badge
 
@@ -99,9 +106,10 @@ never blocks the server.
   means the UI's poll never hits PyPI live beyond the daily throttle; on a cache miss
   it does one bounded fetch). On `None`, return `update_available: false` and omit /
   null the extra fields.
-- `webui/app/app.jsx` header (~line 199, next to `v{version}`) — when
-  `ver.data.update_available`, render a small amber "update available" chip; `title`
-  = `v{latest} · run: {upgrade_command}`. Presentational only.
+- `webui/app/app.jsx` — the version indicator is in the **nav-rail footer** (~line
+  199, the `v{ver.data.version}` span, not a top header bar). When
+  `ver.data.update_available`, render a small amber "update available" chip adjacent
+  to it; `title` = `v{latest} · run: {upgrade_command}`. Presentational only.
 
 ## Error handling
 
