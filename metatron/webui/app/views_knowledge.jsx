@@ -254,7 +254,8 @@ function CurationView({ repo, openDecision, refresh }) {
         : res.error ? <ErrorState onRetry={res.reload} />
           : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)} />)}
+              {res.data.items.map((p, i) => <CandidateCard key={p.id} p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id} onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
+                  onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) toast(r.error || "The judge could not evaluate this"); res.reload(); }} />)}
             </div>}
     </div>
   );
@@ -264,7 +265,8 @@ function TriageCount({ label, n, c }) {
   return <div style={{ textAlign: "center" }}><div className="mono tnum" style={{ fontSize: 22, fontWeight: 600, color: c }}>{n}</div><div className="mono" style={{ fontSize: 9, letterSpacing: ".14em", color: "var(--muted)", textTransform: "uppercase" }}>{label}</div></div>;
 }
 
-function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen }) {
+function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, onValuate }) {
+  const [asking, setAsking] = useState(false);
   return (
     <div className="panel pad enter" style={{ animationDelay: delay + "s", transition: "all .48s cubic-bezier(.4,0,.2,1)", ...(leaving ? { opacity: 0, transform: "translateX(60px) scale(.97)", filter: "blur(2px)" } : {}) }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 18 }}>
@@ -292,6 +294,10 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen })
           <button className="btn primary" disabled={busy} onClick={onApprove}><Icon name="check" size={15} />Approve</button>
           <button className="btn danger" disabled={busy} onClick={onReject}><Icon name="x" size={15} />Reject</button>
           <button className="btn" onClick={onOpen} style={{ fontSize: 12 }}>Inspect</button>
+          <button className="btn" disabled={asking} style={{ fontSize: 12 }}
+            onClick={async () => { setAsking(true); try { await onValuate(); } finally { setAsking(false); } }}>
+            {asking ? <><Spinner size={13} /> Asking…</> : <><Icon name="spark" size={13} /> Ask the judge</>}
+          </button>
         </div>
       </div>
     </div>
