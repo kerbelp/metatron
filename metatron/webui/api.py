@@ -540,6 +540,35 @@ def refine_one(store: DecisionStore, event_store, refiner_factory, event_id: str
     }
 
 
+def valuate_one(store: DecisionStore, provider_factory, decision_id: str, *, judge_factory=None) -> dict:
+    """Run the advisory judge on a single decision (the per-candidate "Ask the judge").
+
+    Advisory only: sets triage + reason, never status. ``provider_factory`` lazily
+    builds the LLM provider (so the API key is only touched on demand); ``judge_factory``
+    wraps it as a DecisionJudge (overridable in tests). Returns ``ok: False`` with a
+    message — never a 500 — when unconfigured, the id is unknown, or the judge errors.
+    """
+    if provider_factory is None:
+        return {"ok": False, "error": "Valuation needs an LLM provider. "
+                "Set ANTHROPIC_API_KEY and restart `metatron ui`."}
+    decision = store.get(decision_id)
+    if decision is None:
+        return {"ok": False, "error": f"No decision with id {decision_id!r} (not found)."}
+    if judge_factory is None:
+        from metatron.webui.jobs import _default_judge_factory as judge_factory
+    try:
+        judge = judge_factory(provider_factory())
+        results = judge.evaluate([decision])  # {decision_id: (verdict, reason)}
+    except Exception as exc:  # provider/network/parse — message, not a crash
+        return {"ok": False, "error": str(exc)}
+    if decision.id not in results:
+        return {"ok": False, "error": "The judge returned no verdict for this decision."}
+    verdict, reason = results[decision.id]
+    updated = store.set_triage(decision.id, verdict, reason)
+    return {"ok": True, "id": updated.id, "triage": updated.triage.value,
+            "triage_reason": updated.triage_reason}
+
+
 def _set_status(store: DecisionStore, decision_id: str, status: Status) -> dict:
     try:
         decision = store.set_status(decision_id, status)

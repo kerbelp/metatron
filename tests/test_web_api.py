@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from metatron.events import Event, EventKind
-from metatron.models import Origin, Decision, Status
+from metatron.models import Origin, Decision, Status, TriageVerdict
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 from metatron.webui.api import (
     approve,
@@ -16,6 +16,7 @@ from metatron.webui.api import (
     reject,
     stats,
     usage,
+    valuate_one,
 )
 
 
@@ -321,3 +322,36 @@ def test_leaderboard_ignores_ratings_for_non_canonical_decisions():
     lb = leaderboard(events, store, repo=REPO)
 
     assert lb["most_helpful"] == [] and lb["rated_total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# valuate_one — single-decision advisory judge
+# ---------------------------------------------------------------------------
+
+class _StubJudge:
+    """Stands in for DecisionJudge: returns a fixed verdict for each candidate.
+    Matches the real contract: dict {decision_id: (verdict, reason)}."""
+    def __init__(self, verdict=TriageVerdict.APPROVE, reason="looks canonical"):
+        self.verdict, self.reason = verdict, reason
+    def evaluate(self, decisions, **kw):
+        return {c.id: (self.verdict, self.reason) for c in decisions}
+
+
+def test_valuate_one_sets_triage(store):
+    [d] = _add(store, 1)
+    out = valuate_one(store, lambda: object(), d.id, judge_factory=lambda _p: _StubJudge())
+    assert out["ok"] is True
+    assert out["triage"] == "approve"
+    assert store.get(d.id).triage is TriageVerdict.APPROVE
+    assert store.get(d.id).triage_reason == "looks canonical"
+
+
+def test_valuate_one_unconfigured_provider_is_clean_error(store):
+    [d] = _add(store, 1)
+    out = valuate_one(store, None, d.id)
+    assert out["ok"] is False and "provider" in out["error"].lower()
+
+
+def test_valuate_one_unknown_id(store):
+    out = valuate_one(store, lambda: object(), "nope", judge_factory=lambda _p: _StubJudge())
+    assert out["ok"] is False and "not found" in out["error"].lower()
