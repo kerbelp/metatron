@@ -179,6 +179,16 @@ function CurationView({ repo, openDecision, refresh }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  const [verdict, setVerdict] = useState("");
+  const [scopeF, setScopeF] = useState("");
+  const [query, setQuery] = useState("");
+
+  const all = res.data ? res.data.items : [];
+  const scopes = MetatronCandidateFilter.scopesOf(all);
+  const filtered = MetatronCandidateFilter.filterCandidates(all, { verdict, scope: scopeF, query });
+  const visible = MetatronCandidatePriority.prioritizeCandidates(filtered);
+  const hasFilter = verdict || scopeF || query;
+
   const recommended = res.data ? res.data.items.filter((p) => p.triage === "approve") : [];
 
   const tickRef = useRef(null);
@@ -277,20 +287,40 @@ function CurationView({ repo, openDecision, refresh }) {
 
       {res.loading ? <Loading label="Loading the review queue…" />
         : res.error ? <ErrorState onRetry={res.reload} />
-          : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
-            : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {MetatronCandidatePriority.prioritizeCandidates(res.data.items).map((p, i) => (
-                <React.Fragment key={p.id}>
-                  <CandidateCard p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id}
-                    onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
-                    onEdit={() => { setEditingId((id) => id === p.id ? null : p.id); setAdding(false); }}
-                    onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "AI could not score this candidate"); return; } res.reload(); }} />
-                  {editingId === p.id && (
-                    <DecisionEditor decision={p} onSaved={() => { setEditingId(null); res.reload(); refresh && refresh(); }} onCancel={() => setEditingId(null)} />
-                  )}
-                </React.Fragment>
-              ))}
-            </div>}
+          : all.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
+            : <>
+              {/* filter rail */}
+              <div className="panel pad enter" style={{ marginBottom: 16, display: "flex", flexWrap: "wrap", gap: 18, alignItems: "center" }}>
+                <FilterGroup label="AI VERDICT" opts={["", "approve", "borderline", "reject"]} value={verdict} onPick={(v) => setVerdict(verdict === v ? "" : v)} render={(v) => v || "all"} />
+                <span style={{ width: 1, height: 24, background: "var(--line)" }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span className="mono dim" style={{ fontSize: 9.5, letterSpacing: ".18em" }}>SCOPE</span>
+                  <select value={scopeF} onChange={(e) => setScopeF(e.target.value)} style={{ background: "rgba(8,18,16,.7)", border: "1px solid var(--line)", borderRadius: 8, padding: "4px 10px", color: "#eafff8", fontSize: 12.5, fontFamily: "inherit" }}>
+                    <option value="">all scopes</option>
+                    {scopes.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <span style={{ width: 1, height: 24, background: "var(--line)" }} />
+                <div className="search"><Icon name="search" size={16} className="dim" /><input placeholder="search pattern, scope, rationale..." value={query} onChange={(e) => setQuery(e.target.value)} /></div>
+                {hasFilter && <button className="chip" onClick={() => { setVerdict(""); setScopeF(""); setQuery(""); }}>&#x2715; clear</button>}
+              </div>
+
+              {visible.length === 0
+                ? <Empty title="No candidates match these filters" detail="Clear or adjust the filters to see more." icon="search" />
+                : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  {visible.map((p, i) => (
+                    <React.Fragment key={p.id}>
+                      <CandidateCard p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id}
+                        onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
+                        onEdit={() => { setEditingId((id) => id === p.id ? null : p.id); setAdding(false); }}
+                        onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "AI could not score this candidate"); return; } res.reload(); }} />
+                      {editingId === p.id && (
+                        <DecisionEditor decision={p} onSaved={() => { setEditingId(null); res.reload(); refresh && refresh(); }} onCancel={() => setEditingId(null)} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>}
+            </>}
     </div>
   );
 }
