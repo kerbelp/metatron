@@ -187,8 +187,8 @@ function CurationView({ repo, openDecision, refresh }) {
   const runJudge = async () => {
     setValuating(true);
     const started = await MetatronAPI.startValuate(repo);
-    if (!started.ok) { setValuating(false); toast(started.error || "Could not start the judge"); return; }
-    if (started.total === 0) { setValuating(false); toast("No untriaged candidates to judge"); res.reload(); return; }
+    if (!started.ok) { setValuating(false); toast(started.error || "Could not start prioritization"); return; }
+    if (started.total === 0) { setValuating(false); toast("No new candidates to prioritize"); res.reload(); return; }
     let failures = 0;
     tickRef.current = setInterval(async () => {
       try {
@@ -198,14 +198,14 @@ function CurationView({ repo, openDecision, refresh }) {
           clearInterval(tickRef.current); tickRef.current = null;
           setValuating(false);
           if (s.state === "error") toast(s.error || "The judge hit an error");
-          else toast("The judge finished triaging the queue", { icon: "spark" });
+          else toast("Candidates prioritized by AI", { icon: "spark" });
           res.reload(); refresh && refresh();
         }
       } catch {
         if (++failures >= 3) {
           clearInterval(tickRef.current); tickRef.current = null;
           setValuating(false);
-          toast("Lost contact with the server while the judge ran");
+          toast("Lost contact with the server while prioritizing");
         }
       }
     }, 1200);
@@ -248,7 +248,7 @@ function CurationView({ repo, openDecision, refresh }) {
             + Add decision
           </button>
           <button className="btn fixed" disabled={valuating} onClick={runJudge}>
-            {valuating ? <><Spinner size={15} /> Running the judge…</> : <><Icon name="spark" size={15} /> Run the judge</>}
+            {valuating ? <><Spinner size={15} /> Prioritizing…</> : <><Icon name="spark" size={15} /> Prioritize with AI</>}
           </button>
           {recommended.length > 0 && <button className="btn primary lg" disabled={approvingAll} onClick={approveAll}>
             {approvingAll ? <><Spinner size={16} /> Canonizing…</> : <><Icon name="bolt" size={17} /> Approve all {recommended.length} recommended</>}
@@ -259,7 +259,7 @@ function CurationView({ repo, openDecision, refresh }) {
       <div className="panel pad enter" style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 18, background: "linear-gradient(100deg, rgba(45,212,191,.06), rgba(7,17,15,.5))" }}>
         <MetatronEmblem size={44} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, color: "#eafff8", marginBottom: 4 }}>The advisory judge has triaged this queue</div>
+          <div style={{ fontSize: 14, color: "#eafff8", marginBottom: 4 }}>AI has prioritized this queue</div>
           <div className="muted" style={{ fontSize: 12.5 }}>Recommendations are guidance only — <b style={{ color: "var(--text-2)" }}>nothing becomes canonical without you</b>. Review each, or batch-approve the judge's picks.</div>
         </div>
         {res.data && <div style={{ display: "flex", gap: 18 }}>
@@ -279,12 +279,12 @@ function CurationView({ repo, openDecision, refresh }) {
         : res.error ? <ErrorState onRetry={res.reload} />
           : res.data.items.length === 0 ? <Empty title="Queue clear" detail="No candidates awaiting review. New ones arrive as knowledge is mined and gaps are refined." icon="check" />
             : <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {res.data.items.map((p, i) => (
+              {MetatronCandidatePriority.prioritizeCandidates(res.data.items).map((p, i) => (
                 <React.Fragment key={p.id}>
                   <CandidateCard p={p} delay={i * 0.05} leaving={leaving[p.id]} busy={busy === p.id}
                     onApprove={(e) => approve(p, e)} onReject={() => reject(p)} onOpen={() => openDecision(p)}
                     onEdit={() => { setEditingId((id) => id === p.id ? null : p.id); setAdding(false); }}
-                    onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "The judge could not evaluate this"); return; } res.reload(); }} />
+                    onValuate={async () => { const r = await MetatronAPI.valuateDecision(p.id); if (r && !r.ok) { toast(r.error || "AI could not score this candidate"); return; } res.reload(); }} />
                   {editingId === p.id && (
                     <DecisionEditor decision={p} onSaved={() => { setEditingId(null); res.reload(); refresh && refresh(); }} onCancel={() => setEditingId(null)} />
                   )}
@@ -331,7 +331,7 @@ function CandidateCard({ p, delay, leaving, busy, onApprove, onReject, onOpen, o
           {onEdit && <button className="btn" onClick={onEdit} style={{ fontSize: 12 }}>Edit</button>}
           <button className="btn" disabled={asking} style={{ fontSize: 12 }}
             onClick={async () => { setAsking(true); try { await onValuate(); } finally { setAsking(false); } }}>
-            {asking ? <><Spinner size={13} /> Asking…</> : <><Icon name="spark" size={13} /> Ask the judge</>}
+            {asking ? <><Spinner size={13} /> Scoring…</> : <><Icon name="spark" size={13} /> Score with AI</>}
           </button>
         </div>
       </div>
