@@ -14,13 +14,21 @@ from metatron.feedback_score import NEUTRAL, helpfulness_scores
 from metatron.models import Origin, Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, DecisionStore
-from metatron.version import package_version, version_string
+from metatron.version import package_version, version_string, check_for_update
 from metatron.webui.observability import usage_summary
 
 
 def version() -> dict:
-    """The version + code revision this server is running (shown in the UI footer)."""
-    return {"version": package_version(), "revision": version_string()}
+    """The version + code revision this server is running (shown in the UI footer),
+    plus whether a newer release is available on PyPI (passive notice only)."""
+    out = {"version": package_version(), "revision": version_string()}
+    info = check_for_update()
+    if info:
+        out.update({"latest": info.latest, "update_available": info.available,
+                    "upgrade_command": info.command})
+    else:
+        out["update_available"] = False
+    return out
 
 
 def list_decisions(

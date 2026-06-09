@@ -419,3 +419,28 @@ def test_update_decision_rejects_bad_confidence(store):
     [d] = _add(store, 1)
     out = update_decision(store, d.id, {"confidence": "ultra"})
     assert out["ok"] is False and "confidence" in out["error"].lower()
+
+
+# ---------------------------------------------------------------------------
+# version endpoint — update-availability fields
+# ---------------------------------------------------------------------------
+
+from metatron import version as V
+
+
+def test_version_endpoint_includes_update_fields(monkeypatch):
+    from metatron.webui import api as webapi
+    monkeypatch.setattr(webapi, "check_for_update",
+                        lambda: V.UpdateInfo("0.2.1", "0.3.0", True, "brew upgrade metatron"))
+    out = webapi.version()
+    assert out["update_available"] is True
+    assert out["latest"] == "0.3.0"
+    assert out["upgrade_command"] == "brew upgrade metatron"
+
+
+def test_version_endpoint_handles_no_check(monkeypatch):
+    from metatron.webui import api as webapi
+    monkeypatch.setattr(webapi, "check_for_update", lambda: None)
+    out = webapi.version()
+    assert out["update_available"] is False
+    assert "version" in out and "revision" in out
