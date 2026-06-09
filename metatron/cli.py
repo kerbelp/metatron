@@ -373,6 +373,8 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
                 model=settings.model, api_key=settings.anthropic_api_key
             )
 
+    # Warn about an available update before the server takes over the terminal.
+    # On a cache hit this is one file read; on a miss it is a 1.5s-timeout, fail-silent check.
     notice = format_update_notice(check_for_update())
     if notice:
         print(notice, file=sys.stderr)

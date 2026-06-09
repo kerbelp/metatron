@@ -134,7 +134,7 @@ def test_bare_invocation_shows_home(monkeypatch):
     assert code == 0
     assert "metatron ·" in text  # tagline line
     assert "Available commands:" in text
-    for cmd in ("ingest", "serve", "ui", "whoami", "export", "import"):
+    for cmd in ("ingest", "serve", "ui", "version", "whoami", "export", "import"):
         assert cmd in text
     assert "metatron <command> --help" in text
 
@@ -463,7 +463,7 @@ from metatron import version as V
 
 def test_version_command_prints_version_and_revision(monkeypatch):
     monkeypatch.setattr("metatron.cli.package_version", lambda: "0.3.0")
-    monkeypatch.setattr("metatron.cli.version_string", lambda *a, **k: "abc1234")
+    monkeypatch.setattr("metatron.cli.version_string", lambda: "abc1234")
     monkeypatch.setattr("metatron.cli.check_for_update", lambda: None)
     out = io.StringIO()
     code = main(["version"], out=out)
@@ -473,7 +473,7 @@ def test_version_command_prints_version_and_revision(monkeypatch):
 
 def test_version_command_shows_update_notice(monkeypatch):
     monkeypatch.setattr("metatron.cli.package_version", lambda: "0.2.1")
-    monkeypatch.setattr("metatron.cli.version_string", lambda *a, **k: "abc1234")
+    monkeypatch.setattr("metatron.cli.version_string", lambda: "abc1234")
     monkeypatch.setattr("metatron.cli.check_for_update",
                         lambda: V.UpdateInfo("0.2.1", "0.3.0", True, "pip install -U getmetatron"))
     out = io.StringIO()
