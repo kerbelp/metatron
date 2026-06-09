@@ -255,12 +255,13 @@ function InlineCandidate({ decision, id, onOpenDecision, onChanged }) {
 }
 
 function FeedbackLoopView({ repo, refresh, openDecision }) {
-  const [filter, setFilter] = useState(“all”);
+  const [filter, setFilter] = useState("all");
   const ev = useApi(() => MetatronAPI.getFeedbackEvents(repo, filter), [repo, filter]);
   const toast = useToast();
   const [refining, setRefining] = useState(null);
   // freshIds: map of event id → decision ids produced this session (before reload)
   const [freshIds, setFreshIds] = useState({});
+  useEffect(() => { setFreshIds({}); }, [repo]);
   const openById = useCallback((id) => {
     MetatronAPI.getDecision(id).then((d) => d && d.id && openDecision && openDecision(d));
   }, [openDecision]);
@@ -269,7 +270,7 @@ function FeedbackLoopView({ repo, refresh, openDecision }) {
     setRefining(e.id);
     const res = await MetatronAPI.refineFeedback(e.id);
     setRefining(null);
-    toast(“Gap refined into a new candidate decision”, { icon: “loop” });
+    toast("Gap refined into a new candidate decision", { icon: "loop" });
     if (res && res.decision_ids && res.decision_ids.length) {
       setFreshIds((prev) => ({ ...prev, [e.id]: res.decision_ids }));
     }
@@ -277,40 +278,43 @@ function FeedbackLoopView({ repo, refresh, openDecision }) {
   };
 
   return (
-    <div className=”view”>
-      <SectionTitle eyebrow=”The self-improving loop” title=”Gaps become knowledge” />
+    <div className="view">
+      <SectionTitle eyebrow="The self-improving loop" title="Gaps become knowledge" />
 
       {/* loop diagram */}
-      <div className=”panel pad enter” style={{ marginBottom: 18, position: “relative”, overflow: “hidden” }}>
-        <div style={{ position: “absolute”, inset: 0, display: “grid”, placeItems: “center”, opacity: .5, pointerEvents: “none” }}><MetatronCube size={300} opacity={0.12} /></div>
-        <div style={{ position: “relative”, display: “flex”, alignItems: “center”, gap: 6, maxWidth: 760, margin: “6px auto” }}>
-          <LoopStage icon=”source” label=”Mine knowledge” color=”var(--teal)” active />
+      <div className="panel pad enter" style={{ marginBottom: 18, position: "relative", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", opacity: .5, pointerEvents: "none" }}><MetatronCube size={300} opacity={0.12} /></div>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 6, maxWidth: 760, margin: "6px auto" }}>
+          <LoopStage icon="source" label="Mine knowledge" color="var(--teal)" active />
           <LoopArrow />
-          <LoopStage icon=”gavel” label=”Human curates” color=”var(--emerald)” active />
+          <LoopStage icon="gavel" label="Human curates" color="var(--emerald)" active />
           <LoopArrow />
-          <LoopStage icon=”impact” label=”Agents query” color=”var(--cyan)” active />
+          <LoopStage icon="impact" label="Agents query" color="var(--cyan)" active />
           <LoopArrow />
-          <LoopStage icon=”pulse” label=”Agents rate + report gaps” color=”var(--amber)” active />
+          <LoopStage icon="pulse" label="Agents rate + report gaps" color="var(--amber)" active />
           <LoopArrow />
-          <LoopStage icon=”loop” label=”Refine → candidate” color=”var(--violet)” active />
+          <LoopStage icon="loop" label="Refine → candidate" color="var(--violet)" active />
         </div>
       </div>
 
-      <div style={{ display: “flex”, alignItems: “center”, gap: 10, marginBottom: 16 }}>
-        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 500 }}>”What was missing” reports</h3>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <h3 style={{ margin: 0, fontSize: 15, fontWeight: 500 }}>“What was missing” reports</h3>
         <div style={{ flex: 1 }} />
-        {[“all”, “unhandled”, “handled”].map((f) => <button key={f} className={“chip “ + (filter === f ? “on” : “”)} onClick={() => setFilter(f)}>{f}</button>)}
+        {["all", "unhandled", "handled"].map((f) => <button key={f} className={"chip " + (filter === f ? "on" : "")} onClick={() => setFilter(f)}>{f}</button>)}
       </div>
 
-      {ev.loading ? <Loading label=”Gathering feedback gaps…” /> : ev.error ? <ErrorState onRetry={ev.reload} /> :
-        ev.data.events.length === 0 ? <Empty title=”No gaps in this view” detail=”Every reported gap has been refined into a candidate decision.” icon=”loop” /> :
-          <div style={{ display: “flex”, flexDirection: “column”, gap: 14 }}>
+      {ev.loading ? <Loading label="Gathering feedback gaps…" /> : ev.error ? <ErrorState onRetry={ev.reload} /> :
+        ev.data.events.length === 0 ? <Empty title="No gaps in this view" detail="Every reported gap has been refined into a candidate decision." icon="loop" /> :
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {ev.data.events.map((e, i) => (
               <GapCard key={e.id} e={e} delay={i * 0.06}
                 onRefine={() => doRefine(e)} refining={refining === e.id}
                 onOpenDecision={openById}
                 freshIds={freshIds[e.id]}
-                onChanged={() => { ev.reload(); refresh && refresh(); }} />
+                onChanged={() => {
+                  setFreshIds((prev) => { const n = { ...prev }; delete n[e.id]; return n; });
+                  ev.reload(); refresh && refresh();
+                }} />
             ))}
           </div>}
     </div>
