@@ -99,3 +99,41 @@ def _classify_install_path(path: str) -> tuple[str, str]:
 
 def detect_install_method() -> tuple[str, str]:
     return _classify_install_path(str(Path(__file__).resolve()))
+
+
+# ---------------------------------------------------------------------------
+# State dir + install provenance (upgrade_command)
+# ---------------------------------------------------------------------------
+
+def _state_dir() -> Path:
+    # Same convention as identity._home(): METATRON_CONFIG_DIR overrides ~/.metatron.
+    return Path(os.environ.get("METATRON_CONFIG_DIR", "~/.metatron")).expanduser()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def upgrade_command() -> str:
+    """Command to upgrade metatron, by precedence:
+    METATRON_INSTALL_CMD env -> ~/.metatron/install.json -> first-run detection (persisted)."""
+    env = os.environ.get("METATRON_INSTALL_CMD")
+    if env:
+        return env
+    path = _state_dir() / "install.json"
+    try:
+        data = json.loads(path.read_text())
+        cmd = data.get("upgrade_command")
+        if cmd:
+            return cmd
+    except (OSError, ValueError):
+        pass
+    method, cmd = detect_install_method()
+    try:  # best-effort persist so detection runs once and stays user-editable
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(
+            {"method": method, "upgrade_command": cmd, "source": "detected",
+             "recorded_at": _now_iso()}, indent=2))
+    except OSError:
+        pass
+    return cmd

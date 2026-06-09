@@ -45,3 +45,30 @@ def test_classify_install_path():
     assert V._classify_install_path("/Users/x/.local/pipx/venvs/getmetatron/lib/...")[1] == "pipx upgrade getmetatron"
     assert V._classify_install_path("/Users/x/.local/share/uv/tools/getmetatron/lib/...")[1] == "uv tool upgrade getmetatron"
     assert V._classify_install_path("/usr/lib/python3.12/site-packages/metatron/version.py")[1] == "pip install -U getmetatron"
+
+
+def test_upgrade_command_env_override_wins(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("METATRON_INSTALL_CMD", "my-custom upgrade")
+    assert V.upgrade_command() == "my-custom upgrade"
+
+
+def test_upgrade_command_reads_existing_install_json(monkeypatch, tmp_path):
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "install.json").write_text('{"upgrade_command": "edited-by-user"}')
+    assert V.upgrade_command() == "edited-by-user"
+
+
+def test_upgrade_command_detects_and_persists_once(monkeypatch, tmp_path):
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    calls = {"n": 0}
+    def fake_detect():
+        calls["n"] += 1
+        return ("pip", "pip install -U getmetatron")
+    monkeypatch.setattr(V, "detect_install_method", fake_detect)
+    assert V.upgrade_command() == "pip install -U getmetatron"
+    assert (tmp_path / "install.json").exists()
+    assert V.upgrade_command() == "pip install -U getmetatron"
+    assert calls["n"] == 1
