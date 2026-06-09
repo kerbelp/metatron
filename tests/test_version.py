@@ -1,7 +1,8 @@
-"""Tests for build/version reporting (the commit served by the UI)."""
+"""Tests for version reporting + the passive update check (network injected)."""
 
 import subprocess
 
+from metatron import version as V
 from metatron.version import git_revision, version_string
 
 
@@ -28,3 +29,19 @@ def test_git_revision_is_none_outside_a_git_repo(tmp_path):
 
 def test_version_string_falls_back_to_unknown(tmp_path):
     assert version_string(tmp_path) == "unknown"
+
+
+def test_is_newer_compares_dotted_numerics():
+    assert V._is_newer("0.10.0", "0.9.0") is True
+    assert V._is_newer("0.3.0", "0.2.1") is True
+    assert V._is_newer("0.2.1", "0.2.1") is False
+    assert V._is_newer("0.2.0", "0.3.0") is False
+    assert V._is_newer("garbage", "0.2.1") is False
+    assert V._is_newer("0.2.1", "dev") is False
+
+
+def test_classify_install_path():
+    assert V._classify_install_path("/opt/homebrew/Cellar/metatron/0.2.1/lib/...")[1] == "brew upgrade metatron"
+    assert V._classify_install_path("/Users/x/.local/pipx/venvs/getmetatron/lib/...")[1] == "pipx upgrade getmetatron"
+    assert V._classify_install_path("/Users/x/.local/share/uv/tools/getmetatron/lib/...")[1] == "uv tool upgrade getmetatron"
+    assert V._classify_install_path("/usr/lib/python3.12/site-packages/metatron/version.py")[1] == "pip install -U getmetatron"

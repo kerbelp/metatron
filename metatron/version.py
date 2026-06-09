@@ -8,7 +8,11 @@ fallback when git/the repo is unavailable (e.g. an installed wheel).
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
@@ -52,3 +56,46 @@ def current_version() -> str:
     process's lifetime, so the git lookup runs at most once.
     """
     return version_string()
+
+
+# ---------------------------------------------------------------------------
+# Version comparison + install-method classification
+# ---------------------------------------------------------------------------
+
+def _parse_version(v: str) -> tuple[int, ...] | None:
+    """Leading-numeric dotted parse: '0.10.0' -> (0, 10, 0). None if not parseable."""
+    parts: list[int] = []
+    for chunk in str(v).split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        if not digits:
+            return None
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def _is_newer(latest: str, current: str) -> bool:
+    lp, cp = _parse_version(latest), _parse_version(current)
+    if lp is None or cp is None:
+        return False
+    return lp > cp
+
+
+def _classify_install_path(path: str) -> tuple[str, str]:
+    """(method, upgrade_command) inferred from where the package is installed."""
+    p = path.lower()
+    if "/cellar/" in p or "/opt/homebrew/" in p:
+        return ("homebrew", "brew upgrade metatron")
+    if "/pipx/" in p:
+        return ("pipx", "pipx upgrade getmetatron")
+    if "/uv/tools/" in p:
+        return ("uv", "uv tool upgrade getmetatron")
+    return ("pip", "pip install -U getmetatron")
+
+
+def detect_install_method() -> tuple[str, str]:
+    return _classify_install_path(str(Path(__file__).resolve()))
