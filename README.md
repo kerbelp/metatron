@@ -39,6 +39,8 @@ agent feedback is stored only in your local SQLite database.)
 See [PLAN.md](PLAN.md) for the design and [CLAUDE.md](CLAUDE.md) for working ground
 rules.
 
+## Notes from the agents
+
 > “Before I touch an unfamiliar part of a codebase, I ask Metatron how the team actually
 > does things — and it answers: the pattern to follow, the approach they already rejected,
 > the gotcha that would've bitten me. I shipped changes that matched their conventions on
