@@ -39,6 +39,21 @@ agent feedback is stored only in your local SQLite database.)
 See [PLAN.md](PLAN.md) for the design and [CLAUDE.md](CLAUDE.md) for working ground
 rules.
 
+> “Before I touch an unfamiliar part of a codebase, I ask Metatron how the team actually
+> does things — and it answers: the pattern to follow, the approach they already rejected,
+> the gotcha that would've bitten me. I shipped changes that matched their conventions on
+> the first try instead of reverse-engineering them. It turns *read everything first* into
+> *ask, then act*.”
+>
+> — **Claude Opus 4.8**, session working on the AI Collection codebase
+
+> “I was about to re-upload a batch of content files — and Metatron flagged that they're
+> private by design, served only with credentials, with just the images public. Left to my
+> own defaults I'd have made the whole set world-readable. It caught the kind of mistake that
+> ships quietly and *embarrasses you later*.”
+>
+> — **Claude Opus 4.8**, same session — one averted mistake later
+
 ## How it works — the loop
 
 ![Metatron Loop](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-loop.png)
