@@ -373,12 +373,14 @@ function GapCard({ e, delay, onRefine, refining, onOpenDecision, freshIds, onCha
               ? producedDecisions.map((d) => <InlineCandidate key={d.id} decision={d} onOpenDecision={onOpenDecision} onChanged={onChanged} />)
               : producedIds.map((id) => <InlineCandidate key={id} id={id} onOpenDecision={onOpenDecision} onChanged={onChanged} />)}
           </div>
+        ) : e.handled ? (
+          <span className="mono dim" style={{ fontSize: 11 }}>Handled as ratings-only feedback — no candidate was distilled.</span>
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <span className="mono dim" style={{ fontSize: 11 }}>{"Distill this gap into a new candidate decision for human review."}</span>
             <div style={{ flex: 1 }} />
-            <button className="btn primary fixed" disabled={e.handled || refining} onClick={onRefine}>
-              {refining ? <><Spinner size={15} /> Refining…</> : e.handled ? <><Icon name="check" size={15} /> Refined</> : <><Icon name="loop" size={15} /> Refine into candidate</>}
+            <button className="btn primary fixed" disabled={refining} onClick={onRefine}>
+              {refining ? <><Spinner size={15} /> Refining…</> : <><Icon name="loop" size={15} /> Refine into candidate</>}
             </button>
           </div>
         )}
