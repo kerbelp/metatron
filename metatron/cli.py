@@ -373,6 +373,10 @@ def _cmd_ui(store, event_store, run_store, port, settings) -> int:
                 model=settings.model, api_key=settings.anthropic_api_key
             )
 
+    notice = format_update_notice(check_for_update())
+    if notice:
+        print(notice, file=sys.stderr)
+
     serve(
         store, event_store, start_port=port, run_store=run_store,
         refiner_factory=refiner_factory,
