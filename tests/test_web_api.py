@@ -444,3 +444,38 @@ def test_version_endpoint_handles_no_check(monkeypatch):
     out = webapi.version()
     assert out["update_available"] is False
     assert "version" in out and "revision" in out
+
+
+# ---------------------------------------------------------------------------
+# keywords editing
+
+
+def test_create_decision_accepts_keywords(store):
+    out = create_decision(store, {"repo": "r", "pattern": "p", "scope": "app",
+                                  "rationale": "why", "keywords": [" s3 ", "s3", "presigned", ""]})
+    assert out["ok"] is True
+    assert store.get(out["id"]).keywords == ["s3", "presigned"]
+
+
+def test_update_decision_replaces_keywords(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"keywords": ["acl", " upload ", "acl"]})
+    assert out["ok"] is True
+    loaded = store.get(d.id)
+    assert loaded.keywords == ["acl", "upload"]
+    assert loaded.pattern == d.pattern  # content untouched
+
+
+def test_update_decision_can_clear_keywords(store):
+    [d] = _add(store, 1)
+    update_decision(store, d.id, {"keywords": ["acl"]})
+    out = update_decision(store, d.id, {"keywords": []})
+    assert out["ok"] is True and store.get(d.id).keywords == []
+
+
+def test_update_decision_ignores_malformed_keywords(store):
+    [d] = _add(store, 1)
+    out = update_decision(store, d.id, {"pattern": "edited", "keywords": "not-a-list"})
+    assert out["ok"] is True
+    assert store.get(d.id).pattern == "edited"
+    assert store.get(d.id).keywords == []

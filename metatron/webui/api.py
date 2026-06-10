@@ -581,7 +581,7 @@ def valuate_one(store: DecisionStore, provider_factory, decision_id: str, *, jud
 def create_decision(store: DecisionStore, body: dict) -> dict:
     """Create a human-authored candidate from the editor form. Candidate + human
     origin; approval stays a separate human action."""
-    from metatron.models import Confidence, Decision, Origin, Status
+    from metatron.models import Confidence, Decision, Origin, Status, sanitize_keywords
     pattern = (body.get("pattern") or "").strip()
     scope = (body.get("scope") or "").strip()
     rationale = (body.get("rationale") or "").strip()
@@ -593,6 +593,7 @@ def create_decision(store: DecisionStore, body: dict) -> dict:
     except ValueError:
         return {"ok": False, "error": f"confidence must be one of: {', '.join(c.value for c in Confidence)}."}
     d = Decision(repo=repo, pattern=pattern, scope=scope, rationale=rationale,
+                 keywords=sanitize_keywords(body.get("keywords")),
                  origin=Origin.HUMAN, confidence=conf, status=Status.CANDIDATE)
     store.add(d)
     return {"ok": True, "id": d.id, "status": d.status.value, "origin": d.origin.value}
@@ -600,7 +601,7 @@ def create_decision(store: DecisionStore, body: dict) -> dict:
 
 def update_decision(store: DecisionStore, decision_id: str, body: dict) -> dict:
     """Edit a decision's content. Allowed for candidate + canonical; rejected is read-only."""
-    from metatron.models import Confidence, Status
+    from metatron.models import Confidence, Status, sanitize_keywords
     decision = store.get(decision_id)
     if decision is None:
         return {"ok": False, "error": f"No decision with id {decision_id!r} (not found)."}
@@ -619,6 +620,10 @@ def update_decision(store: DecisionStore, decision_id: str, body: dict) -> dict:
         except ValueError:
             return {"ok": False, "error": f"confidence must be one of: {', '.join(c.value for c in Confidence)}."}
     updated = store.update_fields(decision_id, **fields)
+    if isinstance(body.get("keywords"), list):
+        # Full replacement (the editor sends the whole list); sanitized like every
+        # other keywords intake. A non-list value is ignored, not an error.
+        updated = store.set_keywords(decision_id, sanitize_keywords(body["keywords"]))
     return {"ok": True, "id": updated.id, "status": updated.status.value}
 
 
