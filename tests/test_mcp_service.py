@@ -458,31 +458,30 @@ def test_stemmer_avoids_false_collisions():
     assert not (_tokens("access control") & _tokens("process queue"))
 
 
-# --- P1b: alias canonicalization + code-literal preservation ---
+# --- vocabulary bridging via keywords + code-literal preservation ---
 
-def test_alias_unifies_link_vocabulary():
-    # href/url/link are the same hyperlink-target concept -> one canonical token.
-    # (route/anchor/slug deliberately excluded — different concept, hurts precision.)
-    assert _tokens("href") == _tokens("url") == _tokens("link") == _tokens("hyperlink")
-
-
-def test_alias_unifies_auth_vocabulary():
-    assert _tokens("clerk") == _tokens("authentication") == _tokens("authorize")
-
-
-def test_alias_closes_href_url_vocabulary_gap():
-    # task says "href"; the relevant decision says only "urls/links" and lives elsewhere.
-    # Without aliasing the only overlap is the (common) word "dashboard" -> filtered.
+def test_keywords_close_the_href_url_vocabulary_gap():
+    # task says "href"; the relevant decision says only "urls/links" and lives
+    # elsewhere — but carries "href" in its curated keywords, the per-decision
+    # replacement for the retired global alias table. Without that keyword the only
+    # overlap is the (common) word "dashboard" -> filtered.
     area = "src/components/Button"
     filler = [_canonical(pattern=f"compose layout piece {i}", scope=area, rationale="x")
               for i in range(4)]
     commons = [_canonical(pattern=f"dashboard widget {i} loads data", scope=f"src/d{i}", rationale="r")
                for i in range(6)]  # make "dashboard" common (low idf)
     link_decision = _canonical(pattern="build dashboard links through the urls helper",
-                            scope="src/utils/i18n", rationale="r")
+                            scope="src/utils/i18n", rationale="r", keywords=["href", "hyperlink"])
     store = _store(*filler, *commons, link_decision)
     results = get_decisions_for_context(store, REPO, area, "fix the href on the dashboard", limit=8)
     assert any(p.scope == "src/utils/i18n" for p in results)
+
+
+def test_distinct_terms_stay_distinct_without_a_bridging_keyword():
+    # No global synonym table: tokens unify only through stemming or a decision's
+    # own keywords, so unrelated vocabularies cannot manufacture matches.
+    assert _tokens("href") != _tokens("url")
+    assert _tokens("clerk") != _tokens("authentication")
 
 
 def test_code_literal_preserved_as_single_token():
