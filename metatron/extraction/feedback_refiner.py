@@ -13,7 +13,7 @@ import json
 
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
-from metatron.models import Confidence, Origin, Decision
+from metatron.models import Confidence, Origin, Decision, sanitize_keywords
 
 
 class RefineError(Exception):
@@ -59,6 +59,7 @@ class FeedbackRefiner:
                     pattern=pattern,
                     scope=(item.get("scope") or scope_hint or "").strip(),
                     rationale=(item.get("rationale") or "").strip(),
+                    keywords=sanitize_keywords(item.get("keywords")),
                     confidence=_parse_confidence(item.get("confidence")),
                     model=self._model,
                     origin=Origin.AGENT_FEEDBACK,

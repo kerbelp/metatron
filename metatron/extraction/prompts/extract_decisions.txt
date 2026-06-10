@@ -20,6 +20,10 @@ Return ONLY a JSON array. Each element is an object with exactly these fields:
   - "scope": the area it applies to (usually "{scope}").
   - "rationale": why this holds, grounded in the signals.
   - "confidence": one of "low", "medium", "high".
+  - "keywords": 3-8 retrieval terms an engineer might use when describing a task this
+    decision applies to — synonyms and code identifiers NOT already present in the
+    pattern or rationale wording (e.g. ["sqlite", "persistence", "DecisionStore"] for a
+    storage rule). Do not restate words the pattern already contains.
 
 If the signals do not support any decision, return [].
 Do not include any prose outside the JSON array.

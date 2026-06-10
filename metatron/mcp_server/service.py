@@ -16,7 +16,7 @@ import math
 import re
 
 from metatron.events import Event, EventKind
-from metatron.models import Confidence, Origin, Decision, SourceRef, Status
+from metatron.models import Confidence, Origin, Decision, SourceRef, Status, sanitize_keywords
 from metatron.storage.base import DecisionStore
 
 _CONFIDENCE_WEIGHT = {Confidence.LOW: 1, Confidence.MEDIUM: 2, Confidence.HIGH: 3}
@@ -169,6 +169,7 @@ def submit_candidate_decision(
     rationale: str,
     confidence: str | Confidence = Confidence.MEDIUM,
     source_refs: list[SourceRef] | None = None,
+    keywords: list[str] | None = None,
 ) -> Decision:
     duplicate = find_duplicate(store, repo=repo, pattern=pattern)
     if duplicate is not None:
@@ -180,6 +181,7 @@ def submit_candidate_decision(
         # matching applies the same normalization for rows stored before this.
         scope=_normalize_scope(scope),
         rationale=rationale,
+        keywords=sanitize_keywords(keywords),
         confidence=_coerce_confidence(confidence),
         origin=Origin.AGENT_SUBMITTED,
         source_refs=source_refs or [],

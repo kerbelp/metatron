@@ -1,5 +1,7 @@
 """Tests for the LLM provider interface, prompt loading, and decision extraction."""
 
+import json
+
 import pytest
 
 from metatron.extraction.extractor import ExtractionError, DecisionExtractor
@@ -119,3 +121,32 @@ def test_extract_returns_empty_list_for_empty_array():
 def test_extract_raises_on_malformed_json():
     with pytest.raises(ExtractionError):
         DecisionExtractor(FakeProvider("not json at all"), "github.com/acme/app").extract(_SIGNALS)
+
+
+def test_extractor_parses_keywords():
+    resp = json.dumps([{
+        "pattern": "Access the DB only through DecisionStore",
+        "scope": "metatron/storage", "rationale": "keeps SQL contained",
+        "confidence": "high",
+        "keywords": ["sqlite", "  database  ", "sqlite", "", 42],
+    }])
+    extractor = DecisionExtractor(FakeProvider(resp), repo="r")
+    [decision] = extractor.extract(_SIGNALS)
+    # sanitized: stripped, deduped, non-strings and empties dropped
+    assert decision.keywords == ["sqlite", "database"]
+
+
+def test_extractor_tolerates_missing_or_malformed_keywords():
+    resp = json.dumps([
+        {"pattern": "A", "scope": "s", "rationale": "r"},
+        {"pattern": "B", "scope": "s", "rationale": "r", "keywords": "not-a-list"},
+    ])
+    extractor = DecisionExtractor(FakeProvider(resp), repo="r")
+    a, b = extractor.extract(_SIGNALS)
+    assert a.keywords == [] and b.keywords == []
+
+
+def test_extraction_prompt_asks_for_keywords():
+    extractor = DecisionExtractor(provider := FakeProvider("[]"), repo="r")
+    extractor.extract(_SIGNALS)
+    assert "keywords" in provider.last_prompt

@@ -207,6 +207,14 @@ def build_server(
             Literal["low", "medium", "high"],
             Field(description="How strongly the team holds this convention."),
         ] = "medium",
+        keywords: Annotated[
+            list[str] | None,
+            Field(description=(
+                "Optional: 3-8 retrieval terms an engineer might use when describing a "
+                "task this rule applies to — synonyms and code identifiers not already "
+                'in the pattern wording (e.g. ["s3", "presigned", "upload"]).'
+            )),
+        ] = None,
     ) -> str:
         """Record a new engineering convention you discovered while working — for human review.
 
@@ -233,6 +241,7 @@ def build_server(
             scope=scope,
             rationale=rationale,
             confidence=confidence,
+            keywords=keywords,
         )
         _record(Event(repo=repo, kind=EventKind.SUBMIT, area=scope, decision_ids=[decision.id]))
         return decision.id
