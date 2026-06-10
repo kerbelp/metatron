@@ -642,3 +642,12 @@ def test_keywords_do_not_admit_without_a_task_match():
         store, REPO, "src/routes/index.tsx", "fix a typo in the footer"
     )
     assert results == []
+
+
+def test_submit_stores_sanitized_keywords():
+    store = _store()
+    decision = submit_candidate_decision(
+        store, repo=REPO, pattern="Route uploads through MediaStore", scope="src/media",
+        rationale="r", keywords=["s3", " presigned ", "s3", ""],
+    )
+    assert store.get(decision.id).keywords == ["s3", "presigned"]

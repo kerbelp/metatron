@@ -16,6 +16,9 @@ guard are three decisions, not one). Each object has EXACTLY:
   "scope": the path/area it applies to (use the scope hint if unsure).
   "rationale": one sentence on why it holds / what breaks without it.
   "confidence": "high" | "medium" | "low".
+  "keywords": 3-8 retrieval terms an engineer might use when describing a task this
+    decision applies to — synonyms and code identifiers NOT already in the pattern or
+    rationale wording. Do not restate words the pattern already contains.
 
 Keep each pattern self-contained and actionable. Do not invent conventions the
 feedback does not support. Return ONLY the JSON array, with no prose outside it.

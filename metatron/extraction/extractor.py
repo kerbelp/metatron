@@ -13,7 +13,14 @@ import json
 from metatron.extraction.prompts import load_prompt, render
 from metatron.extraction.provider import LLMProvider
 from metatron.extraction.signals import ScopeSignals
-from metatron.models import Confidence, Origin, Decision, SourceRef, SourceRefKind
+from metatron.models import (
+    Confidence,
+    Origin,
+    Decision,
+    SourceRef,
+    SourceRefKind,
+    sanitize_keywords,
+)
 
 
 class ExtractionError(Exception):
@@ -52,6 +59,7 @@ class DecisionExtractor:
             pattern=item["pattern"],
             scope=item.get("scope") or signals.scope,
             rationale=item.get("rationale", ""),
+            keywords=sanitize_keywords(item.get("keywords")),
             confidence=_parse_confidence(item.get("confidence")),
             model=self._model,
             origin=Origin.BOOTSTRAP,

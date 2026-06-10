@@ -54,6 +54,31 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def sanitize_keywords(value: object, *, limit: int = 10) -> list[str]:
+    """Coerce model- or agent-supplied keywords into a clean list.
+
+    Keywords arrive from LLM JSON and MCP tool calls, so anything goes: non-lists,
+    non-strings, padding, duplicates. Keep order, strip whitespace, drop empties and
+    case-insensitive repeats, and cap the count — keywords widen retrieval, and an
+    unbounded list would let one decision lexically shadow a whole corpus.
+    """
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        keyword = item.strip()
+        if not keyword or keyword.lower() in seen:
+            continue
+        out.append(keyword)
+        seen.add(keyword.lower())
+        if len(out) >= limit:
+            break
+    return out
+
+
 class SourceRef(BaseModel):
     """Provenance for a decision: a file path or a commit SHA, plus context."""
 

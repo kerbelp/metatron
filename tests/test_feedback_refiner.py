@@ -181,3 +181,13 @@ def test_ratings_only_feedback_is_marked_handled_without_candidates():
     res = refine_feedback(s, ev, FakeRefiner(2), repo=REPO)
     assert res.decisions_created == 0
     assert ev.unhandled_feedback(repo=REPO) == []  # not reprocessed forever
+
+
+def test_refiner_parses_keywords():
+    resp = json.dumps([{
+        "pattern": "Mirror the order_created publish chain", "scope": "src/x",
+        "rationale": "r", "confidence": "high",
+        "keywords": ["webhook", " lemonsqueezy ", "webhook", 7, ""],
+    }])
+    [decision] = FeedbackRefiner(StaticProvider(resp)).refine("gap", scope_hint="src/x")
+    assert decision.keywords == ["webhook", "lemonsqueezy"]
