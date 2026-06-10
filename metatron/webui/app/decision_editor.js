@@ -15,5 +15,23 @@
     const missing = need.filter((k) => !((f[k] || "").trim()));
     return { ok: missing.length === 0, missing };
   }
-  return { validateDecisionForm };
+
+  // Comma-separated keywords input -> clean list. Mirrors the server's
+  // sanitize_keywords (trim, drop empties, case-insensitive dedupe, cap 10) so
+  // what the form previews is what gets stored.
+  function parseKeywords(text) {
+    if (typeof text !== "string") return [];
+    const out = [];
+    const seen = new Set();
+    for (const part of text.split(",")) {
+      const kw = part.trim();
+      if (!kw || seen.has(kw.toLowerCase())) continue;
+      out.push(kw);
+      seen.add(kw.toLowerCase());
+      if (out.length >= 10) break;
+    }
+    return out;
+  }
+
+  return { validateDecisionForm, parseKeywords };
 });

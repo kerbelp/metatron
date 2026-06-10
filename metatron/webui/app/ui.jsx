@@ -128,6 +128,7 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
     scope: decision ? decision.scope : "",
     rationale: decision ? decision.rationale : "",
     confidence: decision ? (decision.confidence || "medium") : "medium",
+    keywords: decision && decision.keywords ? decision.keywords.join(", ") : "",
   });
   const [busy, setBusy] = useState(false);
   const toast = useToast();
@@ -136,9 +137,10 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
   const save = async () => {
     if (!valid) return;
     setBusy(true);
+    const payload = { ...form, keywords: MetatronDecisionEditor.parseKeywords(form.keywords) };
     const r = editing
-      ? await MetatronAPI.updateDecision(decision.id, form)
-      : await MetatronAPI.createDecision(repo, form);
+      ? await MetatronAPI.updateDecision(decision.id, payload)
+      : await MetatronAPI.createDecision(repo, payload);
     setBusy(false);
     if (r && !r.ok) { toast(r.error || "Could not save the decision"); return; }
     onSaved && onSaved();
@@ -155,6 +157,9 @@ function DecisionEditor({ repo, decision, onSaved, onCancel }) {
       <label htmlFor={idPrefix + "-rationale"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RATIONALE</label>
       <textarea id={idPrefix + "-rationale"} value={form.rationale} onChange={set("rationale")} rows={3} style={INPUT_STYLE}
         placeholder="e.g. Why it holds and what it prevents (keeps SQL out of callers so the store stays swappable)" />
+      <label htmlFor={idPrefix + "-keywords"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>RETRIEVAL KEYWORDS <span style={{ opacity: .6 }}>(optional, comma-separated)</span></label>
+      <input id={idPrefix + "-keywords"} value={form.keywords} onChange={set("keywords")} style={INPUT_STYLE}
+        placeholder="e.g. s3, presigned, upload  (terms a task description might use that the wording above doesn't)" />
       <label htmlFor={idPrefix + "-confidence"} className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONFIDENCE</label>
       <select id={idPrefix + "-confidence"} value={form.confidence} onChange={set("confidence")} style={{ ...INPUT_STYLE, resize: "none" }}>
         <option value="low">low</option>
@@ -226,6 +231,13 @@ function DecisionDrawer({ decision, onClose, onApprove, onReject, busy, onEdited
           <div className="panel pad" style={{ background: "rgba(45,212,191,.04)", borderColor: "rgba(45,212,191,.14)", marginBottom: 18 }}>
             <div className="mono" style={{ fontSize: 10, letterSpacing: ".2em", color: "var(--teal)", marginBottom: 9 }}>RATIONALE — WHY IT EXISTS</div>
             <div style={{ fontSize: 14, lineHeight: 1.6, color: "var(--text-2)", textWrap: "pretty" }}>{decision.rationale}</div>
+          </div>
+
+          <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>RETRIEVAL KEYWORDS — HOW AGENTS FIND THIS RULE</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 22 }}>
+            {decision.keywords && decision.keywords.length ? decision.keywords.map((kw, i) => (
+              <span key={i} className="mono" style={{ fontSize: 11.5, padding: "4px 10px", borderRadius: 999, border: "1px solid var(--line)", background: "rgba(8,18,16,.5)", color: "var(--text-2)" }}>{kw}</span>
+            )) : <span className="dim mono" style={{ fontSize: 12 }}>None yet — backfill with `metatron enrich-keywords`, or add via Edit.</span>}
           </div>
 
           <div style={{ marginBottom: 8 }} className="mono dim"><span style={{ fontSize: 10, letterSpacing: ".2em" }}>ORIGIN NOTE</span></div>
