@@ -144,7 +144,9 @@ def submit_candidate_decision(
     decision = Decision(
         repo=repo,
         pattern=pattern,
-        scope=scope,
+        # Normalized at write time so the stored corpus stays clean; serve-time
+        # matching applies the same normalization for rows stored before this.
+        scope=_normalize_scope(scope),
         rationale=rationale,
         confidence=_coerce_confidence(confidence),
         origin=Origin.AGENT_SUBMITTED,
@@ -386,6 +388,23 @@ def _clears_evidence_floor(
     return any(idf.get(tok, 0.0) >= threshold for tok in hits)
 
 
+def _normalize_scope(scope: str) -> str:
+    """Canonical form of a decision scope: a bare path, or ``""`` for global.
+
+    Agents submit scopes in the forms the tool description suggests — a glob
+    ("src/services/**"), the literal "global" — as well as plain paths. Trailing
+    glob segments add nothing over the directory they qualify ("src/services/**"
+    governs the same files the scope "src/services" already covers under prefix
+    matching), so they are dropped; a scope that *is* a glob ("**") or the word
+    "global" means everywhere, i.e. the empty global scope.
+    """
+    parts = scope.strip().strip("/").split("/")
+    while parts and "*" in parts[-1]:
+        parts.pop()
+    normalized = "/".join(parts)
+    return "" if normalized.lower() == "global" else normalized
+
+
 def _scope_weight(decision_scope: str, area_paths: list[str]) -> float:
     """Best scope relationship between a decision and any of the queried paths.
 
@@ -393,6 +412,7 @@ def _scope_weight(decision_scope: str, area_paths: list[str]) -> float:
     *inside* it) outweighs a broad ancestor that merely contains the area, and
     siblings (sharing only a parent dir) score nothing.
     """
+    decision_scope = _normalize_scope(decision_scope)
     if decision_scope == "":
         # Global decisions get NO scope credit — applying "everywhere" is not evidence
         # of relevance to *this* task. With scope 0 they fall to the cross-scope tier
@@ -409,16 +429,32 @@ def _pair_scope(decision_scope: str, area: str) -> float:
         if a != b:
             break
         shared += 1
-    if shared == 0:
-        return 0.0
-    if shared == len(scope) == len(target):  # exact match — most specific
+    if shared and shared == len(scope) == len(target):  # exact match — most specific
         return 3.0 + shared
-    if shared == len(target):  # decision sits inside the queried area — specific
+    if shared and shared == len(target):  # decision sits inside the queried area — specific
         return 2.0 + shared
-    if shared == len(scope):  # decision is an ancestor of the area
+    if shared and shared == len(scope):  # decision is an ancestor of the area
         # Weight by how *close* the ancestor is: a decision scoped src/db is a far
         # better match for src/db/db.ts than one scoped src. Flattening every
         # ancestor to the same weight let generic top-level decisions crowd out the
         # decision whose scope is the file's own directory.
         return float(shared)
-    return 0.0  # siblings: share a parent dir but diverge — not relevant
+    # No root-anchored relationship. Areas are often *names*, not full paths — the
+    # tool accepts an architectural area ("billing"), and decisions may be scoped to
+    # a layer name rather than a rooted path. If either path appears whole and
+    # contiguous inside the other ("billing" in src/billing/webhooks.py), that is a
+    # real but weaker relationship: weight it like a far ancestor (segment count of
+    # the contained path), below every rooted match of the same depth.
+    if _contains(scope, target) or _contains(target, scope):
+        return float(min(len(scope), len(target)))
+    return 0.0  # siblings/unrelated: no containment either way — not relevant
+
+
+def _contains(haystack: list[str], needle: list[str]) -> bool:
+    """Whether ``needle`` occurs as a contiguous run of segments inside ``haystack``."""
+    if not needle or len(needle) >= len(haystack):
+        return False
+    return any(
+        haystack[i : i + len(needle)] == needle
+        for i in range(1, len(haystack) - len(needle) + 1)
+    )

@@ -143,6 +143,78 @@ def test_global_decision_surfaces_on_keyword_match():
     assert "always handle webhook retries" in [p.pattern for p in results]
 
 
+def test_glob_scope_matches_files_inside_it():
+    # The submit tool documents glob scopes like "src/services/**"; a decision scoped
+    # that way must get scope credit for files inside src/services, exactly as a
+    # decision scoped "src/services" would.
+    store = _store(
+        _canonical(pattern="call backends through the gateway client", scope="src/services/**", rationale="r"),
+    )
+    results = get_decisions_for_context(
+        store, REPO, "src/services/payments.py", "tighten timeouts"
+    )
+    assert [p.pattern for p in results] == ["call backends through the gateway client"]
+
+
+def test_bare_glob_scope_is_treated_as_global():
+    # A scope of just "**" applies everywhere, i.e. global: no scope credit, and it
+    # must clear the keyword evidence floor like any global decision.
+    store = _store(_canonical(pattern="prefer composition", scope="**", rationale="r"))
+    results = get_decisions_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    assert results == []
+
+
+def test_global_string_scope_is_treated_as_global():
+    # Agents submit scope="global" (as the tool description suggests); it must behave
+    # exactly like the canonical empty-string global scope, not like a path segment.
+    store = _store(_canonical(pattern="prefer composition", scope="global", rationale="r"))
+    results = get_decisions_for_context(store, REPO, "src/routes/api/payments", "refund a webhook")
+    assert results == []
+
+
+def test_submit_normalizes_global_and_glob_scopes():
+    store = _store()
+    p1 = submit_candidate_decision(store, repo=REPO, pattern="p1", scope="global", rationale="r")
+    p2 = submit_candidate_decision(store, repo=REPO, pattern="p2", scope="src/services/**", rationale="r")
+    p3 = submit_candidate_decision(store, repo=REPO, pattern="p3", scope="**", rationale="r")
+    assert p1.scope == ""
+    assert p2.scope == "src/services"
+    assert p3.scope == ""
+
+
+def test_area_name_matches_scope_segment():
+    # The query tool accepts an architectural area ("billing"), not only a path; a
+    # decision scoped to a directory named billing anywhere in the tree must match.
+    store = _store(
+        _canonical(pattern="charge through the payments gateway", scope="src/billing", rationale="r"),
+        _canonical(pattern="compose home zones", scope="src/components/Home", rationale="r"),
+    )
+    results = get_decisions_for_context(store, REPO, "billing", "tighten timeouts")
+    assert [p.pattern for p in results] == ["charge through the payments gateway"]
+
+
+def test_segment_match_ranks_below_path_match():
+    # A real path relationship is stronger evidence than the area name merely
+    # appearing somewhere in the scope path.
+    exact = _canonical(pattern="exact dir rule", scope="billing", rationale="r")
+    segment = _canonical(pattern="named dir rule", scope="src/billing", rationale="r")
+    store = _store(segment, exact)
+    results = get_decisions_for_context(store, REPO, "billing", "tighten timeouts")
+    assert [p.pattern for p in results] == ["exact dir rule", "named dir rule"]
+
+
+def test_layer_scoped_decision_matches_file_inside_that_layer():
+    # The inverse direction: a decision scoped to an architectural layer name must
+    # surface for a file path that passes through a directory of that name.
+    store = _store(
+        _canonical(pattern="charge through the payments gateway", scope="billing", rationale="r"),
+    )
+    results = get_decisions_for_context(
+        store, REPO, "src/billing/webhooks.py", "tighten timeouts"
+    )
+    assert [p.pattern for p in results] == ["charge through the payments gateway"]
+
+
 def test_returns_empty_over_filler_when_nothing_relates():
     # No scope relationship to the area and no keyword overlap -> return nothing.
     store = _store(
