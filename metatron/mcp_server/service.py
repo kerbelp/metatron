@@ -105,7 +105,7 @@ def get_decisions_for_context(
     on_scope_generic: list[tuple[Decision, float]] = []   # C: in/under the area, no task keyword
     for decision in decisions:
         scope = _scope_weight(decision.scope, area_paths)
-        hits = _tokens(f"{decision.pattern} {decision.rationale}") & query_tokens
+        hits = _decision_tokens(decision) & query_tokens
         kw = sum(idf.get(tok, 0.0) for tok in hits)
         # The SAME evidence floor gates topical admission for both scopes. A same-scope
         # decision counts as topical only if its keyword overlap is real (≥2 distinct hits,
@@ -367,6 +367,17 @@ def _tokens(text: str) -> set[str]:
     return words | _code_literals(text)
 
 
+def _decision_tokens(decision: Decision) -> set[str]:
+    """The lexical surface a decision can match on: pattern, rationale, and keywords.
+
+    Keywords carry the vocabulary the wording doesn't — the synonyms and code
+    identifiers an engineer might type in a task description. They only widen what
+    a decision can match; admission still goes through the same evidence floor and
+    idf weighting as any other token (a keyword in many decisions is worth ~nothing).
+    """
+    return _tokens(" ".join([decision.pattern, decision.rationale, *decision.keywords]))
+
+
 def _build_idf(decisions: list[Decision]) -> dict[str, float]:
     """Inverse document frequency for tokens across the served decisions.
 
@@ -377,7 +388,7 @@ def _build_idf(decisions: list[Decision]) -> dict[str, float]:
     n = len(decisions)
     df: dict[str, int] = {}
     for decision in decisions:
-        for tok in _tokens(f"{decision.pattern} {decision.rationale}"):
+        for tok in _decision_tokens(decision):
             df[tok] = df.get(tok, 0) + 1
     return {tok: math.log((n + 1) / (count + 1)) for tok, count in df.items()}
 

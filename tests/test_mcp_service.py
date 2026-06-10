@@ -611,3 +611,34 @@ def test_reserved_slots_still_return_scope_matches_when_no_keyword_signal():
     results = get_decisions_for_context(store, REPO, area, "unrelated task words", limit=8)
     assert len(results) == 8
     assert all(p.scope == area for p in results)
+
+
+def test_keywords_bridge_task_vocabulary_to_a_decision():
+    # The task says "presigned"; the decision's pattern and rationale never do, but
+    # its keywords carry the term. Rare in the corpus, a single keyword hit is real
+    # evidence, so the decision surfaces across scopes.
+    store = _store(
+        _canonical(pattern="Route uploads through MediaStore", scope="src/server/media",
+                   rationale="central place for access control",
+                   keywords=["presigned", "s3", "upload"]),
+        _canonical(pattern="compose home zones", scope="src/components/Home", rationale="r"),
+        _canonical(pattern="use the email queue for outbound mail", scope="src/server/email", rationale="r"),
+    )
+    results = get_decisions_for_context(
+        store, REPO, "src/routes/api/files.py", "return a presigned link to the client"
+    )
+    assert "Route uploads through MediaStore" in [p.pattern for p in results]
+
+
+def test_keywords_do_not_admit_without_a_task_match():
+    # Keywords expand what a decision can match, never lower the evidence floor:
+    # an off-scope decision whose keywords miss the task is still excluded.
+    store = _store(
+        _canonical(pattern="Route uploads through MediaStore", scope="src/server/media",
+                   rationale="central place for access control",
+                   keywords=["presigned", "s3", "upload"]),
+    )
+    results = get_decisions_for_context(
+        store, REPO, "src/routes/index.tsx", "fix a typo in the footer"
+    )
+    assert results == []

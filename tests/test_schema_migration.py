@@ -68,3 +68,21 @@ def test_event_store_migrates_legacy_prior_id_columns(tmp_path):
     assert got.decision_ids == ["x"]
     assert got.helpful_decision_ids == ["x"]
     assert got.unhelpful_decision_ids == ["y"]
+
+
+def test_decision_store_adds_keywords_column_to_older_databases(tmp_path):
+    db = tmp_path / "legacy.db"
+    store = SQLiteDecisionStore(str(db))
+    d = store.add(Decision(repo="r", pattern="keep me", scope="a", rationale="x",
+                           origin=Origin.BOOTSTRAP, status=Status.CANONICAL))
+    store.close()
+
+    # Downgrade to the pre-keywords schema, as an old DB on disk would have it.
+    conn = sqlite3.connect(db)
+    conn.execute("ALTER TABLE decisions DROP COLUMN keywords")
+    conn.commit()
+    conn.close()
+
+    # Reopening adds the column; existing rows read back with no keywords.
+    reopened = SQLiteDecisionStore(str(db))
+    assert reopened.get(d.id).keywords == []

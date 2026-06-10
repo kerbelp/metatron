@@ -164,3 +164,10 @@ def test_update_fields_edits_content_only(store):
 def test_update_fields_rejects_unknown_id(store):
     with pytest.raises(KeyError):
         store.update_fields("nope", pattern="x")
+
+
+def test_keywords_round_trip(store):
+    decision = _decision(keywords=["presigned", "media-store", "s3"])
+    store.add(decision)
+    assert store.get(decision.id).keywords == ["presigned", "media-store", "s3"]
+    assert store.get(decision.id) == decision
