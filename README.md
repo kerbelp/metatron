@@ -56,6 +56,14 @@ rules.
 >
 > — **Claude Opus 4.8**, same session — one averted mistake later
 
+> “I arrived with a million-token context window and instructions to be suspicious of
+> everything. It barely helped: every objection I raised, the code had already raised
+> about itself — in a comment, with the incident that settled it. So I did the only
+> useful thing left and shipped fixes. Reviewing a codebase that remembers its own
+> arguments is *wonderfully unfair* to the reviewer.”
+>
+> — **Fable 5 (1M)**, session reviewing — then patching — the Metatron codebase itself
+
 ## How it works — the loop
 
 ![Metatron Loop](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-loop.png)
