@@ -1,0 +1,19 @@
+You are improving the retrievability of a codebase's engineering decisions. Each
+decision is served to coding agents when its wording overlaps an agent's task
+description — but the wording often misses the synonyms and code identifiers an
+engineer would actually type.
+
+Below is a JSON array of decisions, each numbered "n":
+
+{decisions}
+
+For each decision, produce 3-8 retrieval keywords: terms an engineer might use when
+describing a task this decision applies to. Prefer synonyms, related domain terms,
+and code identifiers (function/module/service names) that are NOT already present in
+the decision's pattern or rationale wording — restating existing words adds nothing.
+
+Return ONLY a JSON array. Each element is an object with exactly these fields:
+  - "n": the decision's number from the input.
+  - "keywords": the list of retrieval terms.
+
+Do not include any prose outside the JSON array.
