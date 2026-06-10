@@ -49,21 +49,6 @@ _HELP_SCALE = 2.0
 # Stops a lone common token (e.g. "write") from admitting off-topic filler.
 _MIN_KEYWORD_HITS = 2
 
-# Curated synonym groups (P1b). Members of a group canonicalize to one token so a
-# task's word matches a decision's synonym — closing the lexical vocabulary gap (a task
-# says "href", the decision says "url"/"link"). Keep this tight and high-confidence:
-# over-broad groups manufacture false matches. Stemming is applied to members at load.
-_ALIAS_GROUPS = (
-    # hyperlink target — kept narrow on purpose. "route"/"anchor"/"slug" are a
-    # *different* concept (server routing, TOC anchors); folding them in here made
-    # generic routing/anchor decisions spuriously match href tasks and crowd out the
-    # genuinely relevant cross-scope decisions.
-    ("href", "url", "urls", "link", "links", "hyperlink"),
-    # authentication / authorization
-    ("auth", "authn", "authentication", "authenticate", "authorize", "authorization", "login", "signin", "clerk", "session"),
-)
-
-
 def get_decisions_for_context(
     store: DecisionStore,
     repo: str,
@@ -318,7 +303,7 @@ def _coerce_confidence(value: str | Confidence) -> Confidence:
 # access->acc, success->succ, status->statu and manufactured collisions. Words ending
 # in "ss"/"us"/"is" are left intact, and "-ing"/"-tion" are deliberately NOT handled
 # (they over-stem and don't unify the cases we care about; route/routing, auth/
-# authentication are a synonym-map concern, not a stemmer one).
+# authentication are a per-decision keywords concern, not a stemmer one).
 _DERIVATIONAL_SUFFIXES = ("izations", "ization", "ships", "ship", "ments", "ment")
 
 
@@ -339,13 +324,6 @@ def _stem(tok: str) -> str:
     return tok
 
 
-# alias member (stemmed) -> canonical token (stemmed first member of its group)
-_CANONICAL_TOKEN: dict[str, str] = {
-    _stem(member): _stem(group[0])
-    for group in _ALIAS_GROUPS
-    for member in group
-}
-
 # Identifiers and paths like order_created / db.insertApplication / order-created /
 # /blog/write: keep the whole literal as one token (rare -> high idf -> strong
 # evidence), not just its split parts. camelCase already survives the splitter (no
@@ -361,11 +339,14 @@ def _code_literals(text: str) -> set[str]:
 
 
 def _tokens(text: str) -> set[str]:
+    # No global synonym table: vocabulary gaps between a task's wording and a
+    # decision's wording are bridged per decision by its curated `keywords` field
+    # (see _decision_tokens), which scales with the corpus instead of a hand-edited
+    # alias list and can't fold unrelated decisions into one another's matches.
     words = set()
     for tok in re.split(r"[^a-z0-9]+", text.lower()):
         if len(tok) >= 3 and tok not in _STOPWORDS:
-            stem = _stem(tok)
-            words.add(_CANONICAL_TOKEN.get(stem, stem))
+            words.add(_stem(tok))
     return words | _code_literals(text)
 
 
