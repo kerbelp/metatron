@@ -24,6 +24,9 @@ from metatron.extraction.provider import LLMProvider
 from metatron.events import EventKind
 from metatron.extraction.signals import collect_signals
 from metatron.gitlog.reader import GitLogReader
+# The near-duplicate gate lives with the rest of the candidate-intake logic; it has
+# no MCP dependency (the SDK wrapper is mcp_server.server, not .service).
+from metatron.mcp_server.service import find_duplicate
 from metatron.models import IngestRun
 from metatron.parsing.base import ParsedFile
 from metatron.parsing.registry import get_parser_for_path
@@ -105,10 +108,17 @@ def refine_feedback_event(store, event_store, refiner, event_id: str) -> RefineR
 
 
 def _refine_one(store, event_store, refiner, event) -> list[str]:
-    """Refine one feedback event into candidates and mark it handled; return their ids."""
+    """Refine one feedback event into candidates and mark it handled; return their ids.
+
+    Refiner output that near-duplicates a decision already in the store (any status)
+    is skipped rather than added — gap reports often restate known conventions, and
+    each restatement would otherwise land in the curation queue again.
+    """
     produced: list[str] = []
     if event.missing.strip():
         for decision in refiner.refine(event.missing, event.area, event.task):
+            if find_duplicate(store, repo=event.repo, pattern=decision.pattern) is not None:
+                continue
             stored = store.add(decision.model_copy(update={"repo": event.repo}))
             produced.append(stored.id)
     event_store.mark_handled(event.id, produced)

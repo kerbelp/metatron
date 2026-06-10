@@ -216,8 +216,16 @@ def build_server(
         before it becomes canonical and is served to other agents. Nothing you submit here is
         auto-promoted.
 
-        Returns the new candidate decision's id.
+        Returns the new candidate decision's id. If the pattern near-duplicates a decision
+        already on record (in any wording), nothing new is stored and the existing
+        decision's id is returned with a note — no need to resubmit known conventions.
         """
+        duplicate = service.find_duplicate(store, repo=repo, pattern=pattern)
+        if duplicate is not None:
+            return (
+                f"Already on record as decision {duplicate.id} "
+                f"(status: {duplicate.status.value}) — not stored again."
+            )
         decision = service.submit_candidate_decision(
             store,
             repo=repo,

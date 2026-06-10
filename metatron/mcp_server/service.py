@@ -131,6 +131,35 @@ def get_decisions_for_context(
     return picked
 
 
+# Near-duplicate gate for incoming candidates. Pattern-token Jaccard at or above
+# this is "the same rule in different words": agents and the feedback refiner restate
+# conventions the store already holds, and every restatement is another row a human
+# has to triage. Matching runs against ALL statuses on purpose — a candidate dupe is
+# queue spam, a canonical dupe is already served, and a rejected dupe was already
+# turned down by a human; none should (re-)enter the queue.
+_DUPLICATE_SIMILARITY = 0.75
+# Below this many meaningful tokens, overlap is too little signal to call two rules
+# the same ("use the gap helper" vs "mind the gap helper"); never dedupe.
+_MIN_DUPLICATE_TOKENS = 3
+
+
+def find_duplicate(store: DecisionStore, *, repo: str, pattern: str) -> Decision | None:
+    """The existing decision ``pattern`` near-duplicates, if any (highest overlap wins)."""
+    new_tokens = _tokens(pattern)
+    if len(new_tokens) < _MIN_DUPLICATE_TOKENS:
+        return None
+    best: Decision | None = None
+    best_sim = _DUPLICATE_SIMILARITY
+    for existing in store.list(repo=repo):
+        tokens = _tokens(existing.pattern)
+        if len(tokens) < _MIN_DUPLICATE_TOKENS:
+            continue
+        sim = len(new_tokens & tokens) / len(new_tokens | tokens)
+        if sim >= best_sim:
+            best, best_sim = existing, sim
+    return best
+
+
 def submit_candidate_decision(
     store: DecisionStore,
     *,
@@ -141,6 +170,9 @@ def submit_candidate_decision(
     confidence: str | Confidence = Confidence.MEDIUM,
     source_refs: list[SourceRef] | None = None,
 ) -> Decision:
+    duplicate = find_duplicate(store, repo=repo, pattern=pattern)
+    if duplicate is not None:
+        return duplicate
     decision = Decision(
         repo=repo,
         pattern=pattern,
