@@ -15,6 +15,9 @@ The aggregate is deliberately conservative so the loop can't be jerked around:
 - **Shrinkage toward neutral** — a Bayesian pseudo-count pulls decisions with few
   ratings back toward ``NEUTRAL``, so one rave can't crown a decision and one pan can't
   bury it; only a *sustained* pattern moves the score.
+- **Corpus-relative centering** — the ranking signal measures distance from the
+  corpus's own typical rating, not the scale midpoint, because model raters skew
+  positive and would otherwise read as praising everything.
 
 This module is pure: it never reads or writes the store. It only ever *describes*
 helpfulness — promotion/demotion across the canonical set stays human-gated.
@@ -22,7 +25,7 @@ helpfulness — promotion/demotion across the canonical set stays human-gated.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -37,6 +40,12 @@ NEUTRAL = 5.5
 PSEUDO_COUNT = 3.0
 # The score range either side of NEUTRAL, used to normalise into a [-1, 1] signal.
 _HALF_RANGE = 4.5
+# Synthetic ratings for binary-only feedback (helpful/unhelpful lists with no graded
+# ``ratings`` map). Mirror of the derivation in ``submit_feedback`` (≥7 → helpful,
+# ≤4 → noise): one representative score from each band, so cheap binary feedback
+# still feeds serve ordering instead of counting only toward UI tallies.
+BINARY_HELPFUL_RATING = 8
+BINARY_UNHELPFUL_RATING = 3
 
 
 @dataclass(frozen=True)
@@ -45,20 +54,48 @@ class HelpfulnessScore:
 
     ``score`` is on the 1-10 rating scale (shrunk toward :data:`NEUTRAL`);
     ``n_ratings`` is the raw count of ratings it is built from (for "trust" display
-    and review-queue thresholds).
+    and review-queue thresholds); ``baseline`` is the corpus's typical rating — the
+    zero point ``centered`` measures against.
     """
 
     score: float
     n_ratings: int
+    baseline: float = NEUTRAL
 
     @property
     def centered(self) -> float:
-        """Score relative to neutral in roughly [-1, 1] (the ranking signal)."""
-        return (self.score - NEUTRAL) / _HALF_RANGE
+        """Score relative to the corpus baseline, clamped to [-1, 1] (the ranking signal).
+
+        Model raters skew positive — most ratings land 7-9 — so distance from the
+        scale midpoint would mark nearly every decision "helpful" and compress the
+        ordering signal. Measured against the corpus's own (decayed, shrunk) mean
+        rating instead, this reads "better/worse than this repo's typical decision".
+        """
+        raw = (self.score - self.baseline) / _HALF_RANGE
+        return max(-1.0, min(1.0, raw))
 
 
-def _ratings_events(events: Iterable[Event]) -> Iterable[Event]:
-    return (e for e in events if e.kind is EventKind.FEEDBACK and e.ratings)
+def _event_ratings(event: Event) -> dict[str, int]:
+    """The graded ratings an event contributes, synthesized from binary lists if needed.
+
+    Graded ``ratings`` take precedence: when present, the binary lists were derived
+    *from* them at capture, so counting both would double-count. Only a binary-only
+    event gets synthetic scores (helpful wins if an id somehow appears in both lists).
+    """
+    if event.ratings:
+        return event.ratings
+    synthetic = {pid: BINARY_UNHELPFUL_RATING for pid in event.unhelpful_decision_ids}
+    synthetic.update({pid: BINARY_HELPFUL_RATING for pid in event.helpful_decision_ids})
+    return synthetic
+
+
+def _ratings_events(events: Iterable[Event]) -> Iterator[tuple[Event, dict[str, int]]]:
+    for event in events:
+        if event.kind is not EventKind.FEEDBACK:
+            continue
+        ratings = _event_ratings(event)
+        if ratings:
+            yield event, ratings
 
 
 def _age_days(ts: datetime, now: datetime) -> float:
@@ -72,23 +109,36 @@ def helpfulness_scores(
     """Aggregate ratings across feedback events into a score per decision id.
 
     ``events`` is any iterable of events (non-feedback and unrated events are
-    ignored). Returns only decisions that have at least one rating. ``now`` defaults to
-    the current UTC time and is injectable for deterministic tests.
+    ignored; binary-only feedback contributes synthetic ratings). Returns only
+    decisions that have at least one rating. ``now`` defaults to the current UTC
+    time and is injectable for deterministic tests.
     """
     now = now or datetime.now(timezone.utc)
     weighted_sum: dict[str, float] = {}
     weight_total: dict[str, float] = {}
     counts: dict[str, int] = {}
 
-    for event in _ratings_events(events):
+    for event, ratings in _ratings_events(events):
         w = 0.5 ** (_age_days(event.timestamp, now) / HALF_LIFE_DAYS)
-        for decision_id, raw in event.ratings.items():
+        for decision_id, raw in ratings.items():
             weighted_sum[decision_id] = weighted_sum.get(decision_id, 0.0) + w * raw
             weight_total[decision_id] = weight_total.get(decision_id, 0.0) + w
             counts[decision_id] = counts.get(decision_id, 0) + 1
 
+    # Corpus baseline, leave-one-out: each decision is centered against the decayed,
+    # shrunk mean rating of the *other* decisions — its own ratings never move its
+    # own zero point. With sparse data (or a lone rated decision) the baseline
+    # degrades gracefully to NEUTRAL, restoring midpoint centering.
+    all_sum = sum(weighted_sum.values())
+    all_weight = sum(weight_total.values())
+
     scores: dict[str, HelpfulnessScore] = {}
     for decision_id, total_w in weight_total.items():
         score = (weighted_sum[decision_id] + PSEUDO_COUNT * NEUTRAL) / (total_w + PSEUDO_COUNT)
-        scores[decision_id] = HelpfulnessScore(score=score, n_ratings=counts[decision_id])
+        baseline = (all_sum - weighted_sum[decision_id] + PSEUDO_COUNT * NEUTRAL) / (
+            all_weight - total_w + PSEUDO_COUNT
+        )
+        scores[decision_id] = HelpfulnessScore(
+            score=score, n_ratings=counts[decision_id], baseline=baseline
+        )
     return scores

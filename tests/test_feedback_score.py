@@ -79,3 +79,56 @@ def test_centered_signal_is_bounded_and_signed():
 def test_scores_are_independent_per_decision():
     scores = helpfulness_scores([_fb({"p1": 9, "p2": 2})], now=NOW)
     assert scores["p1"].score > NEUTRAL > scores["p2"].score
+
+
+def _fb_binary(helpful=(), unhelpful=(), *, days_ago=0):
+    return Event(
+        repo="r", kind=EventKind.FEEDBACK,
+        helpful_decision_ids=list(helpful), unhelpful_decision_ids=list(unhelpful),
+        timestamp=NOW - timedelta(days=days_ago),
+    )
+
+
+def test_binary_only_feedback_feeds_the_score():
+    # An agent that sends helpful/unhelpful lists without graded ratings still
+    # contributes to serve ordering, via synthetic ratings.
+    scores = helpfulness_scores([_fb_binary(helpful=["p1"], unhelpful=["p2"])], now=NOW)
+    assert scores["p1"].score > NEUTRAL
+    assert scores["p2"].score < NEUTRAL
+
+
+def test_ratings_take_precedence_over_derived_binary_lists():
+    # submit_feedback derives the binary lists FROM ratings when both are present;
+    # such an event must count each rating exactly once.
+    both = Event(
+        repo="r", kind=EventKind.FEEDBACK, ratings={"p1": 10},
+        helpful_decision_ids=["p1"], timestamp=NOW,
+    )
+    assert (
+        helpfulness_scores([both], now=NOW)["p1"]
+        == helpfulness_scores([_fb({"p1": 10})], now=NOW)["p1"]
+    )
+
+
+def test_centered_is_relative_to_the_corpus_mean_rating():
+    # Model raters skew positive. When every rating is high, "centered" must measure
+    # better/worse than this corpus's typical rating, not distance from the scale
+    # midpoint — otherwise everything reads as helpful and the signal collapses.
+    events = [_fb({"hi": 9, "lo": 7}) for _ in range(10)]
+    scores = helpfulness_scores(events, now=NOW)
+    assert scores["hi"].centered > 0
+    assert scores["lo"].centered < 0
+
+
+def test_corpus_baseline_shrinks_to_the_midpoint_when_sparse():
+    # One rating is not a corpus: the baseline stays pulled to NEUTRAL, so a single
+    # high rating still centers positive (pre-existing behavior).
+    s = helpfulness_scores([_fb({"p1": 10})], now=NOW)["p1"]
+    assert s.centered > 0
+
+
+def test_centered_stays_bounded_under_a_skewed_baseline():
+    # Even with an extreme corpus (all 1s plus one 10), centered stays in [-1, 1].
+    events = [_fb({f"p{i}": 1}) for i in range(20)] + [_fb({"top": 10})]
+    scores = helpfulness_scores(events, now=NOW)
+    assert all(-1.0 <= s.centered <= 1.0 for s in scores.values())
