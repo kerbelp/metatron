@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     pattern     TEXT NOT NULL,
     scope       TEXT NOT NULL,
     rationale   TEXT NOT NULL,
+    keywords    TEXT NOT NULL DEFAULT '[]',
     origin      TEXT NOT NULL,
     confidence  TEXT NOT NULL,
     model       TEXT NOT NULL DEFAULT '',
@@ -46,6 +47,7 @@ _COLUMNS = (
     "pattern",
     "scope",
     "rationale",
+    "keywords",
     "origin",
     "confidence",
     "model",
@@ -138,6 +140,7 @@ class SQLiteDecisionStore(DecisionStore):
         _ensure_column(self._conn, "decisions", "created_version", "created_version TEXT NOT NULL DEFAULT ''")
         _ensure_column(self._conn, "decisions", "triage", "triage TEXT NOT NULL DEFAULT 'none'")
         _ensure_column(self._conn, "decisions", "triage_reason", "triage_reason TEXT NOT NULL DEFAULT ''")
+        _ensure_column(self._conn, "decisions", "keywords", "keywords TEXT NOT NULL DEFAULT '[]'")
         self._conn.commit()
 
     def add(self, decision: Decision) -> Decision:
@@ -461,10 +464,12 @@ def _filter(
 def _to_row(decision: Decision) -> dict:
     data = decision.model_dump(mode="json")
     data["source_refs"] = json.dumps(data["source_refs"])
+    data["keywords"] = json.dumps(data["keywords"])
     return data
 
 
 def _from_row(row: sqlite3.Row) -> Decision:
     data = dict(row)
     data["source_refs"] = json.loads(data["source_refs"])
+    data["keywords"] = json.loads(data["keywords"])
     return Decision.model_validate(data)

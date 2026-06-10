@@ -85,6 +85,10 @@ class Decision(BaseModel):
     pattern: str
     scope: str
     rationale: str
+    # Retrieval keywords: terms an engineer might use in a task description that the
+    # pattern/rationale wording does not contain (synonyms, code identifiers). They
+    # widen lexical matching at serve time and are curated alongside the decision.
+    keywords: list[str] = Field(default_factory=list)
     origin: Origin
     confidence: Confidence = Confidence.MEDIUM
     model: str = ""  # the model that extracted it ("" for agent-submitted decisions)
