@@ -223,6 +223,19 @@ class SQLiteDecisionStore(DecisionStore):
         self._conn.commit()
         return updated
 
+    def set_keywords(self, decision_id: str, keywords: list[str]) -> Decision:
+        decision = self.get(decision_id)
+        if decision is None:
+            raise KeyError(decision_id)
+        now = datetime.now(timezone.utc)
+        updated = decision.model_copy(update={"keywords": list(keywords), "updated_at": now})
+        self._conn.execute(
+            "UPDATE decisions SET keywords = ?, updated_at = ? WHERE id = ?",
+            (json.dumps(updated.keywords), now.isoformat(), decision_id),
+        )
+        self._conn.commit()
+        return updated
+
     def update_fields(self, decision_id, *, pattern=None, scope=None, rationale=None, confidence=None):
         decision = self.get(decision_id)
         if decision is None:

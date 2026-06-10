@@ -171,3 +171,19 @@ def test_keywords_round_trip(store):
     store.add(decision)
     assert store.get(decision.id).keywords == ["presigned", "media-store", "s3"]
     assert store.get(decision.id) == decision
+
+
+def test_set_keywords_updates_only_keywords(store):
+    decision = _decision()
+    store.add(decision)
+    updated = store.set_keywords(decision.id, ["s3", "presigned"])
+    assert updated.keywords == ["s3", "presigned"]
+    loaded = store.get(decision.id)
+    assert loaded.keywords == ["s3", "presigned"]
+    assert loaded.pattern == decision.pattern
+    assert loaded.updated_at >= decision.updated_at
+
+
+def test_set_keywords_missing_decision_raises(store):
+    with pytest.raises(KeyError):
+        store.set_keywords("does-not-exist", ["x"])

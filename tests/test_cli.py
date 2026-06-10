@@ -479,3 +479,42 @@ def test_version_command_shows_update_notice(monkeypatch):
     out = io.StringIO()
     main(["version"], out=out)
     assert "update available: 0.3.0" in out.getvalue()
+
+
+class EnrichProvider:
+    """Returns keywords for every numbered decision in the prompt."""
+
+    model = "claude-test"
+
+    def complete(self, prompt: str) -> str:
+        import json
+        import re
+
+        ns = [int(n) for n in re.findall(r'"n":\s*(\d+)', prompt)]
+        return json.dumps([{"n": n, "keywords": [f"kw{n}", "shared"]} for n in ns])
+
+
+def test_enrich_keywords_backfills_canonical_decisions_without_keywords():
+    store = SQLiteDecisionStore(":memory:")
+    bare = _candidate("no keywords yet")
+    bare.status = Status.CANONICAL
+    has = _candidate("already enriched")
+    has.status = Status.CANONICAL
+    has.keywords = ["existing"]
+    cand = _candidate("still a candidate")
+    for d in (bare, has, cand):
+        store.add(d)
+
+    out = io.StringIO()
+    code = main(
+        ["enrich-keywords", "--repo", "github.com/acme/app"],
+        store=store, provider=EnrichProvider(), out=out,
+    )
+
+    assert code == 0
+    assert store.get(bare.id).keywords == ["kw1", "shared"]
+    # decisions that already have keywords are left alone
+    assert store.get(has.id).keywords == ["existing"]
+    # candidates are not touched by the default canonical backfill
+    assert store.get(cand.id).keywords == []
+    assert "1" in out.getvalue()

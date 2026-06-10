@@ -68,7 +68,7 @@ conventions extraction can't see (cross-file/workflow rules).
 ## Prerequisites
 
 - **Git** (installed on your system, to analyze repository commit history and parse files)
-- **An Anthropic API key** — only for the LLM extraction steps (`ingest`, `triage`, `refine-feedback`). `serve`, `ui`, and `candidates` are fully local and need no key.
+- **An Anthropic API key** — only for the LLM extraction steps (`ingest`, `triage`, `enrich-keywords`, `refine-feedback`). `serve`, `ui`, and `candidates` are fully local and need no key.
 
 *Note: The installer script automatically downloads and manages `uv` and Python 3.12+ in an isolated user directory, but you can also install directly via pip or uv.*
 
@@ -229,15 +229,16 @@ automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
 
 ```text
 $ metatron --help
-usage: metatron [-h] {ingest,serve,repo,ui,triage,refine-feedback,candidates} ...
+usage: metatron [-h] {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates} ...
 
 positional arguments:
-  {ingest,serve,repo,ui,triage,refine-feedback,candidates}
+  {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates}
     ingest              bootstrap candidate decisions from a repo
     serve               serve one repo's decisions to agents over MCP
     repo                inspect the repos in the store
     ui                  launch the local curation web UI
     triage              run the advisory judge over candidate decisions (does not auto-curate)
+    enrich-keywords     backfill retrieval keywords on canonical decisions that lack them (does not curate)
     refine-feedback     reshape captured agent feedback into structured candidate decisions (Opus)
     candidates          review and curate candidate decisions
 ```

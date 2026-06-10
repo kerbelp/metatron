@@ -62,6 +62,13 @@ class DecisionStore(ABC):
         """Set a decision's advisory triage verdict + reason. Raises ``KeyError`` if absent."""
 
     @abstractmethod
+    def set_keywords(self, decision_id: str, keywords: list[str]) -> Decision:
+        """Replace a decision's retrieval keywords, bump ``updated_at``, and return it.
+
+        Raises ``KeyError`` if no decision has this id.
+        """
+
+    @abstractmethod
     def list_repos(self) -> list[str]:
         """Return the distinct repo identities present in the store."""
 

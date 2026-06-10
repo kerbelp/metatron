@@ -185,6 +185,9 @@ class CatalogDecisionStore(DecisionStore):
     def set_triage(self, decision_id: str, verdict: TriageVerdict, reason: str) -> Decision:
         return self._p(self._owner(decision_id)).set_triage(decision_id, verdict, reason)
 
+    def set_keywords(self, decision_id: str, keywords: list[str]) -> Decision:
+        return self._p(self._owner(decision_id)).set_keywords(decision_id, keywords)
+
     def update_fields(self, decision_id, *, pattern=None, scope=None, rationale=None, confidence=None):
         return self._p(self._owner(decision_id)).update_fields(
             decision_id, pattern=pattern, scope=scope, rationale=rationale, confidence=confidence,

@@ -200,6 +200,12 @@ def main(
                     model=settings.model, api_key=settings.anthropic_api_key
                 )
             return _cmd_triage(args, store, provider, settings, out)
+        if args.command == "enrich-keywords":
+            if provider is None:
+                provider = AnthropicProvider(
+                    model=settings.model, api_key=settings.anthropic_api_key
+                )
+            return _cmd_enrich_keywords(args, store, provider, settings, out)
         if args.command == "refine-feedback":
             if provider is None:
                 # Reshaping feedback is higher-stakes than extraction — default to Opus.
@@ -429,6 +435,64 @@ def _cmd_triage(args, store, provider, settings, out) -> int:
     return 0
 
 
+def _cmd_enrich_keywords(args, store, provider, settings, out) -> int:
+    from metatron.extraction.enrich import KeywordEnricher
+    from metatron.pricing import estimate_cost
+
+    repo = _resolve_and_announce(args.repo, store, settings, out)
+    # Canonical only by default: those are the decisions being served, so they are
+    # where missing keywords cost retrieval. Candidates gain keywords at extraction
+    # going forward and get enriched here once approved.
+    decisions = [
+        p for p in store.list(repo=repo, status=Status.CANONICAL, limit=args.limit)
+        if not p.keywords
+    ]
+    if not decisions:
+        print("No canonical decisions are missing keywords.", file=out)
+        return 0
+
+    results = KeywordEnricher(provider).enrich(
+        decisions, on_progress=_enrich_progress(out)
+    )
+    for decision_id, keywords in results.items():
+        try:
+            store.set_keywords(decision_id, keywords)
+        except KeyError:
+            continue  # defensive: a decision deleted mid-run is not fatal
+
+    print(f"Enriched {len(results)} of {len(decisions)} decision(s) with keywords.", file=out)
+    cost = estimate_cost(
+        getattr(provider, "model", ""),
+        getattr(provider, "input_tokens", 0),
+        getattr(provider, "output_tokens", 0),
+    )
+    if cost is not None:
+        print(f"  enrich cost: ~${cost:.2f}", file=out)
+    return 0
+
+
+def _enrich_progress(out):
+    """A progress reporter for enrich-keywords: a header, then a line per batch."""
+    def report(p: dict) -> None:
+        total = p["decisions_total"]
+        batches = p["batches_total"]
+        if p["phase"] == "start":
+            if total:
+                print(
+                    f"Enriching {total} decision(s) in {batches} batch(es) — "
+                    "one call each, this can take a moment…",
+                    file=out, flush=True,
+                )
+        elif p["phase"] == "enriching":
+            print(
+                f"  [batch {p['batches_done'] + 1}/{batches}] "
+                f"{p['decisions_done']}/{total} enriched so far …",
+                file=out, flush=True,
+            )
+
+    return report
+
+
 def _triage_progress(out):
     """A progress reporter for triage: a header, then a line per judged batch.
 
@@ -642,6 +706,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="repo id (defaults to METATRON_REPO, else the current dir's id)",
     )
     triage_p.add_argument("--limit", type=int, default=None, help="max candidates to judge")
+
+    enrich_p = sub.add_parser(
+        "enrich-keywords",
+        help="backfill retrieval keywords on canonical decisions that lack them (does not curate)",
+    )
+    enrich_p.add_argument(
+        "--repo", default=None,
+        help="repo id (defaults to METATRON_REPO, else the current dir's id)",
+    )
+    enrich_p.add_argument("--limit", type=int, default=None, help="max decisions to enrich")
 
     refine_p = sub.add_parser(
         "refine-feedback",
