@@ -143,6 +143,71 @@ def test_global_decision_surfaces_on_keyword_match():
     assert "always handle webhook retries" in [p.pattern for p in results]
 
 
+def test_submit_skips_near_duplicate_of_existing_decision():
+    # Re-submitting an existing convention in slightly different words must not add
+    # a second row to the curation queue; the existing decision is returned instead.
+    existing = _canonical(
+        pattern="Use internal.http for outbound calls, not the requests library",
+        scope="src/services", rationale="retries built in",
+    )
+    store = _store(existing)
+    returned = submit_candidate_decision(
+        store, repo=REPO,
+        pattern="Use the internal.http client for all outbound calls instead of the requests library",
+        scope="src/services", rationale="the client retries",
+    )
+    assert returned.id == existing.id
+    assert len(store.list(repo=REPO)) == 1
+
+
+def test_submit_dedupes_against_rejected_decisions():
+    # A human already rejected this convention; re-submitting it must not put it
+    # back into the curation queue.
+    rejected = Decision(
+        repo=REPO, pattern="Wrap database writes in the transaction helper",
+        scope="src/db", rationale="r", origin=Origin.BOOTSTRAP, status=Status.REJECTED,
+    )
+    store = _store(rejected)
+    returned = submit_candidate_decision(
+        store, repo=REPO, pattern="Wrap all database writes in the transaction helper",
+        scope="src/db", rationale="consistency",
+    )
+    assert returned.id == rejected.id
+    assert len(store.list(repo=REPO)) == 1
+
+
+def test_submit_keeps_distinct_patterns():
+    store = _store(
+        _canonical(pattern="Use internal.http for outbound calls", scope="src/services", rationale="r"),
+    )
+    submit_candidate_decision(
+        store, repo=REPO, pattern="Validate webhook signatures before processing the payload",
+        scope="src/services", rationale="r",
+    )
+    assert len(store.list(repo=REPO)) == 2
+
+
+def test_submit_dedup_is_scoped_to_the_repo():
+    other = Decision(
+        repo="github.com/other/x", pattern="Wrap database writes in the transaction helper",
+        scope="src/db", rationale="r", origin=Origin.BOOTSTRAP, status=Status.CANONICAL,
+    )
+    store = _store(other)
+    returned = submit_candidate_decision(
+        store, repo=REPO, pattern="Wrap database writes in the transaction helper",
+        scope="src/db", rationale="r",
+    )
+    assert returned.id != other.id
+    assert len(store.list(repo=REPO)) == 1
+
+
+def test_short_patterns_are_never_deduped():
+    # A couple of shared tokens is not enough signal to call two rules the same.
+    store = _store(_canonical(pattern="use the gap helper", scope="src", rationale="r"))
+    submit_candidate_decision(store, repo=REPO, pattern="mind the gap helper", scope="src", rationale="r")
+    assert len(store.list(repo=REPO)) == 2
+
+
 def test_glob_scope_matches_files_inside_it():
     # The submit tool documents glob scopes like "src/services/**"; a decision scoped
     # that way must get scope credit for files inside src/services, exactly as a

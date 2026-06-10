@@ -89,6 +89,38 @@ def test_refine_feedback_creates_candidates_marks_handled_and_is_idempotent():
     assert (again.events_processed, again.decisions_created) == (0, 0)
 
 
+class FixedRefiner:
+    def __init__(self, patterns: list[str]) -> None:
+        self.patterns = patterns
+
+    def refine(self, gap: str, scope_hint: str = "", task: str = "") -> list[Decision]:
+        return [
+            Decision(repo="placeholder", pattern=pat, scope=scope_hint,
+                  rationale="r", origin=Origin.AGENT_FEEDBACK)
+            for pat in self.patterns
+        ]
+
+
+def test_refine_feedback_skips_candidates_duplicating_existing_decisions():
+    # The refiner often restates a convention the store already holds; near-duplicate
+    # output must not add another row to the curation queue.
+    s, ev = SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:")
+    s.add(Decision(repo=REPO, pattern="Wrap database writes in the transaction helper",
+                   scope="src/db", rationale="r", origin=Origin.AGENT_FEEDBACK))
+    ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap", area="src/db"))
+
+    res = refine_feedback(s, ev, FixedRefiner([
+        "Wrap all database writes in the transaction helper",   # near-duplicate
+        "Validate webhook signatures before processing the payload",  # genuinely new
+    ]), repo=REPO)
+
+    assert (res.events_processed, res.decisions_created) == (1, 1)
+    patterns = [p.pattern for p in s.list(repo=REPO)]
+    assert "Validate webhook signatures before processing the payload" in patterns
+    assert len(patterns) == 2
+    assert ev.unhandled_feedback(repo=REPO) == []  # still marked handled
+
+
 def test_refine_feedback_reports_progress_per_event():
     s, ev = SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:")
     ev.record(Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap one", area="src/a"))
