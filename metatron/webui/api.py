@@ -15,7 +15,7 @@ from metatron.models import Origin, Status, TriageVerdict
 from metatron.pricing import estimate_cost
 from metatron.storage.base import EventStore, DecisionStore
 from metatron.version import package_version, version_string, check_for_update
-from metatron.webui.observability import usage_summary
+from metatron.webui.observability import growth_series, usage_summary
 
 
 def version() -> dict:
@@ -129,6 +129,10 @@ def stats(store: DecisionStore, *, repo: str | None = None) -> dict:
     repo_filter = repo or None
     counts = {s.value: store.count(repo=repo_filter, status=s) for s in Status}
     counts["total"] = store.count(repo=repo_filter)
+    # Real series for the "knowledge growth" chart: cumulative canonical decisions
+    # per day. Flat at zero when the catalog is empty — never a synthetic trend.
+    canonical = store.list(repo=repo_filter, status=Status.CANONICAL)
+    counts["growth"] = growth_series(canonical)
     return counts
 
 

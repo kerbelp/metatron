@@ -479,3 +479,18 @@ def test_update_decision_ignores_malformed_keywords(store):
     assert out["ok"] is True
     assert store.get(d.id).pattern == "edited"
     assert store.get(d.id).keywords == []
+
+
+def test_stats_growth_series_is_flat_zero_on_empty_store(store):
+    result = stats(store)
+    assert result["growth"] == [0] * 14
+
+
+def test_stats_growth_series_ends_at_canonical_total(store):
+    _add(store, 3, status=Status.CANONICAL)
+    _add(store, 2, status=Status.CANDIDATE)  # candidates don't count
+
+    result = stats(store)
+
+    assert result["growth"][-1] == 3
+    assert result["growth"] == sorted(result["growth"])
