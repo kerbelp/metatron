@@ -62,7 +62,7 @@ function OverviewView({ repo, openDecision, goto }) {
           </div>
           <div className="panel pad enter enter-3" style={{ display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <div className="panel-head"><h3>Knowledge growth</h3><span className="sub">canonical decisions over time</span></div>
-            <Spark data={[6, 9, 12, 18, 21, 27, 33, 38, 41, 44, s.canonical]} w={560} h={78} color="var(--teal)" strokeW={2.4} />
+            <Spark data={s.growth} w={560} h={78} color="var(--teal)" strokeW={2.4} />
           </div>
         </div>
       </div>

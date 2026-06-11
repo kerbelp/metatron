@@ -73,10 +73,10 @@ function AgentImpactView({ repo, openPanel }) {
 
       {/* impact summary */}
       <div className="grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 18 }}>
-        <StatCard label="Queries answered" value={u.total_queries} series={[28, 36, 33, 48, 52, 60, 71, 83]} sub={`${u.avg_served} decisions served on average`} delay={0.02} />
-        <StatCard label="Coverage" value={u.coverage * 100} decimals={1} suffix="%" color="var(--emerald)" series={[60, 66, 70, 74, 78, 80, 83, 84]} sub={`${u.misses.toLocaleString()} misses logged`} delay={0.08} />
-        <StatCard label="Helpful rate" value={helpfulRate * 100} decimals={1} suffix="%" color="var(--cyan)" series={[70, 72, 75, 79, 80, 82, 84, 85]} sub="agents rate served decisions 1–10" delay={0.14} />
-        <StatCard label="Decisions in flight" value={u.served_decisions} color="var(--violet)" series={[40, 52, 49, 63, 70, 81, 90, 99]} sub="cumulative decisions delivered" delay={0.2} />
+        <StatCard label="Queries answered" value={u.total_queries} series={u.daily.queries} sub={`${u.avg_served} decisions served on average`} delay={0.02} />
+        <StatCard label="Coverage" value={u.coverage * 100} decimals={1} suffix="%" color="var(--emerald)" series={u.daily.coverage} sub={`${u.misses.toLocaleString()} misses logged`} delay={0.08} />
+        <StatCard label="Helpful rate" value={helpfulRate * 100} decimals={1} suffix="%" color="var(--cyan)" series={u.daily.helpful_rate} sub="agents rate served decisions 1–10" delay={0.14} />
+        <StatCard label="Decisions in flight" value={u.served_decisions} color="var(--violet)" series={u.daily.served} sub="cumulative decisions delivered" delay={0.2} />
       </div>
 
       {/* knowledge in flight — bidirectional agent constellation */}

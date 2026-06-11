@@ -151,11 +151,13 @@ function App() {
   );
   if (boot === "empty") return (
     <div style={{ height: "100vh", display: "grid", placeItems: "center" }}>
-      <div className="state-box">
-        <div className="dim"><Icon name="spark" size={26} /></div>
-        <div className="t">No repositories yet</div>
-        <div className="d">This catalog has no repositories. Run an ingest, or — if you set <span className="mono">METATRON_DB</span> — confirm it points at the right directory.</div>
-        <button className="btn" onClick={repos.reload}>Retry</button>
+      <div className="state-box" style={{ maxWidth: 460 }}>
+        <div style={{ animation: "float-y 3s ease-in-out infinite" }}><MetatronEmblem size={88} /></div>
+        <div className="t" style={{ marginTop: 18 }}>Onboard your first repo</div>
+        <div className="d">Metatron mines a repo's code and git history into decision candidates for you to curate. Start with:</div>
+        <code className="mono" style={{ display: "block", padding: "12px 16px", borderRadius: 10, background: "rgba(120,200,180,.07)", border: "1px solid var(--line)", color: "var(--teal)", fontSize: 12.5, userSelect: "all" }}>metatron ingest /path/to/your/repo</code>
+        <div className="d dim" style={{ fontSize: 11.5 }}>Then refresh — the catalog appears here. If you set <span className="mono">METATRON_DB</span>, confirm it points at the right directory.</div>
+        <button className="btn" onClick={repos.reload}>Refresh</button>
       </div>
     </div>
   );
