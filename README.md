@@ -366,6 +366,19 @@ metatron mirror import           # files -> DB: apply edits, promotions, and new
 concurrent DB+file edits as conflicts rather than clobbering them. Both take
 `--repo <id>` and `--root <path>` (the repo root that holds `metatron/`, default `.`).
 
+Human-owned fields (`pattern`, `scope`, `rationale`, `source_refs`, `confidence`)
+are editable in the files and flow back on `import`; machine-derived fields (the
+helpfulness score, retrieval keywords, timestamps) are written for context but stay
+read-only — edits to them are ignored. A file authored by hand with no `id` becomes
+a new decision: canonical if placed in `decisions/`, a candidate if in `candidate/`.
+
+**Open Knowledge Format.** The bundle is a valid
+[Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
+bundle — each decision is an OKF *concept*: plain markdown with YAML frontmatter,
+readable in any editor, renderable on GitHub, and portable across tools. `mirror
+sync --okf` also writes an OKF `index.md`. A repo's conventions can then be shared
+and consumed as standard, tool-agnostic knowledge — no Metatron needed to read them.
+
 ### `serve` — expose canonical decisions to agents over MCP
 
 ```bash
