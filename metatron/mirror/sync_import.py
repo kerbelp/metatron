@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from metatron.models import Status, Confidence
+from metatron.models import Status, Confidence, Decision, Origin
 from metatron.mirror.render import (
     parse_document, fingerprint_decision, fingerprint_fields,
 )
@@ -47,8 +47,27 @@ def import_bundle(store, repo: str, root: Path) -> ImportResult:
         did = fields.get("id")
         decision = store.get(did) if did else None
         status = status_for_path(path)
+        if did is None:
+            # Hand-authored file with no id: the human placing it in this
+            # directory IS the approval, so create the decision at the
+            # directory-derived status.
+            new = Decision(
+                repo=repo,
+                pattern=fields.get("pattern", ""),
+                scope=fields.get("scope", ""),
+                rationale=fields.get("rationale", ""),
+                origin=Origin.HUMAN,
+                status=status,
+                confidence=Confidence(fields["confidence"]) if fields.get("confidence") else Confidence.MEDIUM,
+            )
+            created = store.add(new)
+            res.updated.append(created.id)
+            continue
         if decision is None:
-            continue  # new-file authoring handled in a later task
+            # File carries an id we don't know (e.g. copied from another repo).
+            # Do not mint a decision under a foreign identity; surface it.
+            res.warnings.append(f"{did}: unknown decision id; skipped.")
+            continue
         # machine-field guard: warn if read-only frontmatter was edited
         raw = _raw_frontmatter(text)
         if "keywords" in raw and list(raw["keywords"]) != list(decision.keywords):

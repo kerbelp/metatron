@@ -98,6 +98,25 @@ def test_missing_baseline_with_divergence_is_a_conflict(tmp_path):
     assert store.get(d.id).pattern == "db-changed"           # not clobbered
 
 
+def test_new_file_without_id_creates_a_decision(tmp_path):
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    d_dir = root / "metatron" / "decisions"
+    d_dir.mkdir(parents=True)
+    (d_dir / "hand-authored.md").write_text(
+        "---\nscope: web\nconfidence: high\n---\n\n"
+        "## Pattern\nAlways gzip API responses.\n\n## Rationale\nBandwidth.\n")
+    res = import_bundle(store, repo="r", root=root)
+    created = store.list(repo="r", status=Status.CANONICAL)
+    assert len(created) == 1
+    assert created[0].pattern == "Always gzip API responses."
+    assert created[0].rationale == "Bandwidth."
+    assert created[0].origin == Origin.HUMAN
+    assert created[0].scope == "web"
+    assert created[0].confidence == Confidence.HIGH
+    assert created[0].id in res.updated
+
+
 def test_clearing_rationale_field_applies(tmp_path):
     # Bug 3: clearing a human body field is a legitimate edit and must apply.
     store = _store(tmp_path)
