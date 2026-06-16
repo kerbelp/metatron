@@ -1,5 +1,5 @@
 from metatron.models import Decision, Origin, Confidence, SourceRef, SourceRefKind
-from metatron.mirror.render import render_document
+from metatron.mirror.render import render_document, parse_document
 
 
 def _decision(**kw):
@@ -23,3 +23,26 @@ def test_render_marks_machine_fields_readonly():
     text = render_document(_decision(), helpfulness=None)
     assert "keywords:" in text
     assert "read-only" in text.lower()
+
+
+def test_parse_returns_human_fields_only():
+    text = render_document(_decision(), helpfulness=None)
+    parsed = parse_document(text)
+    assert parsed["id"]                      # identity preserved
+    assert parsed["scope"] == "web/api"
+    assert parsed["confidence"] == "medium"
+    assert parsed["pattern"] == "Use zod at API boundaries"
+    assert parsed["rationale"].startswith("Hand-rolled")
+    # machine-owned fields are NOT returned as editable
+    assert "keywords" not in parsed
+    assert "helpfulness_score" not in parsed
+    assert "updated_at" not in parsed
+
+
+def test_render_then_parse_preserves_human_fields():
+    d = _decision()
+    parsed = parse_document(render_document(d, helpfulness=None))
+    assert parsed["id"] == d.id
+    assert parsed["scope"] == d.scope
+    assert parsed["pattern"] == d.pattern
+    assert parsed["rationale"] == d.rationale
