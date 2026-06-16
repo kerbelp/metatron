@@ -129,3 +129,77 @@ def test_clearing_rationale_field_applies(tmp_path):
     res = import_bundle(store, repo="r", root=root)
     assert store.get(d.id).rationale == ""
     assert d.id in res.updated
+
+
+def test_import_confined_to_target_repo(tmp_path):
+    # A bundle file whose id belongs to repo A must not be applied while importing
+    # under repo B: a shared store's get() finds it cross-repo, but import must skip.
+    store = _store(tmp_path)
+    a = store.add(Decision(repo="A", pattern="p", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="A", root=root, events=[])
+    # Move A's exported candidate file into decisions/ (would normally promote).
+    src = next((root / "metatron" / "candidate").glob("*.md"))
+    dst = root / "metatron" / "decisions" / src.name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    res = import_bundle(store, repo="B", root=root)
+    assert store.get(a.id).status == Status.CANDIDATE  # UNCHANGED
+    assert a.id not in res.promoted
+    assert a.id not in res.updated
+    assert any(a.id in w and "different repo" in w for w in res.warnings)
+
+
+def test_create_honors_source_refs(tmp_path):
+    # A hand-authored (no-id) file's source_refs must be honored at creation.
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    d_dir = root / "metatron" / "decisions"
+    d_dir.mkdir(parents=True)
+    (d_dir / "hand-authored.md").write_text(
+        '---\nscope: web\nconfidence: high\nsource_refs: ["src/x.py:10"]\n---\n\n'
+        "## Pattern\nP.\n\n## Rationale\nR.\n")
+    import_bundle(store, repo="r", root=root)
+    created = store.list(repo="r", status=Status.CANONICAL)
+    assert len(created) == 1
+    refs = created[0].source_refs
+    assert len(refs) == 1
+    assert refs[0].ref == "src/x.py:10"
+
+
+def test_unchanged_bundle_roundtrip_produces_no_warnings(tmp_path):
+    # M2: exporting then importing an unedited bundle must not warn.
+    store = _store(tmp_path)
+    store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                       origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    res = import_bundle(store, repo="r", root=root)
+    assert res.warnings == []
+
+
+def test_unedited_datetime_timestamp_does_not_warn(tmp_path):
+    # M2: yaml.safe_load turns an unquoted ISO timestamp into a datetime whose
+    # str() uses a space, not 'T'. An UNEDITED timestamp in that form must not
+    # produce a spurious read-only warning.
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    dec = store.get(d.id)
+    # Rewrite the timestamps in the form yaml parses into datetime objects
+    # (unquoted, space separator) — semantically identical to the DB value.
+    text = f.read_text()
+    text = text.replace(
+        f"created_at: '{dec.created_at.isoformat()}'",
+        f"created_at: {dec.created_at.isoformat().replace('T', ' ')}",
+    ).replace(
+        f"updated_at: '{dec.updated_at.isoformat()}'",
+        f"updated_at: {dec.updated_at.isoformat().replace('T', ' ')}",
+    )
+    f.write_text(text)
+    res = import_bundle(store, repo="r", root=root)
+    assert not any("created_at" in w or "updated_at" in w for w in res.warnings)

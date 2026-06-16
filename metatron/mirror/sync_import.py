@@ -4,14 +4,15 @@ fields are ignored (warned); concurrent DB+file edits are surfaced, not clobbere
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
-from metatron.models import Status, Confidence, Decision, Origin
+from metatron.models import (
+    Status, Confidence, Decision, Origin, SourceRef, SourceRefKind,
+)
 from metatron.mirror.render import (
-    parse_document, fingerprint_decision, fingerprint_fields,
+    parse_document, fingerprint_decision, fingerprint_fields, split_frontmatter,
 )
 from metatron.mirror.layout import status_for_path
 
@@ -25,9 +26,21 @@ class ImportResult:
 
 
 def _raw_frontmatter(text: str) -> dict:
-    _, _, rest = text.partition("---\n")
-    front_raw, _, _ = rest.partition("\n---\n")
-    return yaml.safe_load(front_raw) or {}
+    fm, _ = split_frontmatter(text)
+    return fm
+
+
+def _timestamp_edited(raw_value, db_value: datetime) -> bool:
+    """True only if a read-only timestamp was actually changed.
+
+    ``yaml.safe_load`` parses an unquoted ISO timestamp into a ``datetime`` whose
+    ``str()`` uses a space (not ``T``); comparing that string to ``isoformat()``
+    would falsely flag an unedited value. Compare ``datetime`` objects directly
+    when possible, and fall back to normalized-string comparison otherwise.
+    """
+    if isinstance(raw_value, datetime):
+        return raw_value != db_value
+    return str(raw_value) != db_value.isoformat()
 
 
 def import_bundle(store, repo: str, root: Path) -> ImportResult:
@@ -50,7 +63,12 @@ def import_bundle(store, repo: str, root: Path) -> ImportResult:
         if did is None:
             # Hand-authored file with no id: the human placing it in this
             # directory IS the approval, so create the decision at the
-            # directory-derived status.
+            # directory-derived status. source_refs is honored at authoring
+            # (it is read-only only on later edits of an existing decision).
+            source_refs = [
+                SourceRef(kind=SourceRefKind.FILE, ref=str(ref))
+                for ref in (fields.get("source_refs") or [])
+            ]
             new = Decision(
                 repo=repo,
                 pattern=fields.get("pattern", ""),
@@ -59,6 +77,7 @@ def import_bundle(store, repo: str, root: Path) -> ImportResult:
                 origin=Origin.HUMAN,
                 status=status,
                 confidence=Confidence(fields["confidence"]) if fields.get("confidence") else Confidence.MEDIUM,
+                source_refs=source_refs,
             )
             created = store.add(new)
             res.updated.append(created.id)
@@ -68,17 +87,23 @@ def import_bundle(store, repo: str, root: Path) -> ImportResult:
             # Do not mint a decision under a foreign identity; surface it.
             res.warnings.append(f"{did}: unknown decision id; skipped.")
             continue
+        if decision.repo != repo:
+            # The id resolves (a shared/catalog store finds it cross-repo), but it
+            # belongs to a different repo. Editing/promoting it under this repo
+            # would corrupt the wrong repo's curation; skip and surface it.
+            res.warnings.append(f"{did}: belongs to a different repo; skipped.")
+            continue
         # machine-field guard: warn if read-only frontmatter was edited
         raw = _raw_frontmatter(text)
         if "keywords" in raw and list(raw["keywords"]) != list(decision.keywords):
             res.warnings.append(
                 f"{did}: 'keywords' is read-only (machine-derived); ignored."
             )
-        if "created_at" in raw and str(raw["created_at"]) != decision.created_at.isoformat():
+        if "created_at" in raw and _timestamp_edited(raw["created_at"], decision.created_at):
             res.warnings.append(
                 f"{did}: 'created_at' is read-only (machine-derived); ignored."
             )
-        if "updated_at" in raw and str(raw["updated_at"]) != decision.updated_at.isoformat():
+        if "updated_at" in raw and _timestamp_edited(raw["updated_at"], decision.updated_at):
             res.warnings.append(
                 f"{did}: 'updated_at' is read-only (machine-derived); ignored."
             )

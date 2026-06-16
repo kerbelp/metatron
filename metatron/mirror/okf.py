@@ -16,9 +16,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 from metatron.mirror.export import export_bundle
+from metatron.mirror.render import split_frontmatter
 
 _RESERVED = frozenset({"index.md", "log.md"})
 
@@ -27,9 +26,8 @@ def _frontmatter(text: str) -> dict:
     """Parse the YAML frontmatter block of a markdown file, or {} if absent."""
     if not text.startswith("---"):
         return {}
-    _, _, rest = text.partition("---\n")
-    front_raw, _, _ = rest.partition("\n---\n")
-    return yaml.safe_load(front_raw) or {}
+    fm, _ = split_frontmatter(text)
+    return fm
 
 
 def _concept_id(bundle_root: Path, md_path: Path) -> str:
