@@ -651,6 +651,8 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
     root = Path(args.root)
     if args.mirror_command == "sync":
         events = event_store.list_events(repo=repo)
+        # Imported lazily on purpose: keeps the mirror modules (and their yaml
+        # dependency) off the import path of unrelated, hot CLI commands.
         from metatron.mirror.export import export_bundle
         from metatron.mirror.okf import export_okf_bundle
 
@@ -661,6 +663,8 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
         print("Mirror synced.", file=out)
         return 0
     if args.mirror_command == "import":
+        # Lazy import (see sync above): mirror deps stay off the hot path for
+        # unrelated commands.
         from metatron.mirror.sync_import import import_bundle
 
         res = import_bundle(store, repo=repo, root=root)
