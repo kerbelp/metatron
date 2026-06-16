@@ -1,5 +1,7 @@
-from metatron.models import Decision, Origin, Confidence, SourceRef, SourceRefKind
-from metatron.mirror.render import render_document, parse_document
+from metatron.models import Decision, Origin, Confidence, SourceRef, SourceRefKind, Status
+from metatron.mirror.render import (
+    render_document, parse_document, fingerprint_decision, fingerprint_fields,
+)
 
 
 def _decision(**kw):
@@ -46,3 +48,10 @@ def test_render_then_parse_preserves_human_fields():
     assert parsed["scope"] == d.scope
     assert parsed["pattern"] == d.pattern
     assert parsed["rationale"] == d.rationale
+
+
+def test_fingerprint_matches_between_decision_and_its_parsed_file():
+    d = _decision()
+    assert d.status == Status.CANDIDATE  # Decision default
+    parsed = parse_document(render_document(d, helpfulness=None))
+    assert fingerprint_decision(d) == fingerprint_fields(parsed, Status.CANDIDATE)

@@ -7,6 +7,9 @@ never return them as editable.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import yaml
 from metatron.models import Decision
 from metatron.feedback_score import HelpfulnessScore
@@ -51,6 +54,58 @@ def parse_document(text: str) -> dict:
     out["pattern"] = _section(body, "Pattern")
     out["rationale"] = _section(body, "Rationale")
     return out
+
+
+def _human_projection(
+    *, id, status_value, scope, confidence, pattern, rationale, source_refs
+) -> str:
+    """Stable JSON over exactly the human-owned, round-trippable fields.
+
+    Machine fields (keywords, helpfulness_score, timestamps) are deliberately
+    excluded: they drift on their own and would cause false conflicts.
+    """
+    return json.dumps(
+        {
+            "id": id,
+            "status": status_value,
+            "scope": scope,
+            "confidence": confidence,
+            "pattern": pattern,
+            "rationale": rationale,
+            "source_refs": list(source_refs or []),
+        },
+        sort_keys=True,
+    )
+
+
+def fingerprint_decision(d) -> str:
+    """Human-field fingerprint of a live Decision (the export baseline)."""
+    return hashlib.sha1(
+        _human_projection(
+            id=d.id,
+            status_value=d.status.value,
+            scope=d.scope,
+            confidence=d.confidence.value,
+            pattern=d.pattern,
+            rationale=d.rationale,
+            source_refs=[r.ref for r in d.source_refs],
+        ).encode()
+    ).hexdigest()
+
+
+def fingerprint_fields(parsed: dict, status) -> str:
+    """Human-field fingerprint of a parsed file + its directory-derived status."""
+    return hashlib.sha1(
+        _human_projection(
+            id=parsed.get("id"),
+            status_value=status.value,
+            scope=parsed.get("scope"),
+            confidence=parsed.get("confidence"),
+            pattern=parsed.get("pattern"),
+            rationale=parsed.get("rationale"),
+            source_refs=parsed.get("source_refs", []),
+        ).encode()
+    ).hexdigest()
 
 
 def _section(body: str, heading: str) -> str:

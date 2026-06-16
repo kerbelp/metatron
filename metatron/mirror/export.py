@@ -6,12 +6,11 @@ importer's collision detection.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from metatron.models import Status
 from metatron.feedback_score import helpfulness_scores
-from metatron.mirror.render import render_document
+from metatron.mirror.render import render_document, fingerprint_decision
 from metatron.mirror.layout import path_for
 
 def export_bundle(store, repo: str, root: Path, events: list) -> dict[str, str]:
@@ -23,7 +22,10 @@ def export_bundle(store, repo: str, root: Path, events: list) -> dict[str, str]:
             dest = root / path_for(d)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text)
-            state[d.id] = hashlib.sha1(text.encode("utf-8")).hexdigest()
+            # Baseline is the human-field fingerprint (not the full text), so it is
+            # directly comparable to the importer's fingerprints and immune to drift
+            # in machine-owned fields (helpfulness_score, updated_at).
+            state[d.id] = fingerprint_decision(d)
     state_path = root / "metatron" / ".sync-state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps(state, indent=2, sort_keys=True))
