@@ -237,10 +237,10 @@ automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
 
 ```text
 $ metatron --help
-usage: metatron [-h] {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates} ...
+usage: metatron [-h] {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates,mirror} ...
 
 positional arguments:
-  {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates}
+  {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates,mirror}
     ingest              bootstrap candidate decisions from a repo
     serve               serve one repo's decisions to agents over MCP
     repo                inspect the repos in the store
@@ -249,6 +249,7 @@ positional arguments:
     enrich-keywords     backfill retrieval keywords on canonical decisions that lack them (does not curate)
     refine-feedback     reshape captured agent feedback into structured candidate decisions (Opus)
     candidates          review and curate candidate decisions
+    mirror              sync decisions to/from a git-tracked markdown bundle
 ```
 
 ### Choosing the repo
@@ -345,6 +346,25 @@ Review by recommendation in the UI's Candidates filter.
 ```
 
 Flags: `--repo <id>` (limit to one repo), `--limit N` (max candidates to judge).
+
+### `mirror` — sync decisions to/from a git-tracked markdown bundle
+
+Mirrors a repo's decisions to plain markdown under `metatron/` (one file per
+decision, the directory encoding status: `candidate/` vs `decisions/`), so they can
+be reviewed and curated through normal git. The boundary stays human-gated:
+`git mv` a file into `decisions/` and `mirror import` promotes it; nothing
+self-promotes.
+
+```bash
+metatron mirror sync             # DB -> files: write the bundle under metatron/
+metatron mirror sync --okf       # also emit an OKF v0.1 concept index
+metatron mirror import           # files -> DB: apply edits, promotions, and new files
+```
+
+`sync` is deterministic — re-running with no DB change is a no-op — and writes a
+`.sync-state.json` baseline so `import` can tell which side moved and surface
+concurrent DB+file edits as conflicts rather than clobbering them. Both take
+`--repo <id>` and `--root <path>` (the repo root that holds `metatron/`, default `.`).
 
 ### `serve` — expose canonical decisions to agents over MCP
 

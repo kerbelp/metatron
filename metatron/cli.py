@@ -225,6 +225,8 @@ def main(
             return _cmd_import(catalog, args.path, out)
         if args.command == "candidates":
             return _cmd_candidates(args, store, settings, out)
+        if args.command == "mirror":
+            return _cmd_mirror(args, store, event_store, settings, out)
     except RepoResolutionError as exc:
         print(exc, file=out)
         return 2
@@ -644,6 +646,37 @@ def _set_status(store, decision_id, status, verb, out) -> int:
     return 0
 
 
+def _cmd_mirror(args, store, event_store, settings, out) -> int:
+    repo = _resolve_and_announce(args.repo, store, settings, out)
+    root = Path(args.root)
+    if args.mirror_command == "sync":
+        events = event_store.list_events(repo=repo)
+        from metatron.mirror.export import export_bundle
+        from metatron.mirror.okf import export_okf_bundle
+
+        if getattr(args, "okf", False):
+            export_okf_bundle(store, repo=repo, root=root, events=events)
+        else:
+            export_bundle(store, repo=repo, root=root, events=events)
+        print("Mirror synced.", file=out)
+        return 0
+    if args.mirror_command == "import":
+        from metatron.mirror.sync_import import import_bundle
+
+        res = import_bundle(store, repo=repo, root=root)
+        for w in res.warnings:
+            print(f"warning: {w}", file=out)
+        for c in res.conflicts:
+            print(f"conflict (skipped): {c}", file=out)
+        print(
+            f"Imported: {len(res.updated)} updated, {len(res.promoted)} promoted, "
+            f"{len(res.conflicts)} conflicts.",
+            file=out,
+        )
+        return 0
+    return 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="metatron")
     parser.add_argument(
@@ -743,6 +776,18 @@ def _build_parser() -> argparse.ArgumentParser:
     approve_p.add_argument("id")
     reject_p = cand_sub.add_parser("reject", help="reject a candidate")
     reject_p.add_argument("id")
+
+    mirror_p = sub.add_parser(
+        "mirror", help="sync decisions to/from a git-tracked markdown bundle"
+    )
+    mirror_sub = mirror_p.add_subparsers(dest="mirror_command")
+    m_sync = mirror_sub.add_parser("sync", help="write decisions to the bundle (DB -> files)")
+    m_sync.add_argument("--repo", default=None)
+    m_sync.add_argument("--root", default=".", help="repo root that holds metatron/")
+    m_sync.add_argument("--okf", action="store_true", help="also emit an OKF bundle index")
+    m_import = mirror_sub.add_parser("import", help="apply edited bundle files (files -> DB)")
+    m_import.add_argument("--repo", default=None)
+    m_import.add_argument("--root", default=".")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"
