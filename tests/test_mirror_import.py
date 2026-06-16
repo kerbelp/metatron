@@ -1,4 +1,5 @@
 import shutil
+import json
 from metatron.models import Decision, Origin, Status, Confidence
 from metatron.storage.sqlite import SQLiteDecisionStore
 from metatron.mirror.export import export_bundle
@@ -62,4 +63,50 @@ def test_clean_file_edit_applies(tmp_path):
     f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nedited"))
     res = import_bundle(store, repo="r", root=root)
     assert store.get(d.id).pattern == "edited"
+    assert d.id in res.updated
+
+
+def test_stray_non_status_md_does_not_crash_import(tmp_path):
+    # Bug 1: a plausible metatron/README.md must be ignored, not abort the import.
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="orig", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    (root / "metatron" / "README.md").write_text("# Notes\n\narbitrary text\n")
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nedited"))
+    res = import_bundle(store, repo="r", root=root)  # must not raise
+    assert store.get(d.id).pattern == "edited"
+    assert d.id in res.updated
+
+
+def test_missing_baseline_with_divergence_is_a_conflict(tmp_path):
+    # Bug 2: when the sync baseline is gone, a DB-vs-file divergence must surface
+    # as a conflict, not silently let the file clobber the DB.
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="orig", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    (root / "metatron" / ".sync-state.json").unlink()        # baseline gone
+    store.update_fields(d.id, pattern="db-changed")          # DB diverges
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nfile-changed"))
+    res = import_bundle(store, repo="r", root=root)
+    assert d.id in res.conflicts
+    assert store.get(d.id).pattern == "db-changed"           # not clobbered
+
+
+def test_clearing_rationale_field_applies(tmp_path):
+    # Bug 3: clearing a human body field is a legitimate edit and must apply.
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="keep-me",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("## Rationale\nkeep-me", "## Rationale\n"))
+    res = import_bundle(store, repo="r", root=root)
+    assert store.get(d.id).rationale == ""
     assert d.id in res.updated
