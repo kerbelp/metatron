@@ -129,13 +129,18 @@ score 0.91 · 14 helpful / 1 unhelpful · last updated 2026-06-14
 | `pattern` (body) | human | file wins |
 | `scope` | human | file wins |
 | `rationale` (body) | human | file wins |
-| `source_refs` | human | file wins |
+| `source_refs` | human (authoring only) | honored on a new hand-authored file; read-only on edit |
 | `confidence` (enum) | human | file wins |
 | `status` (= directory) | human | directory wins |
 | `helpfulness_score` | machine | ignored (warn if changed) |
 | `keywords` | machine | ignored (warn if changed) |
 | `created_at` / `updated_at` | machine | ignored |
 
+> Note: `source_refs` is honored when a human authors a brand-new file (no `id`) but
+> is **not** round-tripped on edits to existing decisions — the storage layer has no
+> `update_fields` path for it yet, so it renders read-only and is excluded from the
+> change fingerprint. Full source-ref editing is deferred.
+>
 > Note: `confidence` is the curator's `low`/`medium`/`high` enum (editable today in
 > the web UI via `update_fields`), distinct from the machine-derived
 > `helpfulness_score` that `feedback_score.py` computes from agent ratings. Only the
