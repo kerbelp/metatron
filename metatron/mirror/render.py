@@ -40,6 +40,19 @@ def render_document(d: Decision, helpfulness: HelpfulnessScore | None) -> str:
     return f"---\n{front}\n---\n\n" + "\n".join(body) + "\n"
 
 
+def split_frontmatter(text: str) -> tuple[dict, str]:
+    """Split a mirror document into (frontmatter_dict, body).
+
+    The single source of truth for the ``---`` frontmatter convention, shared by
+    the parser, the importer's raw-field guard, and the OKF validator. Returns an
+    empty dict if there is no frontmatter block.
+    """
+    _, _, rest = text.partition("---\n")
+    front_raw, _, body = rest.partition("\n---\n")
+    fm = yaml.safe_load(front_raw) or {}
+    return fm, body
+
+
 def parse_document(text: str) -> dict:
     """Return ONLY human-owned fields from a mirror document.
 
@@ -48,9 +61,7 @@ def parse_document(text: str) -> dict:
     NOT here — it comes from the file's directory. Body sections map to
     pattern/rationale.
     """
-    _, _, rest = text.partition("---\n")
-    front_raw, _, body = rest.partition("\n---\n")
-    fm = yaml.safe_load(front_raw) or {}
+    fm, body = split_frontmatter(text)
     out = {k: fm[k] for k in ("id", "scope", "confidence") if k in fm}
     if "source_refs" in fm:
         out["source_refs"] = fm["source_refs"]
@@ -60,12 +71,15 @@ def parse_document(text: str) -> dict:
 
 
 def _human_projection(
-    *, id, status_value, scope, confidence, pattern, rationale, source_refs
+    *, id, status_value, scope, confidence, pattern, rationale
 ) -> str:
     """Stable JSON over exactly the human-owned, round-trippable fields.
 
     Machine fields (keywords, helpfulness_score, timestamps) are deliberately
     excluded: they drift on their own and would cause false conflicts.
+    ``source_refs`` is excluded too: it is read-only on edit (honored only at
+    authoring), so including it would manufacture phantom conflicts/changes that
+    the importer cannot apply.
     """
     return json.dumps(
         {
@@ -75,7 +89,6 @@ def _human_projection(
             "confidence": confidence,
             "pattern": pattern,
             "rationale": rationale,
-            "source_refs": list(source_refs or []),
         },
         sort_keys=True,
     )
@@ -91,7 +104,6 @@ def fingerprint_decision(d) -> str:
             confidence=d.confidence.value,
             pattern=d.pattern,
             rationale=d.rationale,
-            source_refs=[r.ref for r in d.source_refs],
         ).encode()
     ).hexdigest()
 
@@ -106,7 +118,6 @@ def fingerprint_fields(parsed: dict, status) -> str:
             confidence=parsed.get("confidence"),
             pattern=parsed.get("pattern"),
             rationale=parsed.get("rationale"),
-            source_refs=parsed.get("source_refs", []),
         ).encode()
     ).hexdigest()
 
