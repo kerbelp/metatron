@@ -13,6 +13,11 @@ def _decision(**kw):
     base.update(kw); return Decision(**base)
 
 
+def test_render_emits_okf_type_field():
+    text = render_document(_decision(), helpfulness=None)
+    assert "type: Metatron Decision" in text  # required OKF v0.1 concept field
+
+
 def test_render_includes_human_fields_in_frontmatter_and_body():
     text = render_document(_decision(), helpfulness=None)
     assert "id:" in text and "confidence: medium" in text

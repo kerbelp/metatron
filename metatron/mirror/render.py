@@ -17,6 +17,9 @@ from metatron.feedback_score import HelpfulnessScore
 
 def render_document(d: Decision, helpfulness: HelpfulnessScore | None) -> str:
     fm = {
+        # OKF v0.1 requires exactly one frontmatter field: `type`. Constant, so it
+        # does not affect idempotence, the human-field fingerprint, or parse_document.
+        "type": "Metatron Decision",
         "id": d.id,
         "scope": d.scope,
         "confidence": d.confidence.value,
