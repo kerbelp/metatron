@@ -1,0 +1,65 @@
+import shutil
+from metatron.models import Decision, Origin, Status, Confidence
+from metatron.storage.sqlite import SQLiteDecisionStore
+from metatron.mirror.export import export_bundle
+from metatron.mirror.sync_import import import_bundle
+
+
+def _store(tmp_path):
+    return SQLiteDecisionStore(str(tmp_path / "d.db"))
+
+
+def test_moving_file_to_decisions_promotes_to_canonical(tmp_path):
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                           origin=Origin.AGENT_SUBMITTED, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    src = next((root / "metatron" / "candidate").glob("*.md"))
+    dst = root / "metatron" / "decisions" / src.name
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dst))
+    result = import_bundle(store, repo="r", root=root)
+    assert store.get(d.id).status == Status.CANONICAL
+    assert d.id in result.promoted
+
+
+def test_editing_keywords_in_file_is_ignored_and_warns(tmp_path):
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE,
+                           keywords=["orig"]))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("orig", "hacked"))
+    res = import_bundle(store, repo="r", root=root)
+    assert store.get(d.id).keywords == ["orig"]      # unchanged
+    assert any("keyword" in w.lower() or "read-only" in w.lower() for w in res.warnings)
+
+
+def test_concurrent_db_and_file_edit_is_a_conflict(tmp_path):
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="orig", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])     # records baseline fingerprint
+    store.update_fields(d.id, pattern="db-changed")          # DB changes a human field
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nfile-changed"))
+    res = import_bundle(store, repo="r", root=root)
+    assert d.id in res.conflicts
+    assert store.get(d.id).pattern == "db-changed"           # not clobbered
+
+
+def test_clean_file_edit_applies(tmp_path):
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="orig", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[])
+    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nedited"))
+    res = import_bundle(store, repo="r", root=root)
+    assert store.get(d.id).pattern == "edited"
+    assert d.id in res.updated
