@@ -97,7 +97,8 @@ metatron mirror sync --okf   # DB -> files: write an OKF bundle under metatron/
 metatron mirror import       # files -> DB: apply edits, promotions, and new files
 ```
 
-See the [`mirror` command](#command-reference) for the full workflow.
+See the [`mirror` command](#command-reference) for the full workflow, or read the
+announcement: [Metatron speaks the Open Knowledge Format](https://getmetatron.com/blog/open-knowledge-format/).
 
 ## Prerequisites
 
