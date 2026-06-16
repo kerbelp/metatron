@@ -73,6 +73,32 @@ them to your agent over MCP. As the agent works it reports gaps via `submit_feed
 `refine-feedback` reshapes those gaps into new candidates — closing the loop on the
 conventions extraction can't see (cross-file/workflow rules).
 
+## Decisions in git — Open Knowledge Format (OKF) export
+
+Prefer working in plain files and your agent over a UI? Metatron can mirror a repo's
+decisions to markdown under `metatron/` — and that bundle is a valid
+[Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
+bundle, so your conventions are portable to any tool that reads the standard.
+
+- **Git is the audit trail.** Status lives in the directory — `candidate/` vs
+  `decisions/`. Promote a decision with a `git mv`, review it in a PR, blame any line.
+  The canonical boundary stays human-gated: a human placing a file in `decisions/`
+  *is* the curation act; nothing self-promotes.
+- **Edit as files.** Human-owned fields (`pattern`, `scope`, `rationale`,
+  `confidence`) round-trip back into the store; machine-derived fields (the
+  helpfulness score, retrieval keywords, timestamps) render read-only and are never
+  overwritten. SQLite stays the source of truth; the files are a synced mirror.
+- **A portable OKF bundle.** Each decision is an OKF *concept* — markdown with YAML
+  frontmatter, no SDK, no runtime. Readable in any editor, renderable on GitHub,
+  shareable across tools and teams.
+
+```bash
+metatron mirror sync --okf   # DB -> files: write an OKF bundle under metatron/
+metatron mirror import       # files -> DB: apply edits, promotions, and new files
+```
+
+See the [`mirror` command](#command-reference) for the full workflow.
+
 ## Prerequisites
 
 - **Git** (installed on your system, to analyze repository commit history and parse files)
