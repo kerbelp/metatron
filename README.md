@@ -233,13 +233,21 @@ ANTHROPIC_API_KEY=sk-ant-...
 …or `export ANTHROPIC_API_KEY=sk-ant-...` directly.
 
 **Non-secret settings** live in an optional `metatron.toml` (environment variables
-`METATRON_DB` / `METATRON_MODEL` override it):
+`METATRON_DB` / `METATRON_MODEL` / `METATRON_OUTPUT_LANGUAGE` override it):
 
 ```toml
 [metatron]
-db_path = "~/.metatron"        # catalog dir: one self-contained .db file per repo
-model   = "claude-sonnet-4-6"  # default extraction model
+db_path         = "~/.metatron"        # catalog dir: one self-contained .db file per repo
+model           = "claude-sonnet-4-6"  # default extraction model
+output_language = "english"            # language for generated decisions (see below)
 ```
+
+`output_language` sets the natural language of generated output — the `pattern` and
+`rationale` fields and keywords. The default `english` is unchanged from earlier
+versions. Set it (e.g. `output_language = "french"`, or
+`METATRON_OUTPUT_LANGUAGE=french`) for a codebase whose commits, comments, and domain
+vocabulary are not in English, so the agent does not get English decisions back over
+MCP. Code identifiers, file paths, and library names are never translated.
 
 Each repo gets its own SQLite file under the catalog directory, so a repo's decisions
 are a single, shippable artifact (see [`export`](#export--share-a-repos-decisions-no-mcp-setup)).

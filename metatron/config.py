@@ -21,6 +21,13 @@ from metatron.extraction.provider import DEFAULT_MODEL
 # single-file mode (the recipient of a handed-off DB).
 DEFAULT_DB_PATH = str(Path.home() / ".metatron")
 
+# The natural language for LLM-generated output (the ``pattern`` and ``rationale``
+# fields, keywords, etc.). The default keeps the historical English-only behaviour;
+# code identifiers, file paths, and library names are never translated regardless.
+# Overridable via METATRON_OUTPUT_LANGUAGE / metatron.toml so a codebase whose commits
+# and comments are not in English does not get English decisions back over MCP.
+DEFAULT_OUTPUT_LANGUAGE = "english"
+
 
 class Settings(BaseModel):
     db_path: str = DEFAULT_DB_PATH
@@ -29,6 +36,10 @@ class Settings(BaseModel):
     # A persisted default repo (written by ``metatron repo set``). It sits below the
     # ``METATRON_REPO`` env var in precedence, so an env override still wins per-shell.
     default_repo: str | None = None
+    # The language LLM output is written in. A global setting today; the
+    # ``get_output_language`` helper is the single resolution point so a per-repo
+    # override can layer on later without touching the prompt call sites.
+    output_language: str = DEFAULT_OUTPUT_LANGUAGE
 
 
 def load_settings(path: str | Path = "metatron.toml") -> Settings:
@@ -46,7 +57,21 @@ def load_settings(path: str | Path = "metatron.toml") -> Settings:
         ),
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
         default_repo=file_values.get("default_repo"),
+        output_language=os.environ.get(
+            "METATRON_OUTPUT_LANGUAGE",
+            file_values.get("output_language", DEFAULT_OUTPUT_LANGUAGE),
+        ),
     )
+
+
+def get_output_language(path: str | Path = "metatron.toml") -> str:
+    """Resolve the configured output language (env > ``metatron.toml`` > default).
+
+    The single resolution point for output language, so prompt rendering never reads
+    config directly and a per-repo override can layer on here later without changing
+    any call site.
+    """
+    return load_settings(path).output_language
 
 
 def update_settings(updates: dict, path: str | Path = "metatron.toml") -> None:
