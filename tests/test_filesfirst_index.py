@@ -26,6 +26,15 @@ def test_index_skips_reserved_files(tmp_path):
     assert "| `a` |" in out
 
 
+def test_index_coerces_scalar_keywords(tmp_path):
+    # A scalar `keywords: auth` must render as `auth`, not char-by-char `a, u, t, h`.
+    _write(tmp_path, "a.md",
+           "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\nkeywords: auth\n---\nb\n")
+    out = build_index(tmp_path)
+    assert "| auth |" in out
+    assert "a, u, t, h" not in out
+
+
 def test_write_index_creates_file(tmp_path):
     _write(tmp_path, "a.md",
            "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\n---\nb\n")

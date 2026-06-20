@@ -39,6 +39,14 @@ def test_flags_duplicate_ids(tmp_path):
     assert any("duplicate id" in e.message for e in errs)
 
 
+def test_flags_non_list_keywords(tmp_path):
+    # A scalar `keywords: auth` is invalid — keywords must be a YAML list.
+    _write(tmp_path, "x.md",
+           "---\nid: x\ntype: decision\nstatus: candidate\ntitle: T\nkeywords: auth\n---\nb\n")
+    errs = lint_tree(tmp_path)
+    assert any("keywords must be a list" in e.message for e in errs)
+
+
 def test_reserved_filenames_skipped(tmp_path):
     _write(tmp_path, "index.md", "# generated\n")
     _write(tmp_path, "log.md", "# log\n")

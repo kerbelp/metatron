@@ -31,6 +31,10 @@ def lint_decision(doc: DecisionFile) -> list[LintError]:
     confidence = fm.get("confidence")
     if confidence is not None and confidence not in CONFIDENCE:
         errs.append(LintError(doc.path, f"invalid confidence: {confidence!r}"))
+    keywords = fm.get("keywords")
+    if keywords is not None and not isinstance(keywords, list):
+        errs.append(LintError(
+            doc.path, f"keywords must be a list, got {type(keywords).__name__}"))
     slug = doc.path.stem
     if fm.get("id") and fm["id"] != slug:
         errs.append(LintError(

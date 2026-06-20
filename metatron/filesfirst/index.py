@@ -15,7 +15,10 @@ def build_index(decisions_dir: Path) -> str:
         if md.name in RESERVED_FILENAMES:
             continue
         fm = parse_decision_file(md, md.read_text(encoding="utf-8")).frontmatter
-        keywords = ", ".join(fm.get("keywords") or [])
+        kw = fm.get("keywords") or []
+        if isinstance(kw, str):  # tolerate a scalar `keywords: auth` (lint flags it)
+            kw = [kw]
+        keywords = ", ".join(kw)
         rows.append(
             f"| `{fm.get('id', '')}` | {fm.get('status', '')} | "
             f"{fm.get('title', '')} | {keywords} | {fm.get('references', 0)} |"

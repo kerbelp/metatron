@@ -685,10 +685,13 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
 
 
 def _cmd_files(args, out) -> int:
-    from pathlib import Path
+    base = Path(args.path)
+    if not base.exists():
+        print(f"no such directory: {base}", file=out)
+        return 1
     if args.files_command == "lint":
         from metatron.filesfirst.lint import lint_tree
-        errors = lint_tree(Path(args.path))
+        errors = lint_tree(base)
         for e in errors:
             print(f"{e.path}: {e.message}", file=out)
         if errors:
@@ -698,11 +701,11 @@ def _cmd_files(args, out) -> int:
         return 0
     if args.files_command == "index":
         from metatron.filesfirst.index import write_index
-        path = write_index(Path(args.path))
+        path = write_index(base)
         print(str(path), file=out)
         return 0
     if args.files_command == "new":
-        target = Path(args.path) / f"{args.slug}.md"
+        target = base / f"{args.slug}.md"
         if target.exists():
             print(f"refusing to overwrite {target}", file=out)
             return 1
