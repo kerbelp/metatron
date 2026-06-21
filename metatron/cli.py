@@ -927,7 +927,10 @@ def _build_parser() -> argparse.ArgumentParser:
     f_report.add_argument("--since", default=None, help="window start (ISO date; overrides --days)")
     f_report.add_argument("--until", default=None, help="window end (ISO date; default today)")
     f_report.add_argument("--out", default=None, help="write markdown here instead of stdout")
-    f_report.add_argument("--max-commits", type=int, default=1000)
+    f_report.add_argument(
+        "--max-commits", type=int, default=1000,
+        help="cap on commits scanned for the window; raise it if a window holds "
+             "more commits than this, or the adoption denominator under-counts")
     f_check = files_sub.add_parser(
         "check-fields", help="reject cross-ownership frontmatter edits (human vs CI)")
     f_check.add_argument("--base", required=True, help="git ref to diff against")

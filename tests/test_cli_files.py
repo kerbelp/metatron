@@ -154,7 +154,8 @@ def test_files_report_renders_digest(tmp_path):
     assert res.returncode == 0, res.stdout + res.stderr
     assert "# Decision usage digest" in res.stdout
     assert "token-refresh" in res.stdout
-    assert "consulted a decision" in res.stdout
+    # the repo's single commit declared the trailer => adoption denominator is 1
+    assert "1 of 1 commits (100.0%) consulted a decision." in res.stdout
 
 
 def test_files_report_writes_out_file(tmp_path):
