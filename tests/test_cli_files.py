@@ -84,3 +84,29 @@ def test_files_record_quarantines_unknown_id(tmp_path):
     assert rec.returncode == 0
     assert "typo-id" in (d / "log" / "unmatched.md").read_text()
     assert "references:" not in (d / "real.md").read_text()
+
+
+def test_check_fields_rejects_human_editing_machine_field(tmp_path):
+    repo = tmp_path
+    _git("init", cwd=repo)
+    _git("config", "user.email", "t@example.com", cwd=repo)
+    _git("config", "user.name", "T", cwd=repo)
+    d = repo / "metatron" / "decisions"
+    d.mkdir(parents=True)
+    f = d / "d.md"
+    f.write_text("---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n---\nb\n",
+                 encoding="utf-8")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "-m", "add d", cwd=repo)
+    base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                          capture_output=True, text=True).stdout.strip()
+
+    # a human hand-edits a machine field
+    f.write_text(
+        "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\nreferences: 99\n---\nb\n",
+        encoding="utf-8")
+
+    res = _run("files", "check-fields", "--base", base, "--path", str(d),
+               "--actor", "human", cwd=repo)
+    assert res.returncode != 0
+    assert "references" in (res.stdout + res.stderr)
