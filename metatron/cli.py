@@ -153,6 +153,9 @@ def main(
             print(notice, file=out)
         return 0
 
+    if args.command == "files":
+        return _cmd_files(args, out)
+
     settings = load_settings()
     if args.db:
         settings = settings.model_copy(update={"db_path": args.db})
@@ -681,6 +684,47 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
     return 1
 
 
+def _cmd_files(args, out) -> int:
+    base = Path(args.path)
+    if not base.exists():
+        print(f"no such directory: {base}", file=out)
+        return 1
+    if args.files_command == "lint":
+        from metatron.filesfirst.lint import lint_tree
+        errors = lint_tree(base)
+        for e in errors:
+            print(f"{e.path}: {e.message}", file=out)
+        if errors:
+            print(f"{len(errors)} problem(s) found", file=out)
+            return 1
+        print("ok", file=out)
+        return 0
+    if args.files_command == "index":
+        from metatron.filesfirst.index import write_index
+        path = write_index(base)
+        print(str(path), file=out)
+        return 0
+    if args.files_command == "new":
+        target = base / f"{args.slug}.md"
+        if target.exists():
+            print(f"refusing to overwrite {target}", file=out)
+            return 1
+        target.write_text(
+            "---\n"
+            f"id: {args.slug}\n"
+            "type: decision\n"
+            "status: candidate\n"
+            f"title: {args.title}\n"
+            "keywords: []\n"
+            "---\n\n"
+            "## Decision\n\n## Why\n\n## Consequences\n",
+            encoding="utf-8")
+        print(str(target), file=out)
+        return 0
+    print("unknown files command", file=out)
+    return 2
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="metatron")
     parser.add_argument(
@@ -792,6 +836,17 @@ def _build_parser() -> argparse.ArgumentParser:
     m_import = mirror_sub.add_parser("import", help="apply edited bundle files (files -> DB)")
     m_import.add_argument("--repo", default=None)
     m_import.add_argument("--root", default=".")
+
+    files_p = sub.add_parser("files", help="author, lint, and index git-authoritative decision files")
+    files_sub = files_p.add_subparsers(dest="files_command")
+    f_lint = files_sub.add_parser("lint", help="validate decision files")
+    f_lint.add_argument("--path", default="metatron/decisions")
+    f_index = files_sub.add_parser("index", help="regenerate index.md")
+    f_index.add_argument("--path", default="metatron/decisions")
+    f_new = files_sub.add_parser("new", help="scaffold a candidate decision")
+    f_new.add_argument("slug")
+    f_new.add_argument("--title", required=True)
+    f_new.add_argument("--path", default="metatron/decisions")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"
