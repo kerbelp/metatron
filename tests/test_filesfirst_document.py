@@ -1,5 +1,5 @@
 from pathlib import Path
-from metatron.filesfirst.document import parse_decision_file
+from metatron.filesfirst.document import parse_decision_file, decision_ids
 
 
 SAMPLE = """---
@@ -26,3 +26,10 @@ def test_parse_missing_frontmatter_is_empty_not_crash():
     doc = parse_decision_file(Path("x.md"), "just prose, no frontmatter")
     assert doc.id is None
     assert doc.status is None
+
+
+def test_decision_ids_collects_ids_and_skips_reserved(tmp_path):
+    (tmp_path / "a.md").write_text(
+        "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\n---\nb\n", encoding="utf-8")
+    (tmp_path / "index.md").write_text("# generated\n", encoding="utf-8")
+    assert decision_ids(tmp_path) == {"a"}
