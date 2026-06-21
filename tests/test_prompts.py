@@ -20,6 +20,18 @@ def test_non_english_appends_directive():
     assert "Return ONLY a JSON array." in prompt
 
 
+def test_directive_reaffirms_json_only_output_last():
+    # The base templates end with a "no prose outside the JSON array" instruction.
+    # Appending the language directive after it would leave a content instruction as
+    # the final thing the model reads, so the directive must re-assert the output
+    # format as its closing sentence.
+    prompt = load_prompt("extract_decisions", language="french")
+
+    tail = prompt.rstrip()
+    assert tail.endswith("with no prose outside it.")
+    assert "JSON array" in tail.rsplit("Output language:", 1)[1]
+
+
 def test_directive_survives_render():
     # The appended directive carries no ``{placeholder}`` braces, so rendering the
     # template through ``str.format`` must not raise.
