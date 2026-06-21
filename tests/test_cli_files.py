@@ -131,3 +131,48 @@ def test_check_fields_with_relative_default_path(tmp_path):
     res = _run("files", "check-fields", "--base", base,
                "--path", "metatron/decisions", "--repo", ".", cwd=repo)
     assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_files_report_renders_digest(tmp_path):
+    repo = tmp_path
+    _git("init", cwd=repo)
+    _git("config", "user.email", "t@example.com", cwd=repo)
+    _git("config", "user.name", "T", cwd=repo)
+    d = repo / "metatron" / "decisions"
+    d.mkdir(parents=True)
+    (d / "token-refresh.md").write_text(
+        "---\nid: token-refresh\ntype: decision\nstatus: canonical\ntitle: Refresh\n---\nb\n",
+        encoding="utf-8")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "-m", "use it\n\nDecisions-Applied: token-refresh\n", cwd=repo)
+
+    # populate the ledger first
+    assert _run("files", "record", "--path", str(d), cwd=repo).returncode == 0
+
+    res = _run("files", "report", "--path", str(d), "--repo", str(repo),
+               "--days", "3650", cwd=repo)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "# Decision usage digest" in res.stdout
+    assert "token-refresh" in res.stdout
+    # the repo's single commit declared the trailer => adoption denominator is 1
+    assert "1 of 1 commits (100.0%) consulted a decision." in res.stdout
+
+
+def test_files_report_writes_out_file(tmp_path):
+    repo = tmp_path
+    _git("init", cwd=repo)
+    _git("config", "user.email", "t@example.com", cwd=repo)
+    _git("config", "user.name", "T", cwd=repo)
+    d = repo / "metatron" / "decisions"
+    d.mkdir(parents=True)
+    (d / "a.md").write_text(
+        "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\n---\nb\n", encoding="utf-8")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "-m", "init", cwd=repo)
+
+    out_file = repo / "digest.md"
+    res = _run("files", "report", "--path", str(d), "--repo", str(repo),
+               "--out", str(out_file), cwd=repo)
+    assert res.returncode == 0
+    assert out_file.exists()
+    assert "Decision usage digest" in out_file.read_text(encoding="utf-8")
