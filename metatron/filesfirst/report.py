@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -45,3 +46,55 @@ def load_window_entries(log_dir: Path, start: str, end: str) -> list[LedgerEntry
             continue
         out.extend(e for e in read_entries(shard) if start <= e.date <= end)
     return out
+
+
+@dataclass
+class Report:
+    start: str
+    end: str
+    total_commits: int
+    consulted_commits: int
+    adoption_pct: float
+    reuse: list[tuple[str, str, int]]        # (id, title, applied_count), desc
+    violations: list[tuple[str, str, str]]   # (id, title, sha)
+    status_counts: dict[str, int]
+    candidates_awaiting: int
+
+
+def _title(decisions: dict[str, DecisionMeta], decision_id: str) -> str:
+    meta = decisions.get(decision_id)
+    return meta.title if meta else ""
+
+
+def build_report(
+    entries: list[LedgerEntry],
+    total_commits: int,
+    decisions: dict[str, DecisionMeta],
+    start: str,
+    end: str,
+) -> Report:
+    """Aggregate windowed ledger entries + decision metadata into a Report."""
+    applied = Counter(e.decision_id for e in entries if e.kind == "applied")
+    reuse = sorted(
+        ((decision_id, _title(decisions, decision_id), count)
+         for decision_id, count in applied.items()),
+        key=lambda row: (-row[2], row[0]),
+    )
+    violations = [
+        (e.decision_id, _title(decisions, e.decision_id), e.sha)
+        for e in entries if e.kind == "violated"
+    ]
+    consulted = {e.sha for e in entries}
+    adoption_pct = round(100 * len(consulted) / total_commits, 1) if total_commits else 0.0
+    status_counts = dict(Counter(m.status for m in decisions.values()))
+    return Report(
+        start=start,
+        end=end,
+        total_commits=total_commits,
+        consulted_commits=len(consulted),
+        adoption_pct=adoption_pct,
+        reuse=reuse,
+        violations=violations,
+        status_counts=status_counts,
+        candidates_awaiting=status_counts.get("candidate", 0),
+    )
