@@ -736,6 +736,30 @@ def _cmd_files(args, out) -> int:
         write_index(base)
         print(f"recorded {len(entries)} trailer entr(y/ies)", file=out)
         return 0
+    if args.files_command == "report":
+        from datetime import date, timedelta
+        from metatron.gitlog.reader import GitLogReader
+        from metatron.filesfirst.report import (
+            build_report, load_decisions, load_window_entries, render_markdown)
+
+        end = args.until or date.today().isoformat()
+        start = args.since or (date.today() - timedelta(days=args.days)).isoformat()
+        commits = GitLogReader(args.repo).commits(since=start, max_commits=args.max_commits)
+        # `--since` is an inclusive lower bound by author date; re-filter to also
+        # apply the upper bound `end` (the adoption denominator = commits in window).
+        in_window = [c for c in commits if start <= c.date.date().isoformat() <= end]
+        report = build_report(
+            load_window_entries(base / "log", start, end),
+            total_commits=len(in_window),
+            decisions=load_decisions(base),
+            start=start, end=end)
+        markdown = render_markdown(report)
+        if args.out:
+            Path(args.out).write_text(markdown, encoding="utf-8")
+            print(str(args.out), file=out)
+        else:
+            print(markdown, file=out)
+        return 0
     if args.files_command == "check-fields":
         import subprocess
         from metatron.mirror.render import split_frontmatter
@@ -895,6 +919,15 @@ def _build_parser() -> argparse.ArgumentParser:
     f_record.add_argument("--repo", default=".", help="git repo root to read commits from")
     f_record.add_argument("--since", default=None, help="git --since window (e.g. '7 days ago')")
     f_record.add_argument("--max-commits", type=int, default=200)
+    f_report = files_sub.add_parser(
+        "report", help="render a usage digest (adoption, reuse, drift, curation) over the ledger")
+    f_report.add_argument("--path", default="metatron/decisions")
+    f_report.add_argument("--repo", default=".", help="git repo root to count commits from")
+    f_report.add_argument("--days", type=int, default=7, help="trailing window length")
+    f_report.add_argument("--since", default=None, help="window start (ISO date; overrides --days)")
+    f_report.add_argument("--until", default=None, help="window end (ISO date; default today)")
+    f_report.add_argument("--out", default=None, help="write markdown here instead of stdout")
+    f_report.add_argument("--max-commits", type=int, default=1000)
     f_check = files_sub.add_parser(
         "check-fields", help="reject cross-ownership frontmatter edits (human vs CI)")
     f_check.add_argument("--base", required=True, help="git ref to diff against")
