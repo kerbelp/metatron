@@ -747,8 +747,9 @@ def _cmd_files(args, out) -> int:
         for md in sorted(base.glob("*.md")):
             if md.name in RESERVED_FILENAMES:  # log/ is a subdir, so glob never reaches unmatched.md
                 continue
+            rel = md.resolve().relative_to(repo_path)
             show = subprocess.run(
-                ["git", "show", f"{args.base}:{md.relative_to(repo_path)}"],
+                ["git", "show", f"{args.base}:{rel}"],
                 cwd=repo_path, capture_output=True, text=True)
             old_fm, _ = split_frontmatter(show.stdout) if show.returncode == 0 else ({}, "")
             new_fm, _ = split_frontmatter(md.read_text(encoding="utf-8"))

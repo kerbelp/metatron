@@ -41,11 +41,34 @@ def decision_ids(decisions_dir: Path) -> set[str]:
     return ids
 
 
+def _is_top_level_key(line: str, keys) -> bool:
+    """True if ``line`` is a top-level ``key:`` entry for one of ``keys``.
+
+    Indented lines (block-list items, nested values) are never matched, so only
+    the scalar machine-field lines are replaced — human-authored formatting is
+    left byte-for-byte intact.
+    """
+    if not line or line[0].isspace() or ":" not in line:
+        return False
+    return line.split(":", 1)[0].strip() in keys
+
+
 def write_machine_fields(path: Path, fields: dict) -> None:
-    """Merge machine-owned fields into a decision file's frontmatter in place,
-    leaving human fields and the prose body untouched."""
+    """Merge machine-owned fields into a decision file's frontmatter in place.
+
+    Only the machine-field lines are rewritten (replaced if present, else
+    appended); every human-authored frontmatter line and the prose body are
+    preserved verbatim, so a CI count update never reflows lines it does not own.
+    """
     text = Path(path).read_text(encoding="utf-8")
-    fm, body = split_frontmatter(text)
-    fm.update(fields)
-    front = yaml.safe_dump(fm, sort_keys=False).strip()
-    Path(path).write_text(f"---\n{front}\n---\n{body}", encoding="utf-8")
+    _, sep, rest = text.partition("---\n")
+    if not sep:
+        return  # no frontmatter block to update
+    front_raw, _, body = rest.partition("\n---\n")
+    kept = [
+        line for line in front_raw.splitlines()
+        if not _is_top_level_key(line, fields)
+    ]
+    for key, value in fields.items():
+        kept.append(yaml.safe_dump({key: value}, sort_keys=False).strip())
+    Path(path).write_text("---\n" + "\n".join(kept) + "\n---\n" + body, encoding="utf-8")

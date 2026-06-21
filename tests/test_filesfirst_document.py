@@ -46,3 +46,28 @@ def test_write_machine_fields_preserves_human_fields_and_body(tmp_path):
     assert "violations: 1" in text
     assert "id: d" in text and "title: T" in text   # human fields kept
     assert "Prose body." in text                      # body kept
+
+
+def test_write_machine_fields_does_not_reflow_human_fields(tmp_path):
+    # A CI count update must not rewrite human-owned formatting (flow-style list
+    # stays flow-style); only the machine-field lines change.
+    p = tmp_path / "d.md"
+    p.write_text(
+        "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n"
+        "keywords: [auth, tokens]\n---\n\nBody.\n", encoding="utf-8")
+    write_machine_fields(p, {"references": 2})
+    text = p.read_text(encoding="utf-8")
+    assert "keywords: [auth, tokens]" in text
+    assert "references: 2" in text
+
+
+def test_write_machine_fields_is_idempotent(tmp_path):
+    # Re-applying the same fields replaces the line rather than duplicating it.
+    p = tmp_path / "d.md"
+    p.write_text(
+        "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n---\nb\n", encoding="utf-8")
+    write_machine_fields(p, {"references": 1})
+    first = p.read_text(encoding="utf-8")
+    write_machine_fields(p, {"references": 1})
+    assert p.read_text(encoding="utf-8") == first
+    assert first.count("references:") == 1

@@ -110,3 +110,24 @@ def test_check_fields_rejects_human_editing_machine_field(tmp_path):
                "--actor", "human", cwd=repo)
     assert res.returncode != 0
     assert "references" in (res.stdout + res.stderr)
+
+
+def test_check_fields_with_relative_default_path(tmp_path):
+    # Invoked the way CI does: a relative --path inside --repo. A clean tree
+    # (no edits) must pass without a path-resolution crash.
+    repo = tmp_path
+    _git("init", cwd=repo)
+    _git("config", "user.email", "t@example.com", cwd=repo)
+    _git("config", "user.name", "T", cwd=repo)
+    d = repo / "metatron" / "decisions"
+    d.mkdir(parents=True)
+    (d / "d.md").write_text(
+        "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n---\nb\n", encoding="utf-8")
+    _git("add", "-A", cwd=repo)
+    _git("commit", "-m", "add d", cwd=repo)
+    base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                          capture_output=True, text=True).stdout.strip()
+
+    res = _run("files", "check-fields", "--base", base,
+               "--path", "metatron/decisions", "--repo", ".", cwd=repo)
+    assert res.returncode == 0, res.stdout + res.stderr
