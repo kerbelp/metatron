@@ -721,6 +721,48 @@ def _cmd_files(args, out) -> int:
             encoding="utf-8")
         print(str(target), file=out)
         return 0
+    if args.files_command == "record":
+        from metatron.gitlog.reader import GitLogReader
+        from metatron.filesfirst.document import decision_ids
+        from metatron.filesfirst.ledger import append_entries, entries_from_commit
+        from metatron.filesfirst.counts import apply_counts
+        from metatron.filesfirst.index import write_index
+
+        commits = GitLogReader(args.repo).commits(
+            max_commits=args.max_commits, since=args.since)
+        entries = [e for c in commits for e in entries_from_commit(c)]
+        append_entries(base / "log", entries, known_ids=decision_ids(base))
+        apply_counts(base)
+        write_index(base)
+        print(f"recorded {len(entries)} trailer entr(y/ies)", file=out)
+        return 0
+    if args.files_command == "check-fields":
+        import subprocess
+        from metatron.mirror.render import split_frontmatter
+        from metatron.filesfirst.fields import changed_fields, ownership_violations
+        from metatron.filesfirst.schema import RESERVED_FILENAMES
+
+        repo_path = Path(args.repo).resolve()
+        problems = []
+        for md in sorted(base.glob("*.md")):
+            if md.name in RESERVED_FILENAMES:  # log/ is a subdir, so glob never reaches unmatched.md
+                continue
+            rel = md.resolve().relative_to(repo_path)
+            show = subprocess.run(
+                ["git", "show", f"{args.base}:{rel}"],
+                cwd=repo_path, capture_output=True, text=True)
+            old_fm, _ = split_frontmatter(show.stdout) if show.returncode == 0 else ({}, "")
+            new_fm, _ = split_frontmatter(md.read_text(encoding="utf-8"))
+            bad = ownership_violations(changed_fields(old_fm, new_fm), actor=args.actor)
+            for field_name in sorted(bad):
+                problems.append(f"{md}: {args.actor} may not edit '{field_name}'")
+        for p in problems:
+            print(p, file=out)
+        if problems:
+            print(f"{len(problems)} field-ownership violation(s)", file=out)
+            return 1
+        print("ok", file=out)
+        return 0
     print("unknown files command", file=out)
     return 2
 
@@ -847,6 +889,18 @@ def _build_parser() -> argparse.ArgumentParser:
     f_new.add_argument("slug")
     f_new.add_argument("--title", required=True)
     f_new.add_argument("--path", default="metatron/decisions")
+    f_record = files_sub.add_parser(
+        "record", help="post-merge: append usage trailers to the ledger and roll up counts")
+    f_record.add_argument("--path", default="metatron/decisions")
+    f_record.add_argument("--repo", default=".", help="git repo root to read commits from")
+    f_record.add_argument("--since", default=None, help="git --since window (e.g. '7 days ago')")
+    f_record.add_argument("--max-commits", type=int, default=200)
+    f_check = files_sub.add_parser(
+        "check-fields", help="reject cross-ownership frontmatter edits (human vs CI)")
+    f_check.add_argument("--base", required=True, help="git ref to diff against")
+    f_check.add_argument("--path", default="metatron/decisions")
+    f_check.add_argument("--repo", default=".")
+    f_check.add_argument("--actor", choices=("human", "ci"), default="human")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"
