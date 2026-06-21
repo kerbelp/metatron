@@ -721,6 +721,21 @@ def _cmd_files(args, out) -> int:
             encoding="utf-8")
         print(str(target), file=out)
         return 0
+    if args.files_command == "record":
+        from metatron.gitlog.reader import GitLogReader
+        from metatron.filesfirst.document import decision_ids
+        from metatron.filesfirst.ledger import append_entries, entries_from_commit
+        from metatron.filesfirst.counts import apply_counts
+        from metatron.filesfirst.index import write_index
+
+        commits = GitLogReader(args.repo).commits(
+            max_commits=args.max_commits, since=args.since)
+        entries = [e for c in commits for e in entries_from_commit(c)]
+        append_entries(base / "log", entries, known_ids=decision_ids(base))
+        apply_counts(base)
+        write_index(base)
+        print(f"recorded {len(entries)} trailer entr(y/ies)", file=out)
+        return 0
     print("unknown files command", file=out)
     return 2
 
@@ -847,6 +862,12 @@ def _build_parser() -> argparse.ArgumentParser:
     f_new.add_argument("slug")
     f_new.add_argument("--title", required=True)
     f_new.add_argument("--path", default="metatron/decisions")
+    f_record = files_sub.add_parser(
+        "record", help="post-merge: append usage trailers to the ledger and roll up counts")
+    f_record.add_argument("--path", default="metatron/decisions")
+    f_record.add_argument("--repo", default=".", help="git repo root to read commits from")
+    f_record.add_argument("--since", default=None, help="git --since window (e.g. '7 days ago')")
+    f_record.add_argument("--max-commits", type=int, default=200)
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"
