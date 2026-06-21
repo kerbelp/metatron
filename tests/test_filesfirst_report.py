@@ -77,3 +77,45 @@ def test_build_report_handles_zero_commits():
     r = build_report([], total_commits=0, decisions={}, start="2026-06-01", end="2026-06-07")
     assert r.adoption_pct == 0.0
     assert r.reuse == [] and r.violations == []
+
+
+from metatron.filesfirst.report import render_markdown
+
+
+def test_render_markdown_is_deterministic_and_complete():
+    r = Report(
+        start="2026-06-08", end="2026-06-14",
+        total_commits=5, consulted_commits=3, adoption_pct=60.0,
+        reuse=[("token-refresh", "Refresh server-side", 2), ("auth-ttl", "Session TTL", 1)],
+        violations=[("legacy-retry", "Old retry policy", "s3abc")],
+        status_counts={"canonical": 2, "candidate": 1, "deprecated": 1},
+        candidates_awaiting=1,
+    )
+    md = render_markdown(r)
+    assert md == (
+        "# Decision usage digest\n\n"
+        "**Window:** 2026-06-08 to 2026-06-14\n\n"
+        "## Adoption\n\n"
+        "3 of 5 commits (60.0%) consulted a decision.\n\n"
+        "## Knowledge reuse\n\n"
+        "| decision | title | applied |\n|---|---|---|\n"
+        "| `token-refresh` | Refresh server-side | 2 |\n"
+        "| `auth-ttl` | Session TTL | 1 |\n\n"
+        "## Drift caught\n\n"
+        "| decision | title | commit |\n|---|---|---|\n"
+        "| `legacy-retry` | Old retry policy | `s3abc` |\n\n"
+        "## Curation health\n\n"
+        "| status | count |\n|---|---|\n"
+        "| candidate | 1 |\n| canonical | 2 |\n| deprecated | 1 |\n\n"
+        "1 candidate(s) awaiting promotion.\n\n"
+        "---\n\n"
+        "_Every count above traces to a merged commit trailer._\n"
+    )
+
+
+def test_render_markdown_handles_empty_sections():
+    r = Report("2026-06-01", "2026-06-07", 0, 0, 0.0, [], [], {}, 0)
+    md = render_markdown(r)
+    assert "0 of 0 commits (0.0%) consulted a decision." in md
+    assert "_No decisions applied in this window._" in md
+    assert "_No drift caught in this window._" in md

@@ -98,3 +98,48 @@ def build_report(
         status_counts=status_counts,
         candidates_awaiting=status_counts.get("candidate", 0),
     )
+
+
+def _reuse_section(reuse: list[tuple[str, str, int]], top: int) -> str:
+    if not reuse:
+        return "_No decisions applied in this window._\n"
+    rows = "".join(
+        f"| `{decision_id}` | {title} | {count} |\n"
+        for decision_id, title, count in reuse[:top])
+    return "| decision | title | applied |\n|---|---|---|\n" + rows
+
+
+def _drift_section(violations: list[tuple[str, str, str]]) -> str:
+    if not violations:
+        return "_No drift caught in this window._\n"
+    rows = "".join(
+        f"| `{decision_id}` | {title} | `{sha}` |\n"
+        for decision_id, title, sha in violations)
+    return "| decision | title | commit |\n|---|---|---|\n" + rows
+
+
+def _curation_section(status_counts: dict[str, int], awaiting: int) -> str:
+    rows = "".join(
+        f"| {status} | {status_counts[status]} |\n"
+        for status in sorted(status_counts))
+    table = "| status | count |\n|---|---|\n" + rows
+    return f"{table}\n{awaiting} candidate(s) awaiting promotion.\n"
+
+
+def render_markdown(report: Report, *, top: int = 10) -> str:
+    """Render a Report as a deterministic markdown digest (no dollar figures)."""
+    return (
+        "# Decision usage digest\n\n"
+        f"**Window:** {report.start} to {report.end}\n\n"
+        "## Adoption\n\n"
+        f"{report.consulted_commits} of {report.total_commits} commits "
+        f"({report.adoption_pct}%) consulted a decision.\n\n"
+        "## Knowledge reuse\n\n"
+        f"{_reuse_section(report.reuse, top)}\n"
+        "## Drift caught\n\n"
+        f"{_drift_section(report.violations)}\n"
+        "## Curation health\n\n"
+        f"{_curation_section(report.status_counts, report.candidates_awaiting)}\n"
+        "---\n\n"
+        "_Every count above traces to a merged commit trailer._\n"
+    )
