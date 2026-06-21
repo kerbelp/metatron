@@ -41,3 +41,13 @@ def test_write_index_creates_file(tmp_path):
     path = write_index(tmp_path)
     assert path == tmp_path / "index.md"
     assert "| `a` |" in path.read_text(encoding="utf-8")
+
+
+def test_index_includes_violation_count(tmp_path):
+    _write(tmp_path, "d.md",
+           "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n"
+           "references: 4\nviolations: 2\n---\nb\n")
+    out = build_index(tmp_path)
+    assert "| 4 |" in out      # refs
+    assert "| 2 |" in out      # viol
+    assert "viol" in out       # header gained the column

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from metatron.mirror.render import split_frontmatter
 from metatron.filesfirst.schema import RESERVED_FILENAMES
 
@@ -38,3 +39,13 @@ def decision_ids(decisions_dir: Path) -> set[str]:
         if doc.id:
             ids.add(doc.id)
     return ids
+
+
+def write_machine_fields(path: Path, fields: dict) -> None:
+    """Merge machine-owned fields into a decision file's frontmatter in place,
+    leaving human fields and the prose body untouched."""
+    text = Path(path).read_text(encoding="utf-8")
+    fm, body = split_frontmatter(text)
+    fm.update(fields)
+    front = yaml.safe_dump(fm, sort_keys=False).strip()
+    Path(path).write_text(f"---\n{front}\n---\n{body}", encoding="utf-8")

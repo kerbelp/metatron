@@ -1,5 +1,5 @@
 from pathlib import Path
-from metatron.filesfirst.document import parse_decision_file, decision_ids
+from metatron.filesfirst.document import parse_decision_file, decision_ids, write_machine_fields
 
 
 SAMPLE = """---
@@ -33,3 +33,16 @@ def test_decision_ids_collects_ids_and_skips_reserved(tmp_path):
         "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\n---\nb\n", encoding="utf-8")
     (tmp_path / "index.md").write_text("# generated\n", encoding="utf-8")
     assert decision_ids(tmp_path) == {"a"}
+
+
+def test_write_machine_fields_preserves_human_fields_and_body(tmp_path):
+    p = tmp_path / "d.md"
+    p.write_text(
+        "---\nid: d\ntype: decision\nstatus: canonical\ntitle: T\n"
+        "keywords: [auth]\n---\n\n## Decision\n\nProse body.\n", encoding="utf-8")
+    write_machine_fields(p, {"references": 5, "violations": 1, "last_applied": "2026-06-18"})
+    text = p.read_text(encoding="utf-8")
+    assert "references: 5" in text
+    assert "violations: 1" in text
+    assert "id: d" in text and "title: T" in text   # human fields kept
+    assert "Prose body." in text                      # body kept
