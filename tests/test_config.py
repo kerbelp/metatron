@@ -1,6 +1,12 @@
 """Tests for settings loading: defaults, file values, and env overrides."""
 
-from metatron.config import DEFAULT_DB_PATH, load_settings, update_settings
+from metatron.config import (
+    DEFAULT_DB_PATH,
+    DEFAULT_OUTPUT_LANGUAGE,
+    get_output_language,
+    load_settings,
+    update_settings,
+)
 from metatron.extraction.provider import DEFAULT_MODEL
 
 
@@ -8,6 +14,7 @@ def test_defaults_when_no_file_and_no_env(tmp_path, monkeypatch):
     monkeypatch.delenv("METATRON_DB", raising=False)
     monkeypatch.delenv("METATRON_MODEL", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("METATRON_OUTPUT_LANGUAGE", raising=False)
 
     settings = load_settings(tmp_path / "absent.toml")
 
@@ -15,6 +22,25 @@ def test_defaults_when_no_file_and_no_env(tmp_path, monkeypatch):
     assert settings.db_path == DEFAULT_DB_PATH
     assert settings.model == DEFAULT_MODEL
     assert settings.anthropic_api_key is None
+    assert settings.output_language == DEFAULT_OUTPUT_LANGUAGE
+
+
+def test_reads_output_language_from_toml(tmp_path, monkeypatch):
+    monkeypatch.delenv("METATRON_OUTPUT_LANGUAGE", raising=False)
+    cfg = tmp_path / "metatron.toml"
+    cfg.write_text('[metatron]\noutput_language = "french"\n')
+
+    assert load_settings(cfg).output_language == "french"
+    assert get_output_language(cfg) == "french"
+
+
+def test_env_overrides_output_language(tmp_path, monkeypatch):
+    cfg = tmp_path / "metatron.toml"
+    cfg.write_text('[metatron]\noutput_language = "french"\n')
+    monkeypatch.setenv("METATRON_OUTPUT_LANGUAGE", "german")
+
+    assert load_settings(cfg).output_language == "german"
+    assert get_output_language(cfg) == "german"
 
 
 def test_reads_values_from_toml(tmp_path, monkeypatch):
