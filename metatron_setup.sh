@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 #
-# metatron_setup.sh — onboard a repo to Metatron.
+# metatron_setup.sh — onboard a repo to Metatron (MCP version).
+#
+# For a files-first setup instead (no MCP server, no Claude hooks — the agent reads
+# the OKF files under metatron/ directly, with the git files as the source of truth),
+# use metatron_setup_files.sh.
 #
 # Adds (never deletes) two things to the target repo so its coding agent reliably
 # consults Metatron:
