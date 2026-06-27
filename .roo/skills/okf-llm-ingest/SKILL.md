@@ -8,8 +8,10 @@ description: Use when extracting a codebase's implementation decisions into Meta
 ## Overview
 
 Metatron captures a codebase's real implementation decisions — preferred patterns,
-rejected approaches, edge cases, internal conventions — as **structured records**,
-and serves them to coding agents over MCP. The built-in `metatron ingest <path>`
+rejected approaches, edge cases, internal conventions — as **structured records**.
+Agents consume them either over MCP, or — in **files-first mode** — by reading these
+OKF files in git directly, in which case the files *are* the source of truth and the
+database is just a rebuildable serving index. The built-in `metatron ingest <path>`
 uses an Anthropic model to extract those records. This skill lets **any** LLM/agent
 do the extraction instead, by writing the same records as plain
 [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
@@ -42,6 +44,21 @@ exist in the store (that round-trips through `mirror sync`/`import` by `id`).
 
 The files are also a valid, portable OKF bundle on their own — shareable even if the
 recipient never imports them.
+
+## Monorepos
+
+Each app/package keeps its **own** `metatron/` knowledge base, co-located with it
+(e.g. `apps/web/metatron/`, `services/api/metatron/`). Write candidates into the
+`metatron/candidate/` of the app you're documenting, and import that one with
+`--root`:
+
+```bash
+metatron mirror import --root apps/web    # reads apps/web/metatron/
+```
+
+Consult and extend the `metatron/` **nearest** the code you're touching (walk up from
+the file to the closest `metatron/`). A single-app repo is just the degenerate case:
+`metatron/` at the repo root, `--root .`.
 
 ## File format (exact)
 
@@ -103,7 +120,7 @@ Extract conventions an agent couldn't infer from the framework alone:
 | New-decision signal | **no `id` field** |
 | Body sections read | `## Pattern`, `## Rationale` (only) |
 | Human-owned fields | `scope`, `confidence`, `source_refs` |
-| Land them | `metatron mirror import` (run from the repo) |
+| Land them | `metatron mirror import` (monorepo: `--root <app>`) |
 | Validate bundle | every concept file declares a non-empty `type` |
 
 ## Common mistakes

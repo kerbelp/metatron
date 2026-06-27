@@ -56,6 +56,11 @@ derived, rebuildable index, not something you curate or hand-edit. Do **not** st
    metatron mirror import     # rebuilds the DB from files; moved files become canonical
    ```
 
+**Monorepos:** each app has its own `metatron/` (e.g. `apps/web/metatron/`). Move the
+file within that app's tree (`apps/web/metatron/candidate/X.md` →
+`apps/web/metatron/decisions/X.md`) and reconcile it with
+`metatron mirror import --root apps/web`.
+
 ## CI's allowed role
 
 - **Validate** the bundle: every concept `.md` declares a non-empty `type`; `.md`
