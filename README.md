@@ -87,7 +87,9 @@ bundle, so your conventions are portable to any tool that reads the standard.
 - **Edit as files.** Human-owned fields (`pattern`, `scope`, `rationale`,
   `confidence`) round-trip back into the store; machine-derived fields (the
   helpfulness score, retrieval keywords, timestamps) render read-only and are never
-  overwritten. SQLite stays the source of truth; the files are a synced mirror.
+  overwritten. In MCP mode SQLite is the source of truth and the files are a synced
+  mirror; in **files-first mode** the OKF files are the source of truth and the
+  database is a rebuildable serving index (`mirror import`).
 - **A portable OKF bundle.** Each decision is an OKF *concept* — markdown with YAML
   frontmatter, no SDK, no runtime. Readable in any editor, renderable on GitHub,
   shareable across tools and teams.
@@ -96,6 +98,10 @@ bundle, so your conventions are portable to any tool that reads the standard.
 metatron mirror sync --okf   # DB -> files: write an OKF bundle under metatron/
 metatron mirror import       # files -> DB: apply edits, promotions, and new files
 ```
+
+To run an agent in this mode with **no MCP at all** — reading `metatron/` directly and
+authoring candidates as files — onboard with
+[`metatron_setup_files.sh`](#files-first-mode-no-mcp).
 
 See the [`mirror` command](#command-reference) for the full workflow, or read the
 announcement: [Metatron speaks the Open Knowledge Format](https://getmetatron.com/blog/open-knowledge-format/).
@@ -528,6 +534,10 @@ Flags: `--repo <id>`, `--limit N` (max reports to refine), `--model <name>`
 
 ## Connecting a coding agent (MCP)
 
+There are two onboarding modes: **MCP** (the default, below) serves decisions over the
+MCP server; **files-first** (no MCP) has the agent read the OKF files directly — jump
+to [Files-first mode](#files-first-mode-no-mcp).
+
 So a coding agent reliably *consults* the decisions (rather than rediscovering
 conventions), run the onboarding script from inside the target repo:
 
@@ -547,6 +557,24 @@ repo:
 
 The repo id is derived from the `origin` remote (override with `METATRON_REPO`).
 Then reconnect the agent so it loads the hooks and server.
+
+### Files-first mode (no MCP)
+
+Prefer to skip MCP entirely and let the agent read conventions straight from the OKF
+files in git? Use the files-first onboarding script instead:
+
+```bash
+bash /path/to/metatron/metatron_setup_files.sh   # or pass an app dir as an arg
+```
+
+It adds **no MCP server and no Claude hooks**. Instead it writes a `.roo/rules` rule
+(the "consult `metatron/` first" directive, which Roo loads every turn), copies the
+`okf-llm-ingest` and `okf-promote-candidates` skills into `.roo/skills/`, scaffolds the
+`metatron/` knowledge base, and appends a files-first block to `CLAUDE.md`. The git
+files are the source of truth, and promotion stays human-gated via a `git mv` reviewed
+in a PR. **Monorepos:** run it once per app — each keeps its own co-located
+`metatron/`, addressed with `mirror import --root <app>`, and the agent consults the
+`metatron/` nearest the code it touches.
 
 ### MCP tools exposed
 
