@@ -31,6 +31,22 @@ These are locked. Do not re-litigate or substitute them:
   self-promotes. **Crossing the canonical boundary — promote, demote, reject —
   is always human-gated.** This invariant is absolute.
 
+## Source of truth (depends on deployment)
+
+Metatron supports two ways of operating, and the source of truth differs:
+
+- **MCP / database mode (default).** SQLite is the source of truth; the git-tracked
+  OKF markdown bundle is a synced mirror (`metatron mirror sync`). Curation happens in
+  the store (CLI/UI), and decisions are served to agents over MCP.
+- **Files-first mode (no MCP).** For teams that want to avoid MCP, the git-tracked OKF
+  files are the source of truth: the directory (`candidate/` vs `decisions/`) is the
+  status, decisions are curated as plain files reviewed via pull request, and the
+  database is a derived, rebuildable serving index (`metatron mirror import`).
+
+The **canonical boundary stays human-gated in both modes** (see Core principle):
+nothing self-promotes; a human placing or moving a file into `decisions/` — or
+approving the pull request that does — is the curation act.
+
 ## Partial self-learning loop (2026-06-03)
 
 Metatron now has a **bounded** self-learning loop, so the "no automatic feedback
