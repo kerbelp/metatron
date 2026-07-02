@@ -26,6 +26,10 @@ MCP (Model Context Protocol). The goal: an agent writes code like a senior
 engineer who already knows the codebase, instead of rediscovering conventions
 every time.
 
+Metatron is a reference implementation of the
+[Repository Context Layer](https://github.com/kerbelp/context-md) — a proposed
+standard for git-native, agent-maintained project context.
+
 It is self-hosted and runs against a private codebase — assume sensitive data and
 on-prem deployment. (Extraction sends only *structural* signals — imports,
 decorators, base classes, commit subjects — to the model, never raw source, and
