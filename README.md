@@ -576,7 +576,7 @@ bash /path/to/metatron/metatron_setup_files.sh   # or pass an app dir as an arg
 
 It adds **no MCP server and no Claude hooks**. Instead it writes a `.roo/rules` rule
 (the "consult `metatron/` first" directive, which Roo loads every turn), copies the
-`okf-llm-ingest` and `okf-promote-candidates` skills into `.roo/skills/`, scaffolds the
+`context-okf-llm-ingest` and `context-okf-promote-candidates` skills into `.roo/skills/`, scaffolds the
 `metatron/` knowledge base, and appends a files-first block to `CLAUDE.md`. The git
 files are the source of truth, and promotion stays human-gated via a `git mv` reviewed
 in a PR. **Monorepos:** run it once per app — each keeps its own co-located

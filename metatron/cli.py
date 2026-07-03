@@ -814,8 +814,8 @@ def _cmd_context(args, out) -> int:
             print(f"  {line}", file=out)
         from metatron.config import DEFAULT_CONTEXT_DIR
         shown = kb_name or load_settings().context_dir or DEFAULT_CONTEXT_DIR
-        print(f"\nDone. Author candidates into {shown}/candidate/ (skill: okf-llm-ingest);", file=out)
-        print("promotion is a human-reviewed git mv (skill: okf-promote-candidates).", file=out)
+        print(f"\nDone. Author candidates into {shown}/candidate/ (skill: context-okf-llm-ingest);", file=out)
+        print("promotion is a human-reviewed git mv (skill: context-okf-promote-candidates).", file=out)
         return 0
     print("unknown context command", file=out)
     return 2

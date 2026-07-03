@@ -1,5 +1,5 @@
 ---
-name: okf-llm-ingest
+name: context-okf-llm-ingest
 description: Use when extracting a codebase's implementation decisions into Metatron with an LLM/agent instead of `metatron ingest` — authoring candidate decisions as Open Knowledge Format (OKF) markdown files locally for review.
 ---
 

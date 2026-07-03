@@ -1,5 +1,5 @@
 ---
-name: okf-promote-candidates
+name: context-okf-promote-candidates
 description: Use when promoting reviewed Metatron candidate decisions to canonical in a git/CI flow — moving Open Knowledge Format (OKF) files from candidate/ to decisions/. The agent performs only human-named moves; it never decides what to promote.
 ---
 
@@ -10,7 +10,7 @@ description: Use when promoting reviewed Metatron candidate decisions to canonic
 A Metatron decision becomes **canonical** by moving its OKF file from
 `context/candidate/` to `context/decisions/`. The directory *is* the status.
 This skill covers doing that move in a git/CI flow, as a companion to authoring
-candidates (see the `okf-llm-ingest` skill).
+candidates (see the `context-okf-llm-ingest` skill).
 
 **This skill is mechanical only.** You move the specific files a human named, and
 nothing else. You do **not** decide which candidates are worthy — that judgment is

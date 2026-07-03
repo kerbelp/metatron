@@ -10,11 +10,12 @@ deletes) the artifacts that make a coding agent consult the OKF knowledge base:
 3. The knowledge-base scaffold (``candidate/``, ``decisions/``, README) at the
    configured directory — ``context/`` by default, another name via the ``--dir``
    flag, ``METATRON_CONTEXT_DIR``, or ``context_dir`` in ``metatron.toml``.
-4. A managed block in ``CLAUDE.md`` between METATRON markers (appended once).
+4. A managed block in ``AGENTS.md`` between METATRON markers — appended to an
+   existing file, never overwriting it.
 
-Idempotent: safe to run repeatedly; existing CLAUDE.md content and hand-authored
+Idempotent: safe to run repeatedly; existing AGENTS.md content and hand-authored
 knowledge-base files are preserved. Monorepos: run once per app dir; workspace-root
-artifacts (``.roo/``, root CLAUDE.md) are shared, the knowledge base is per-app.
+artifacts (``.roo/``, root AGENTS.md) are shared, the knowledge base is per-app.
 
 The METATRON markers are the idempotence key shared with
 ``metatron_setup_files.sh``: either entry point recognizes (and never duplicates)
@@ -30,7 +31,7 @@ from pathlib import Path
 
 from metatron.config import DEFAULT_CONTEXT_DIR, load_settings
 
-_SKILLS = ("okf-llm-ingest", "okf-promote-candidates")
+_SKILLS = ("context-okf-llm-ingest", "context-okf-promote-candidates")
 
 _RULE_TEXT = """\
 # Metatron conventions (files-first)
@@ -45,10 +46,10 @@ one **nearest** the files you are touching (walk up to the closest `{kb}/`).
   not rediscover conventions manually until you have.
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `{kb}/candidate/` (skill:
-  `okf-llm-ingest`). Candidates are proposals for human review — never canonical.
+  `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
 - **Never self-promote.** Do not move files into `{kb}/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
-  `okf-promote-candidates`). Nothing self-promotes.
+  `context-okf-promote-candidates`). Nothing self-promotes.
 """
 
 _KB_README = """\
@@ -79,12 +80,12 @@ and follow them.** State that you consulted them; do not rediscover conventions
 manually until you have.
 
 When you find a durable convention not already captured, **author it as a candidate**:
-a new OKF file in the nearest `{kb}/candidate/` (see the `okf-llm-ingest` skill in
+a new OKF file in the nearest `{kb}/candidate/` (see the `context-okf-llm-ingest` skill in
 `.roo/skills/`). Candidates are uncurated proposals for human review.
 
 **Promotion to canonical is human-gated.** Never move a file into `{kb}/decisions/`
 yourself; a human does that via `git mv` reviewed in a pull request (see the
-`okf-promote-candidates` skill). Nothing self-promotes.
+`context-okf-promote-candidates` skill). Nothing self-promotes.
 <!-- METATRON:END -->
 """
 
@@ -97,8 +98,8 @@ This app's conventions live in `{kb}/` here: `{kb}/decisions/` (canonical),
 editing this app's code and follow them; record any missing durable convention as a
 candidate OKF file in `{kb}/candidate/`. Never self-promote into
 `{kb}/decisions/` — promotion is human-gated via `git mv` in a reviewed pull
-request. See the workspace-root `.roo/skills/` (`okf-llm-ingest`,
-`okf-promote-candidates`) for the file format and workflow.
+request. See the workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
+`context-okf-promote-candidates`) for the file format and workflow.
 <!-- METATRON:END -->
 """
 
@@ -112,7 +113,7 @@ class SetupResult:
 def _workspace_root(target: Path) -> Path:
     """The git toplevel containing *target*, or *target* itself outside git.
 
-    Root-level artifacts (``.roo/``, the general CLAUDE.md block) are shared across
+    Root-level artifacts (``.roo/``, the general AGENTS.md block) are shared across
     all apps of a monorepo and live here; the knowledge base lives at the target.
     """
     try:
@@ -188,7 +189,7 @@ def _scaffold_kb(target: Path, kb_name: str, res: SetupResult) -> None:
         res.messages.append(f"scaffolded {kb} (candidate/, decisions/, README.md)")
 
 
-def _add_claude_block(md: Path, block: str, res: SetupResult) -> None:
+def _add_agents_block(md: Path, block: str, res: SetupResult) -> None:
     if md.exists() and "METATRON:START" in md.read_text(encoding="utf-8"):
         res.messages.append(f"{md} already has the Metatron block — left as is")
         return
@@ -210,7 +211,7 @@ def run_setup(target: Path, dir_name: str | None = None) -> SetupResult:
     _write_rule(root, kb_name, res)
     _install_skills(root, kb_name, res)
     _scaffold_kb(target, kb_name, res)
-    _add_claude_block(root / "CLAUDE.md", _ROOT_BLOCK.format(kb=kb_name), res)
+    _add_agents_block(root / "AGENTS.md", _ROOT_BLOCK.format(kb=kb_name), res)
     if target != root:
-        _add_claude_block(target / "CLAUDE.md", _APP_BLOCK.format(kb=kb_name), res)
+        _add_agents_block(target / "AGENTS.md", _APP_BLOCK.format(kb=kb_name), res)
     return res

@@ -28,18 +28,18 @@ def test_setup_creates_all_artifacts(tmp_path):
     assert (repo / "context" / "candidate" / ".gitkeep").exists()
     assert (repo / "context" / "decisions" / ".gitkeep").exists()
     assert (repo / "context" / "README.md").exists()
-    claude = (repo / "CLAUDE.md").read_text()
-    assert "METATRON:START" in claude and "METATRON:END" in claude
+    agents = (repo / "AGENTS.md").read_text()
+    assert "METATRON:START" in agents and "METATRON:END" in agents
 
 
 def test_setup_is_idempotent_and_preserves_content(tmp_path):
     repo = _repo(tmp_path)
-    (repo / "CLAUDE.md").write_text("# Existing rules\n")
+    (repo / "AGENTS.md").write_text("# Existing rules\n")
     run_setup(repo)
     (repo / "context" / "candidate" / "hand-authored.md").write_text("x")
-    first = (repo / "CLAUDE.md").read_text()
+    first = (repo / "AGENTS.md").read_text()
     run_setup(repo)
-    assert (repo / "CLAUDE.md").read_text() == first          # block appended once
+    assert (repo / "AGENTS.md").read_text() == first          # block appended once
     assert first.startswith("# Existing rules")               # prior content kept
     assert (repo / "context" / "candidate" / "hand-authored.md").read_text() == "x"
 
@@ -47,11 +47,11 @@ def test_setup_is_idempotent_and_preserves_content(tmp_path):
 def test_setup_recognizes_shell_script_marker(tmp_path):
     # A repo onboarded by metatron_setup_files.sh must not get a second block.
     repo = _repo(tmp_path)
-    (repo / "CLAUDE.md").write_text(
+    (repo / "AGENTS.md").write_text(
         "<!-- METATRON:START (managed by metatron_setup_files.sh) -->\nx\n"
         "<!-- METATRON:END -->\n")
     run_setup(repo)
-    assert (repo / "CLAUDE.md").read_text().count("METATRON:START") == 1
+    assert (repo / "AGENTS.md").read_text().count("METATRON:START") == 1
 
 
 def test_monorepo_app_gets_own_kb_and_block(tmp_path):
@@ -63,8 +63,8 @@ def test_monorepo_app_gets_own_kb_and_block(tmp_path):
     assert (repo / ".roo" / "rules" / "metatron.md").exists()
     assert (app / "context" / "candidate").is_dir()
     assert not (repo / "context").exists()
-    assert "METATRON:START" in (repo / "CLAUDE.md").read_text()
-    assert "METATRON:START" in (app / "CLAUDE.md").read_text()
+    assert "METATRON:START" in (repo / "AGENTS.md").read_text()
+    assert "METATRON:START" in (app / "AGENTS.md").read_text()
 
 
 def test_packaged_skills_match_repo_skills():
@@ -100,10 +100,10 @@ def test_setup_honors_custom_dir_name(tmp_path):
     # Managed texts reference the chosen directory, not the default.
     rule = (repo / ".roo" / "rules" / "metatron.md").read_text()
     assert "conventions/decisions/" in rule and "context/decisions/" not in rule
-    skill = (repo / ".roo" / "skills" / "okf-llm-ingest" / "SKILL.md").read_text()
+    skill = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
     assert "conventions/candidate" in skill and "context/candidate" not in skill
-    claude = (repo / "CLAUDE.md").read_text()
-    assert "conventions/candidate" in claude
+    agents = (repo / "AGENTS.md").read_text()
+    assert "conventions/candidate" in agents
 
 
 def test_cli_context_setup_dir_flag(tmp_path):
