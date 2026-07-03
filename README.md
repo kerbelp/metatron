@@ -105,7 +105,7 @@ metatron mirror import       # files -> DB: apply edits, promotions, and new fil
 
 To run an agent in this mode with **no MCP at all** — reading `context/` directly and
 authoring candidates as files — onboard with
-[`metatron_setup_files.sh`](#files-first-mode-no-mcp).
+[`metatron context setup`](#files-first-mode-no-mcp).
 
 See the [`mirror` command](#command-reference) for the full workflow, or read the
 announcement: [Metatron speaks the Open Knowledge Format](https://getmetatron.com/blog/open-knowledge-format/).
@@ -243,13 +243,15 @@ ANTHROPIC_API_KEY=sk-ant-...
 …or `export ANTHROPIC_API_KEY=sk-ant-...` directly.
 
 **Non-secret settings** live in an optional `metatron.toml` (environment variables
-`METATRON_DB` / `METATRON_MODEL` / `METATRON_OUTPUT_LANGUAGE` override it):
+`METATRON_DB` / `METATRON_MODEL` / `METATRON_OUTPUT_LANGUAGE` /
+`METATRON_CONTEXT_DIR` override it):
 
 ```toml
 [metatron]
 db_path         = "~/.metatron"        # catalog dir: one self-contained .db file per repo
 model           = "claude-sonnet-4-6"  # default extraction model
 output_language = "english"            # language for generated decisions (see below)
+context_dir     = "context"            # knowledge-base dir name (legacy metatron/ auto-detected)
 ```
 
 `output_language` sets the natural language of generated output — the `pattern` and
@@ -282,19 +284,24 @@ automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
 
 ```text
 $ metatron --help
-usage: metatron [-h] {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates,mirror} ...
+usage: metatron [-h] [--db DB] {ingest,serve,repo,ui,version,whoami,triage,enrich-keywords,refine-feedback,candidates,mirror,files,context,export,import} ...
 
 positional arguments:
-  {ingest,serve,repo,ui,triage,enrich-keywords,refine-feedback,candidates,mirror}
     ingest              bootstrap candidate decisions from a repo
     serve               serve one repo's decisions to agents over MCP
-    repo                inspect the repos in the store
+    repo                inspect and choose the repo commands act on
     ui                  launch the local curation web UI
+    version             show the installed version and check for updates
+    whoami              show or set the local identity stamped onto served events
     triage              run the advisory judge over candidate decisions (does not auto-curate)
     enrich-keywords     backfill retrieval keywords on canonical decisions that lack them (does not curate)
     refine-feedback     reshape captured agent feedback into structured candidate decisions (Opus)
     candidates          review and curate candidate decisions
     mirror              sync decisions to/from a git-tracked markdown bundle
+    files               author, lint, and index git-authoritative decision files
+    context             onboard a repo to files-first mode (rule, skills, knowledge base)
+    export              copy a repo's self-contained DB out for hand-off
+    import              merge another employee's exported DB into this catalog
 ```
 
 ### Choosing the repo
@@ -426,6 +433,31 @@ bundle — each decision is an OKF *concept*: plain markdown with YAML frontmatt
 readable in any editor, renderable on GitHub, and portable across tools. `mirror
 sync --okf` also writes an OKF `index.md`. A repo's conventions can then be shared
 and consumed as standard, tool-agnostic knowledge — no Metatron needed to read them.
+
+### `context` — onboard a repo to files-first mode
+
+Writes everything a coding agent needs to consult and extend the knowledge base as
+plain files (see [Files-first mode](#files-first-mode-no-mcp)): the `.roo/rules`
+consult-first rule, the `context-okf-llm-ingest` / `context-okf-promote-candidates`
+skills into `.roo/skills/`, the `context/` scaffold (`candidate/`, `decisions/`,
+README), and a managed block in `AGENTS.md` — appended to an existing file, never
+overwriting it.
+
+```bash
+metatron context setup                 # onboard the current repo
+metatron context setup apps/web        # monorepo: onboard one app
+metatron context setup --dir kb        # custom knowledge-base directory name
+```
+
+Idempotent: re-running refreshes the managed rule and skills, and leaves your
+`AGENTS.md` content and hand-authored knowledge-base files untouched.
+
+### `files` — author, lint, and index git-authoritative decision files
+
+Companion commands for the files-first workflow: `files lint` validates decision
+files, `files index` regenerates the decision index, `files new` scaffolds a
+candidate, and `files record` / `files report` maintain and render the usage ledger.
+All default to `<context-dir>/decisions`; pass `--path` to point elsewhere.
 
 ### `serve` — expose canonical decisions to agents over MCP
 
@@ -568,20 +600,24 @@ Then reconnect the agent so it loads the hooks and server.
 ### Files-first mode (no MCP)
 
 Prefer to skip MCP entirely and let the agent read conventions straight from the OKF
-files in git? Use the files-first onboarding script instead:
+files in git? Onboard the repo with the built-in command:
 
 ```bash
-bash /path/to/metatron/metatron_setup_files.sh   # or pass an app dir as an arg
+metatron context setup              # onboard the current repo (or pass a dir)
+metatron context setup --dir kb     # use a custom knowledge-base directory name
 ```
 
+(Equivalent without an installed metatron: `bash /path/to/metatron/metatron_setup_files.sh`.)
+
 It adds **no MCP server and no Claude hooks**. Instead it writes a `.roo/rules` rule
-(the "consult `metatron/` first" directive, which Roo loads every turn), copies the
-`context-okf-llm-ingest` and `context-okf-promote-candidates` skills into `.roo/skills/`, scaffolds the
-`metatron/` knowledge base, and appends a files-first block to `CLAUDE.md`. The git
+(the "consult `context/` first" directive, which Roo loads every turn), installs the
+`context-okf-llm-ingest` and `context-okf-promote-candidates` skills into
+`.roo/skills/`, scaffolds the `context/` knowledge base, and appends a files-first
+block to `AGENTS.md` — appended to an existing file, never overwriting it. The git
 files are the source of truth, and promotion stays human-gated via a `git mv` reviewed
 in a PR. **Monorepos:** run it once per app — each keeps its own co-located
-`metatron/`, addressed with `mirror import --root <app>`, and the agent consults the
-`metatron/` nearest the code it touches.
+`context/`, addressed with `mirror import --root <app>`, and the agent consults the
+`context/` nearest the code it touches.
 
 ### MCP tools exposed
 
