@@ -157,6 +157,9 @@ def main(
     if args.command == "files":
         return _cmd_files(args, out)
 
+    if args.command == "context":
+        return _cmd_context(args, out)
+
     settings = load_settings()
     if args.db:
         settings = settings.model_copy(update={"db_path": args.db})
@@ -798,6 +801,26 @@ def _cmd_files(args, out) -> int:
     return 2
 
 
+def _cmd_context(args, out) -> int:
+    if args.context_command == "setup":
+        from metatron.context_setup import run_setup
+        target = Path(args.path)
+        if not target.is_dir():
+            print(f"no such directory: {target}", file=out)
+            return 1
+        print(f"Onboarding to Metatron (files-first): {target.resolve()}", file=out)
+        kb_name = getattr(args, "dir", None)
+        for line in run_setup(target, dir_name=kb_name).messages:
+            print(f"  {line}", file=out)
+        from metatron.config import DEFAULT_CONTEXT_DIR
+        shown = kb_name or load_settings().context_dir or DEFAULT_CONTEXT_DIR
+        print(f"\nDone. Author candidates into {shown}/candidate/ (skill: context-okf-llm-ingest);", file=out)
+        print("promotion is a human-reviewed git mv (skill: context-okf-promote-candidates).", file=out)
+        return 0
+    print("unknown context command", file=out)
+    return 2
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="metatron")
     parser.add_argument(
@@ -948,6 +971,18 @@ def _build_parser() -> argparse.ArgumentParser:
     f_check.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_check.add_argument("--repo", default=".")
     f_check.add_argument("--actor", choices=("human", "ci"), default="human")
+
+    context_p = sub.add_parser(
+        "context", help="onboard a repo to files-first mode (rule, skills, knowledge base)")
+    context_sub = context_p.add_subparsers(dest="context_command")
+    c_setup = context_sub.add_parser(
+        "setup", help="add the consult-first rule, OKF skills, and knowledge-base scaffold")
+    c_setup.add_argument(
+        "path", nargs="?", default=".",
+        help="repo or monorepo-app directory to onboard (default: current dir)")
+    c_setup.add_argument(
+        "--dir", default=None,
+        help="knowledge-base directory name (default: context, or the configured context_dir)")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"
