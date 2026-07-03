@@ -41,10 +41,11 @@ def test_is_newer_compares_dotted_numerics():
 
 
 def test_classify_install_path():
-    assert V._classify_install_path("/opt/homebrew/Cellar/metatron/0.2.1/lib/...")[1] == "brew upgrade metatron"
     assert V._classify_install_path("/Users/x/.local/pipx/venvs/getmetatron/lib/...")[1] == "pipx upgrade getmetatron"
     assert V._classify_install_path("/Users/x/.local/share/uv/tools/getmetatron/lib/...")[1] == "uv tool upgrade getmetatron"
     assert V._classify_install_path("/usr/lib/python3.12/site-packages/metatron/version.py")[1] == "pip install -U getmetatron"
+    # No Homebrew distribution exists; brew-looking paths fall through to pip.
+    assert V._classify_install_path("/opt/homebrew/Cellar/metatron/0.2.1/lib/...")[1] == "pip install -U getmetatron"
 
 
 def test_upgrade_command_env_override_wins(monkeypatch, tmp_path):
@@ -164,5 +165,5 @@ def test_check_for_update_cache_only_never_fetches(monkeypatch, tmp_path):
 def test_format_update_notice():
     assert V.format_update_notice(None) is None
     assert V.format_update_notice(V.UpdateInfo("0.2.1", "0.2.1", False, "x")) is None
-    msg = V.format_update_notice(V.UpdateInfo("0.2.1", "0.3.0", True, "brew upgrade metatron"))
-    assert "0.3.0" in msg and "brew upgrade metatron" in msg
+    msg = V.format_update_notice(V.UpdateInfo("0.2.1", "0.3.0", True, "uv tool upgrade getmetatron"))
+    assert "0.3.0" in msg and "uv tool upgrade getmetatron" in msg

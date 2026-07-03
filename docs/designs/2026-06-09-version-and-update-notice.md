@@ -63,10 +63,13 @@ Functions:
   Anything that doesn't parse cleanly → `False` (no notice). Equal → `False`.
 - `detect_install_method() -> tuple[str, str]` — best-effort `(method, command)` from
   the install path (`Path(__file__)` / `sys.prefix` / `sys.argv[0]`):
-  - `/Cellar/` or `/opt/homebrew/` → `("homebrew", "brew upgrade metatron")`
   - `/pipx/` → `("pipx", "pipx upgrade getmetatron")`
   - `/uv/tools/` → `("uv", "uv tool upgrade getmetatron")`
   - else → `("pip", "pip install -U getmetatron")`
+
+  (An initial Homebrew branch — `/Cellar/` or `/opt/homebrew/` →
+  `brew upgrade metatron` — was removed: no Homebrew distribution exists, so those
+  paths fall through to pip.)
 - `upgrade_command() -> str` — resolves the command by precedence:
   1. `METATRON_INSTALL_CMD` env var (explicit override), else
   2. `install.json` if present, else
@@ -124,7 +127,7 @@ best-effort (a write failure is ignored).
   (function arg / monkeypatch), never hit live, and the config dir is pointed at a
   `tmp_path`:
   - `_is_newer`: newer / equal / older / unparseable.
-  - `detect_install_method`: homebrew / pipx / uv / pip sample paths.
+  - `detect_install_method`: pipx / uv / pip sample paths.
   - `upgrade_command`: env override wins; existing `install.json` is read; first-run
     detection writes `install.json` and is reused (no re-detect); a user-edited file
     is respected.
