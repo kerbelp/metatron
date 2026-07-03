@@ -15,6 +15,7 @@ from metatron.mirror.render import (
     parse_document, fingerprint_decision, fingerprint_fields, split_frontmatter,
 )
 from metatron.mirror.layout import status_for_path
+from metatron.filesfirst.schema import RESERVED_FILENAMES
 
 
 @dataclass
@@ -55,12 +56,24 @@ def import_bundle(store, repo: str, root: Path) -> ImportResult:
     paths = sorted((mirror / "candidate").glob("*.md")) + \
         sorted((mirror / "decisions").glob("*.md"))
     for path in paths:
+        # Generated listings (index.md, log.md) live in the status directories
+        # but are not concept documents — never import them.
+        if path.name in RESERVED_FILENAMES:
+            continue
         text = path.read_text()
         fields = parse_document(text)
         did = fields.get("id")
         decision = store.get(did) if did else None
         status = status_for_path(path)
         if did is None:
+            # An id-less file must declare itself an OKF concept; anything else
+            # (a stray note, a misplaced README) must not silently become a
+            # decision at the directory-derived status.
+            if not str(_raw_frontmatter(text).get("type") or "").strip():
+                res.warnings.append(
+                    f"{path.name}: no 'type' frontmatter — not a decision document, skipped"
+                )
+                continue
             # Hand-authored file with no id: the human placing it in this
             # directory IS the approval, so create the decision at the
             # directory-derived status. source_refs is honored at authoring

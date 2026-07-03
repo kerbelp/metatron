@@ -103,7 +103,7 @@ def test_new_file_without_id_creates_a_decision(tmp_path):
     d_dir = root / "metatron" / "decisions"
     d_dir.mkdir(parents=True)
     (d_dir / "hand-authored.md").write_text(
-        "---\nscope: web\nconfidence: high\n---\n\n"
+        "---\ntype: Metatron Decision\nscope: web\nconfidence: high\n---\n\n"
         "## Pattern\nAlways gzip API responses.\n\n## Rationale\nBandwidth.\n")
     res = import_bundle(store, repo="r", root=root)
     created = store.list(repo="r", status=Status.CANONICAL)
@@ -157,7 +157,7 @@ def test_create_honors_source_refs(tmp_path):
     d_dir = root / "metatron" / "decisions"
     d_dir.mkdir(parents=True)
     (d_dir / "hand-authored.md").write_text(
-        '---\nscope: web\nconfidence: high\nsource_refs: ["src/x.py:10"]\n---\n\n'
+        '---\ntype: Metatron Decision\nscope: web\nconfidence: high\nsource_refs: ["src/x.py:10"]\n---\n\n'
         "## Pattern\nP.\n\n## Rationale\nR.\n")
     import_bundle(store, repo="r", root=root)
     created = store.list(repo="r", status=Status.CANONICAL)
@@ -202,3 +202,32 @@ def test_unedited_datetime_timestamp_does_not_warn(tmp_path):
     f.write_text(text)
     res = import_bundle(store, repo="r", root=root)
     assert not any("created_at" in w or "updated_at" in w for w in res.warnings)
+
+
+def test_generated_index_file_is_not_imported_as_a_decision(tmp_path):
+    # `metatron files index` writes a generated listing (index.md) into
+    # decisions/. It is a reserved artifact, not a concept document — it must
+    # never be imported (least of all as a silently-created CANONICAL decision).
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    (root / "metatron" / "decisions").mkdir(parents=True)
+    (root / "metatron" / "decisions" / "index.md").write_text(
+        "# Decision index\n\n> Generated — do not edit.\n"
+    )
+    res = import_bundle(store, repo="r", root=root)
+    assert store.count() == 0
+    assert res.warnings == []  # known artifact: skipped silently
+
+
+def test_idless_file_without_type_is_skipped_with_warning(tmp_path):
+    # A stray id-less markdown note in a status directory is not an OKF concept
+    # (no `type` frontmatter) and must not become a decision.
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    (root / "metatron" / "decisions").mkdir(parents=True)
+    (root / "metatron" / "decisions" / "notes.md").write_text(
+        "---\nauthor: someone\n---\n\n## Pattern\nstray note\n"
+    )
+    res = import_bundle(store, repo="r", root=root)
+    assert store.count() == 0
+    assert any("notes.md" in w and "type" in w for w in res.warnings)
