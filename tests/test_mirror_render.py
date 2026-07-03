@@ -10,7 +10,8 @@ def _decision(**kw):
                 origin=Origin.AGENT_SUBMITTED, confidence=Confidence.MEDIUM,
                 keywords=["zod", "validation"],
                 source_refs=[SourceRef(kind=SourceRefKind.FILE, ref="src/api/validate.ts:42")])
-    base.update(kw); return Decision(**base)
+    base.update(kw)
+    return Decision(**base)
 
 
 def test_render_emits_okf_type_field():

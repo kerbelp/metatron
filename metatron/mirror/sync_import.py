@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from metatron.models import (
-    Status, Confidence, Decision, Origin, SourceRef, SourceRefKind,
+    Confidence, Decision, Origin, SourceRef, SourceRefKind,
 )
 from metatron.mirror.render import (
     parse_document, fingerprint_decision, fingerprint_fields, split_frontmatter,

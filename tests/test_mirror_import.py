@@ -1,5 +1,4 @@
 import shutil
-import json
 from metatron.models import Decision, Origin, Status, Confidence
 from metatron.storage.sqlite import SQLiteDecisionStore
 from metatron.mirror.export import export_bundle

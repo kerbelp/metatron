@@ -1,4 +1,3 @@
-from pathlib import Path
 from metatron.filesfirst.index import build_index, write_index
 
 

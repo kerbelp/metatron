@@ -12,7 +12,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from metatron.events import Event
-from metatron.models import IngestRun, Decision, Status
+from metatron.models import IngestRun, Decision, Origin, Status, TriageVerdict
 from metatron.storage.base import EventStore, DecisionStore
 
 # Every per-repo file carries this one-row table so it is self-describing (its repo
@@ -165,8 +165,8 @@ class SQLiteDecisionStore(DecisionStore):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
-        triage: "TriageVerdict | None" = None,
-        origin: "Origin | None" = None,
+        triage: TriageVerdict | None = None,
+        origin: Origin | None = None,
         search: str | None = None,
         limit: int | None = None,
         offset: int = 0,
@@ -186,8 +186,8 @@ class SQLiteDecisionStore(DecisionStore):
         status: Status | None = None,
         scope: str | None = None,
         model: str | None = None,
-        triage: "TriageVerdict | None" = None,
-        origin: "Origin | None" = None,
+        triage: TriageVerdict | None = None,
+        origin: Origin | None = None,
         search: str | None = None,
     ) -> int:
         where, params = _filter(repo, status, scope, model, triage, origin, search)
