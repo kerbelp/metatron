@@ -8,13 +8,19 @@ description: Use when promoting reviewed Metatron candidate decisions to canonic
 ## Overview
 
 A Metatron decision becomes **canonical** by moving its OKF file from
-`metatron/candidate/` to `metatron/decisions/`. The directory *is* the status.
+`context/candidate/` to `context/decisions/`. The directory *is* the status.
 This skill covers doing that move in a git/CI flow, as a companion to authoring
 candidates (see the `okf-llm-ingest` skill).
 
 **This skill is mechanical only.** You move the specific files a human named, and
 nothing else. You do **not** decide which candidates are worthy — that judgment is
 the human curation act Metatron's model is built around.
+
+
+> **Directory name:** `context/` is the default knowledge-base directory. A repo may
+> configure another name (`context_dir` in `metatron.toml`, `METATRON_CONTEXT_DIR`,
+> or `--context-dir` on the mirror commands); pre-rename repos may still use
+> `metatron/`. The layout inside is identical — substitute the configured name.
 
 ## The invariant — read before doing anything
 
@@ -45,10 +51,10 @@ derived, rebuildable index, not something you curate or hand-edit. Do **not** st
 
 ## Workflow
 
-1. A human names the candidate(s) to promote (e.g. `metatron/candidate/use-repo-pattern.md`).
+1. A human names the candidate(s) to promote (e.g. `context/candidate/use-repo-pattern.md`).
 2. For each named file, move it — preserving history:
    ```bash
-   git mv metatron/candidate/use-repo-pattern.md metatron/decisions/use-repo-pattern.md
+   git mv context/candidate/use-repo-pattern.md context/decisions/use-repo-pattern.md
    ```
 3. Open a pull request with only those moves. A human reviews and **merges**.
 4. After merge, reconcile the serving index (locally or in CI):
@@ -56,9 +62,9 @@ derived, rebuildable index, not something you curate or hand-edit. Do **not** st
    metatron mirror import     # rebuilds the DB from files; moved files become canonical
    ```
 
-**Monorepos:** each app has its own `metatron/` (e.g. `apps/web/metatron/`). Move the
-file within that app's tree (`apps/web/metatron/candidate/X.md` →
-`apps/web/metatron/decisions/X.md`) and reconcile it with
+**Monorepos:** each app has its own `context/` (e.g. `apps/web/context/`). Move the
+file within that app's tree (`apps/web/context/candidate/X.md` →
+`apps/web/context/decisions/X.md`) and reconcile it with
 `metatron mirror import --root apps/web`.
 
 ## CI's allowed role
@@ -91,5 +97,5 @@ file within that app's tree (`apps/web/metatron/candidate/X.md` →
   content edits as a separate authoring change.
 - **Stamping `id`s.** Writing `id` into files; the rebuilt DB won't know it and the
   file is skipped on import.
-- **Moving to a wrong path.** Files must land directly in `metatron/decisions/`; only
+- **Moving to a wrong path.** Files must land directly in `context/decisions/`; only
   `candidate/` and `decisions/` are status directories.

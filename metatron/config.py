@@ -28,6 +28,13 @@ DEFAULT_DB_PATH = str(Path.home() / ".metatron")
 # and comments are not in English does not get English decisions back over MCP.
 DEFAULT_OUTPUT_LANGUAGE = "english"
 
+# The knowledge-base directory inside a repo (the OKF bundle root, holding
+# ``candidate/`` and ``decisions/``). "context" matches the Repository Context Layer
+# framing and avoids colliding with a "metatron" package/dir; earlier bundles used
+# ``metatron/``, which resolve_context_dir still recognizes.
+DEFAULT_CONTEXT_DIR = "context"
+LEGACY_CONTEXT_DIR = "metatron"
+
 
 class Settings(BaseModel):
     db_path: str = DEFAULT_DB_PATH
@@ -40,6 +47,10 @@ class Settings(BaseModel):
     # ``get_output_language`` helper is the single resolution point so a per-repo
     # override can layer on later without touching the prompt call sites.
     output_language: str = DEFAULT_OUTPUT_LANGUAGE
+    # The repo's knowledge-base directory name. ``None`` means "not explicitly
+    # configured", which lets ``resolve_context_dir`` fall back to a legacy
+    # ``metatron/`` bundle; an explicit value is always used as-is.
+    context_dir: str | None = None
 
 
 def load_settings(path: str | Path = "metatron.toml") -> Settings:
@@ -61,7 +72,31 @@ def load_settings(path: str | Path = "metatron.toml") -> Settings:
             "METATRON_OUTPUT_LANGUAGE",
             file_values.get("output_language", DEFAULT_OUTPUT_LANGUAGE),
         ),
+        context_dir=os.environ.get(
+            "METATRON_CONTEXT_DIR", file_values.get("context_dir")
+        ),
     )
+
+
+def resolve_context_dir(root: str | Path = ".", configured: str | None = None) -> Path:
+    """The repo's knowledge-base directory under *root*.
+
+    An explicitly *configured* name (CLI flag, ``METATRON_CONTEXT_DIR``,
+    ``metatron.toml``) is always used as-is. Otherwise the default ``context/`` is
+    chosen — unless it does not exist while a legacy ``metatron/`` bundle (one that
+    actually has a ``candidate/`` or ``decisions/`` status directory) does, so repos
+    onboarded before the rename keep working without configuration.
+    """
+    root = Path(root)
+    if configured:
+        return root / configured
+    preferred = root / DEFAULT_CONTEXT_DIR
+    legacy = root / LEGACY_CONTEXT_DIR
+    if not preferred.exists() and (
+        (legacy / "candidate").is_dir() or (legacy / "decisions").is_dir()
+    ):
+        return legacy
+    return preferred
 
 
 def get_output_language(path: str | Path = "metatron.toml") -> str:

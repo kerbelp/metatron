@@ -20,9 +20,15 @@ API key, no `ingest` run.
 
 **The one invariant you must respect:** an LLM only ever produces **candidates**.
 Crossing the canonical boundary (promoting a candidate to canonical) is *always*
-human-gated. Write candidate files to `metatron/candidate/` only — **never** to
-`metatron/decisions/`. A human moving a file into `decisions/` is the curation act;
+human-gated. Write candidate files to `context/candidate/` only — **never** to
+`context/decisions/`. A human moving a file into `decisions/` is the curation act;
 nothing self-promotes.
+
+
+> **Directory name:** `context/` is the default knowledge-base directory. A repo may
+> configure another name (`context_dir` in `metatron.toml`, `METATRON_CONTEXT_DIR`,
+> or `--context-dir` on the mirror commands); pre-rename repos may still use
+> `metatron/`. The layout inside is identical — substitute the configured name.
 
 ## When to use
 
@@ -37,7 +43,7 @@ exist in the store (that round-trips through `mirror sync`/`import` by `id`).
 
 1. Read the target repo. Identify **prescriptive, non-obvious decisions** a senior
    engineer on this codebase already knows (see "What makes a good decision").
-2. Write each one as an OKF concept file under `<repo>/metatron/candidate/`.
+2. Write each one as an OKF concept file under `<repo>/context/candidate/`.
 3. Run `metatron mirror import` (from the repo). New files (no `id`) are minted as
    **candidate** decisions, origin `human`, at the directory-derived status.
 4. A human reviews with `metatron candidates list` / the UI, then promotes.
@@ -47,18 +53,18 @@ recipient never imports them.
 
 ## Monorepos
 
-Each app/package keeps its **own** `metatron/` knowledge base, co-located with it
-(e.g. `apps/web/metatron/`, `services/api/metatron/`). Write candidates into the
-`metatron/candidate/` of the app you're documenting, and import that one with
+Each app/package keeps its **own** `context/` knowledge base, co-located with it
+(e.g. `apps/web/context/`, `services/api/context/`). Write candidates into the
+`context/candidate/` of the app you're documenting, and import that one with
 `--root`:
 
 ```bash
-metatron mirror import --root apps/web    # reads apps/web/metatron/
+metatron mirror import --root apps/web    # reads apps/web/context/
 ```
 
-Consult and extend the `metatron/` **nearest** the code you're touching (walk up from
-the file to the closest `metatron/`). A single-app repo is just the degenerate case:
-`metatron/` at the repo root, `--root .`.
+Consult and extend the `context/` **nearest** the code you're touching (walk up from
+the file to the closest `context/`). A single-app repo is just the degenerate case:
+`context/` at the repo root, `--root .`.
 
 ## File format (exact)
 
@@ -115,7 +121,7 @@ Extract conventions an agent couldn't infer from the framework alone:
 
 | Concern | Answer |
 |---|---|
-| Where to write | `<repo>/metatron/candidate/*.md` (never `decisions/`) |
+| Where to write | `<repo>/context/candidate/*.md` (never `decisions/`) |
 | Required frontmatter | `type: Metatron Decision` |
 | New-decision signal | **no `id` field** |
 | Body sections read | `## Pattern`, `## Rationale` (only) |

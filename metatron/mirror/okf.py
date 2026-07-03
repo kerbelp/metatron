@@ -5,7 +5,7 @@ markdown file whose frontmatter carries the one required field, ``type``. This
 module adds the OKF-flavoured extras on top of the plain export:
 
 - ``export_okf_bundle`` writes the bundle, then an optional OKF directory listing
-  (``<root>/metatron/index.md``) enumerating every concept by its concept id.
+  (the bundle root (``index.md``)) enumerating every concept by its concept id.
 - ``validate_okf_bundle`` checks the structural invariant that matters for OKF
   validity: every concept doc declares a non-empty ``type``.
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from metatron.config import resolve_context_dir
 from metatron.mirror.export import export_bundle
 from metatron.mirror.render import split_frontmatter
 
@@ -35,14 +36,16 @@ def _concept_id(bundle_root: Path, md_path: Path) -> str:
     return md_path.relative_to(bundle_root).with_suffix("").as_posix()
 
 
-def export_okf_bundle(store, repo: str, root: Path, events: list) -> dict[str, str]:
+def export_okf_bundle(store, repo: str, root: Path, events: list,
+                      context_dir: str | None = None) -> dict[str, str]:
     """Export an OKF v0.1 bundle and an optional concept index.
 
     Delegates to ``export_bundle`` (which writes OKF-valid concept docs), then
-    writes ``<root>/metatron/index.md`` listing each concept by its concept id.
+    writes the bundle root (``index.md``) listing each concept by its concept id.
     """
-    state = export_bundle(store, repo=repo, root=root, events=events)
-    bundle_root = Path(root) / "metatron"
+    state = export_bundle(store, repo=repo, root=root, events=events,
+                          context_dir=context_dir)
+    bundle_root = resolve_context_dir(root, context_dir)
     concepts = sorted(
         p
         for p in bundle_root.rglob("*.md")
@@ -57,14 +60,14 @@ def export_okf_bundle(store, repo: str, root: Path, events: list) -> dict[str, s
     return state
 
 
-def validate_okf_bundle(root: Path) -> list[str]:
+def validate_okf_bundle(root: Path, context_dir: str | None = None) -> list[str]:
     """Return structural OKF errors (empty list = valid bundle).
 
-    Walks every concept ``.md`` file under ``<root>/metatron/`` (excluding the
+    Walks every concept ``.md`` file under the bundle root (excluding the
     reserved ``index.md``/``log.md``) and reports any that lack a non-empty
     ``type`` frontmatter field.
     """
-    bundle_root = Path(root) / "metatron"
+    bundle_root = resolve_context_dir(root, context_dir)
     errors: list[str] = []
     for p in sorted(bundle_root.rglob("*.md")):
         if p.name in _RESERVED:

@@ -14,6 +14,7 @@ from metatron.models import (
 from metatron.mirror.render import (
     parse_document, fingerprint_decision, fingerprint_fields, split_frontmatter,
 )
+from metatron.config import resolve_context_dir
 from metatron.mirror.layout import status_for_path
 from metatron.filesfirst.schema import RESERVED_FILENAMES
 
@@ -44,9 +45,10 @@ def _timestamp_edited(raw_value, db_value: datetime) -> bool:
     return str(raw_value) != db_value.isoformat()
 
 
-def import_bundle(store, repo: str, root: Path) -> ImportResult:
+def import_bundle(store, repo: str, root: Path,
+                  context_dir: str | None = None) -> ImportResult:
     res = ImportResult()
-    mirror = root / "metatron"
+    mirror = resolve_context_dir(root, context_dir)
     state = {}
     state_path = mirror / ".sync-state.json"
     if state_path.exists():

@@ -15,8 +15,8 @@ def test_moving_file_to_decisions_promotes_to_canonical(tmp_path):
                            origin=Origin.AGENT_SUBMITTED, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    src = next((root / "metatron" / "candidate").glob("*.md"))
-    dst = root / "metatron" / "decisions" / src.name
+    src = next((root / "context" / "candidate").glob("*.md"))
+    dst = root / "context" / "decisions" / src.name
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(src), str(dst))
     result = import_bundle(store, repo="r", root=root)
@@ -31,7 +31,7 @@ def test_editing_keywords_in_file_is_ignored_and_warns(tmp_path):
                            keywords=["orig"]))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("orig", "hacked"))
     res = import_bundle(store, repo="r", root=root)
     assert store.get(d.id).keywords == ["orig"]      # unchanged
@@ -45,7 +45,7 @@ def test_concurrent_db_and_file_edit_is_a_conflict(tmp_path):
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])     # records baseline fingerprint
     store.update_fields(d.id, pattern="db-changed")          # DB changes a human field
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nfile-changed"))
     res = import_bundle(store, repo="r", root=root)
     assert d.id in res.conflicts
@@ -58,7 +58,7 @@ def test_clean_file_edit_applies(tmp_path):
                            origin=Origin.HUMAN, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nedited"))
     res = import_bundle(store, repo="r", root=root)
     assert store.get(d.id).pattern == "edited"
@@ -72,8 +72,8 @@ def test_stray_non_status_md_does_not_crash_import(tmp_path):
                            origin=Origin.HUMAN, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    (root / "metatron" / "README.md").write_text("# Notes\n\narbitrary text\n")
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    (root / "context" / "README.md").write_text("# Notes\n\narbitrary text\n")
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nedited"))
     res = import_bundle(store, repo="r", root=root)  # must not raise
     assert store.get(d.id).pattern == "edited"
@@ -88,9 +88,9 @@ def test_missing_baseline_with_divergence_is_a_conflict(tmp_path):
                            origin=Origin.HUMAN, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    (root / "metatron" / ".sync-state.json").unlink()        # baseline gone
+    (root / "context" / ".sync-state.json").unlink()        # baseline gone
     store.update_fields(d.id, pattern="db-changed")          # DB diverges
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("## Pattern\norig", "## Pattern\nfile-changed"))
     res = import_bundle(store, repo="r", root=root)
     assert d.id in res.conflicts
@@ -100,7 +100,7 @@ def test_missing_baseline_with_divergence_is_a_conflict(tmp_path):
 def test_new_file_without_id_creates_a_decision(tmp_path):
     store = _store(tmp_path)
     root = tmp_path / "mirror"
-    d_dir = root / "metatron" / "decisions"
+    d_dir = root / "context" / "decisions"
     d_dir.mkdir(parents=True)
     (d_dir / "hand-authored.md").write_text(
         "---\ntype: Metatron Decision\nscope: web\nconfidence: high\n---\n\n"
@@ -123,7 +123,7 @@ def test_clearing_rationale_field_applies(tmp_path):
                            origin=Origin.HUMAN, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     f.write_text(f.read_text().replace("## Rationale\nkeep-me", "## Rationale\n"))
     res = import_bundle(store, repo="r", root=root)
     assert store.get(d.id).rationale == ""
@@ -139,8 +139,8 @@ def test_import_confined_to_target_repo(tmp_path):
     root = tmp_path / "mirror"
     export_bundle(store, repo="A", root=root, events=[])
     # Move A's exported candidate file into decisions/ (would normally promote).
-    src = next((root / "metatron" / "candidate").glob("*.md"))
-    dst = root / "metatron" / "decisions" / src.name
+    src = next((root / "context" / "candidate").glob("*.md"))
+    dst = root / "context" / "decisions" / src.name
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(src), str(dst))
     res = import_bundle(store, repo="B", root=root)
@@ -154,7 +154,7 @@ def test_create_honors_source_refs(tmp_path):
     # A hand-authored (no-id) file's source_refs must be honored at creation.
     store = _store(tmp_path)
     root = tmp_path / "mirror"
-    d_dir = root / "metatron" / "decisions"
+    d_dir = root / "context" / "decisions"
     d_dir.mkdir(parents=True)
     (d_dir / "hand-authored.md").write_text(
         '---\ntype: Metatron Decision\nscope: web\nconfidence: high\nsource_refs: ["src/x.py:10"]\n---\n\n'
@@ -187,7 +187,7 @@ def test_unedited_datetime_timestamp_does_not_warn(tmp_path):
                            origin=Origin.HUMAN, status=Status.CANDIDATE))
     root = tmp_path / "mirror"
     export_bundle(store, repo="r", root=root, events=[])
-    f = next((root / "metatron" / "candidate").glob("*.md"))
+    f = next((root / "context" / "candidate").glob("*.md"))
     dec = store.get(d.id)
     # Rewrite the timestamps in the form yaml parses into datetime objects
     # (unquoted, space separator) — semantically identical to the DB value.
@@ -210,8 +210,8 @@ def test_generated_index_file_is_not_imported_as_a_decision(tmp_path):
     # never be imported (least of all as a silently-created CANONICAL decision).
     store = _store(tmp_path)
     root = tmp_path / "mirror"
-    (root / "metatron" / "decisions").mkdir(parents=True)
-    (root / "metatron" / "decisions" / "index.md").write_text(
+    (root / "context" / "decisions").mkdir(parents=True)
+    (root / "context" / "decisions" / "index.md").write_text(
         "# Decision index\n\n> Generated — do not edit.\n"
     )
     res = import_bundle(store, repo="r", root=root)
@@ -224,10 +224,37 @@ def test_idless_file_without_type_is_skipped_with_warning(tmp_path):
     # (no `type` frontmatter) and must not become a decision.
     store = _store(tmp_path)
     root = tmp_path / "mirror"
-    (root / "metatron" / "decisions").mkdir(parents=True)
-    (root / "metatron" / "decisions" / "notes.md").write_text(
+    (root / "context" / "decisions").mkdir(parents=True)
+    (root / "context" / "decisions" / "notes.md").write_text(
         "---\nauthor: someone\n---\n\n## Pattern\nstray note\n"
     )
     res = import_bundle(store, repo="r", root=root)
     assert store.count() == 0
     assert any("notes.md" in w and "type" in w for w in res.warnings)
+
+
+def test_import_reads_legacy_metatron_bundle_without_config(tmp_path):
+    # Bundles created before the context/ rename live under metatron/; with no
+    # explicit configuration the importer must keep reading them.
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    d_dir = root / "metatron" / "decisions"
+    d_dir.mkdir(parents=True)
+    (d_dir / "hand-authored.md").write_text(
+        "---\ntype: Metatron Decision\nscope: web\nconfidence: high\n---\n\n"
+        "## Pattern\nP.\n\n## Rationale\nR.\n")
+    import_bundle(store, repo="r", root=root)
+    assert store.count(repo="r", status=Status.CANONICAL) == 1
+
+
+def test_roundtrip_with_custom_context_dir(tmp_path):
+    # An explicitly configured directory name is honored by export and import.
+    store = _store(tmp_path)
+    d = store.add(Decision(repo="r", pattern="p", scope="a", rationale="x",
+                           origin=Origin.HUMAN, status=Status.CANDIDATE))
+    root = tmp_path / "mirror"
+    export_bundle(store, repo="r", root=root, events=[], context_dir="kb")
+    assert (root / "kb" / "candidate").is_dir()
+    assert not (root / "context").exists()
+    res = import_bundle(store, repo="r", root=root, context_dir="kb")
+    assert res.conflicts == [] and store.get(d.id).status == Status.CANDIDATE

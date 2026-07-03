@@ -8,19 +8,22 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from metatron.config import resolve_context_dir
 from metatron.models import Status
 from metatron.feedback_score import helpfulness_scores
 from metatron.mirror.render import render_document, fingerprint_decision
 from metatron.mirror.layout import path_for
 
-def export_bundle(store, repo: str, root: Path, events: list) -> dict[str, str]:
+def export_bundle(store, repo: str, root: Path, events: list,
+                  context_dir: str | None = None) -> dict[str, str]:
+    mirror = resolve_context_dir(root, context_dir)
     scores = helpfulness_scores(events)
     state: dict[str, str] = {}
     written: set[Path] = set()
     for status in (Status.CANDIDATE, Status.CANONICAL):
         for d in store.list(repo=repo, status=status):
             text = render_document(d, helpfulness=scores.get(d.id))
-            dest = root / path_for(d)
+            dest = path_for(d, mirror)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(text)
             written.add(dest.resolve())
@@ -32,7 +35,6 @@ def export_bundle(store, repo: str, root: Path, events: list) -> dict[str, str]:
     # set (demoted, rejected, deleted) must not leave a stale file behind. Prune
     # is confined to the two status dirs and never touches index.md, the sync
     # state, or anything outside them.
-    mirror = root / "metatron"
     for status_dir in ("candidate", "decisions"):
         for stale in (mirror / status_dir).glob("*.md"):
             if stale.resolve() not in written:

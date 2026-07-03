@@ -2,19 +2,19 @@
 #
 # metatron_setup_files.sh — onboard a repo (or one app of a monorepo) to Metatron
 # in FILES-FIRST mode: no MCP server, no Claude hooks. The agent reads conventions
-# straight from Open Knowledge Format (OKF) markdown under metatron/, and the OKF
+# straight from Open Knowledge Format (OKF) markdown under context/, and the OKF
 # files in git are the source of truth.
 #
 # Companion to metatron_setup.sh (the MCP version). The differences:
-#   - CLAUDE.md gets a "read the metatron/ files first" block (not "query the MCP tool").
+#   - CLAUDE.md gets a "read the context/ files first" block (not "query the MCP tool").
 #   - A .roo/rules/ rule re-states the directive every turn (Roo loads workspace
 #     rules natively) — this replaces the .claude UserPromptSubmit/Stop hooks.
 #   - The OKF authoring + promotion skills are copied into .roo/skills/.
-#   - The metatron/ knowledge base is scaffolded.
+#   - The context/ knowledge base is scaffolded.
 #   - Nothing MCP: no .mcp.json, no .claude/ changes, no feedback script.
 #
 # Monorepos: run once per app, passing the app dir. Each app keeps its own
-# metatron/ co-located with it; the agent consults the metatron/ nearest the code
+# context/ co-located with it; the agent consults the context/ nearest the code
 # it touches. Workspace-root artifacts (.roo/, root CLAUDE.md) are shared and
 # refreshed idempotently on every run.
 #
@@ -52,7 +52,7 @@ fi
 # Workspace root = the git toplevel that contains the target (falls back to the
 # target itself for a non-git directory). Root-level artifacts (.roo/, the general
 # CLAUDE.md block) live here and are shared across all apps in a monorepo; the
-# metatron/ knowledge base lives at the target (the app).
+# context/ knowledge base lives at the target (the app).
 WORKSPACE_ROOT="$(git -C "$TARGET" rev-parse --show-toplevel 2>/dev/null || echo "$TARGET")"
 
 echo "Onboarding to Metatron (files-first): $TARGET"
@@ -77,17 +77,17 @@ cat > "$ROO_RULES/metatron.md" <<'EOF'
 # Metatron conventions (files-first)
 
 This repo's coding conventions ("decisions") live as Open Knowledge Format markdown
-under `metatron/`: `metatron/decisions/` is **canonical**, `metatron/candidate/` is
-**proposed** (unreviewed). In a monorepo each app has its own `metatron/` — use the
-one **nearest** the files you are touching (walk up to the closest `metatron/`).
+under `context/`: `context/decisions/` is **canonical**, `context/candidate/` is
+**proposed** (unreviewed). In a monorepo each app has its own `context/` — use the
+one **nearest** the files you are touching (walk up to the closest `context/`).
 
 - **Consult first.** Before exploring or editing code in an area, read the relevant
-  files in the nearest `metatron/decisions/` and follow them. Say that you did; do
+  files in the nearest `context/decisions/` and follow them. Say that you did; do
   not rediscover conventions manually until you have.
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
-  Author it as a new OKF file in the nearest `metatron/candidate/` (skill:
+  Author it as a new OKF file in the nearest `context/candidate/` (skill:
   `okf-llm-ingest`). Candidates are proposals for human review — never canonical.
-- **Never self-promote.** Do not move files into `metatron/decisions/`. Promotion is
+- **Never self-promote.** Do not move files into `context/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
   `okf-promote-candidates`). Nothing self-promotes.
 EOF
@@ -106,8 +106,8 @@ else
   echo "  copied OKF skills to $ROO_SKILLS (okf-llm-ingest, okf-promote-candidates)"
 fi
 
-# --- 3. metatron/ knowledge base (scaffold; never clobbers content) ---------
-KB="$TARGET/metatron"
+# --- 3. context/ knowledge base (scaffold; never clobbers content) ---------
+KB="$TARGET/context"
 mkdir -p "$KB/candidate" "$KB/decisions"
 # .gitkeep so the empty status dirs survive a commit.
 [[ -e "$KB/candidate/.gitkeep" ]] || : > "$KB/candidate/.gitkeep"
@@ -136,20 +136,20 @@ ROOT_BLOCK='<!-- METATRON:START (managed by metatron_setup_files.sh — safe to 
 ## Codebase conventions via Metatron (files) — consult FIRST
 
 This repo'"'"'s conventions ("decisions") live as Open Knowledge Format markdown under
-`metatron/` — `metatron/decisions/` is canonical, `metatron/candidate/` is proposed
-(unreviewed). In a monorepo each app has its own `metatron/`; use the one **nearest**
+`context/` — `context/decisions/` is canonical, `context/candidate/` is proposed
+(unreviewed). In a monorepo each app has its own `context/`; use the one **nearest**
 the files you are touching.
 
 **Before you Read, Grep, Glob, or Edit code in an area — and before proposing an
-implementation — first read the relevant files in the nearest `metatron/decisions/`
+implementation — first read the relevant files in the nearest `context/decisions/`
 and follow them.** State that you consulted them; do not rediscover conventions
 manually until you have.
 
 When you find a durable convention not already captured, **author it as a candidate**:
-a new OKF file in the nearest `metatron/candidate/` (see the `okf-llm-ingest` skill in
+a new OKF file in the nearest `context/candidate/` (see the `okf-llm-ingest` skill in
 `.roo/skills/`). Candidates are uncurated proposals for human review.
 
-**Promotion to canonical is human-gated.** Never move a file into `metatron/decisions/`
+**Promotion to canonical is human-gated.** Never move a file into `context/decisions/`
 yourself; a human does that via `git mv` reviewed in a pull request (see the
 `okf-promote-candidates` skill). Nothing self-promotes.
 <!-- METATRON:END -->'
@@ -162,11 +162,11 @@ if [[ "$TARGET" != "$WORKSPACE_ROOT" ]]; then
   APP_BLOCK='<!-- METATRON:START (managed by metatron_setup_files.sh — safe to edit inside) -->
 ## Metatron conventions for this app — consult FIRST
 
-This app'"'"'s conventions live in `metatron/` here: `metatron/decisions/` (canonical),
-`metatron/candidate/` (proposed). Read the relevant `metatron/decisions/` before
+This app'"'"'s conventions live in `context/` here: `context/decisions/` (canonical),
+`context/candidate/` (proposed). Read the relevant `context/decisions/` before
 editing this app'"'"'s code and follow them; record any missing durable convention as a
-candidate OKF file in `metatron/candidate/`. Never self-promote into
-`metatron/decisions/` — promotion is human-gated via `git mv` in a reviewed pull
+candidate OKF file in `context/candidate/`. Never self-promote into
+`context/decisions/` — promotion is human-gated via `git mv` in a reviewed pull
 request. See the workspace-root `.roo/skills/` (`okf-llm-ingest`,
 `okf-promote-candidates`) for the file format and workflow.
 <!-- METATRON:END -->'
@@ -176,5 +176,5 @@ fi
 echo
 echo "Done (files-first — no MCP, no hooks). Next steps:"
 echo "  - Author candidates into $KB/candidate/ (see .roo/skills/okf-llm-ingest)."
-echo "  - Promote reviewed ones with a human-approved 'git mv' to metatron/decisions/."
+echo "  - Promote reviewed ones with a human-approved 'git mv' to context/decisions/."
 echo "  - Reconnect Roo / Claude Code so it picks up the new .roo rule and CLAUDE.md."
