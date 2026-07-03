@@ -16,7 +16,10 @@ uses an Anthropic model to extract those records. This skill lets **any** LLM/ag
 do the extraction instead, by writing the same records as plain
 [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
 markdown files. `metatron mirror import` then reads those files into the store — no
-API key, no `ingest` run.
+API key, no `ingest` run. The git-tracked bundle is Metatron's implementation of the
+[Repository Context Layer](https://github.com/kerbelp/context-md) — see the
+[context-md manifesto](https://github.com/kerbelp/context-md/blob/main/whitepaper/context-md-manifesto.pdf)
+for the rationale behind git-native, agent-maintained project context.
 
 **The one invariant you must respect:** an LLM only ever produces **candidates**.
 Crossing the canonical boundary (promoting a candidate to canonical) is *always*
