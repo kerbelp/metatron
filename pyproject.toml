@@ -29,6 +29,7 @@ metatron = "metatron.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "ruff>=0.14",
 ]
 
 [build-system]
@@ -40,3 +41,15 @@ packages = ["metatron"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# Default rule set (pyflakes + pycodestyle errors), minus E731: small named
+# lambdas for per-item scoring terms are an established idiom here.
+ignore = ["E731"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests group imports with the section of tests that uses them.
+"tests/*" = ["E402"]

@@ -23,9 +23,6 @@ from metatron.version import package_version, version_string, check_for_update, 
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.repo_identity import repo_id
 
-# Feedback refinement defaults to Opus (overridable with --model); the global
-# default model (Sonnet) is tuned for bulk extraction, not this higher-stakes step.
-REFINE_MODEL = "claude-opus-4-8"
 from metatron.models import Status
 from metatron.pipeline import ingest
 from metatron.storage.base import DecisionStore
@@ -37,6 +34,10 @@ from metatron.storage.catalog import (
 )
 from metatron.storage.migrate import migrate_legacy_db
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteIngestRunStore
+
+# Feedback refinement defaults to Opus (overridable with --model); the global
+# default model (Sonnet) is tuned for bulk extraction, not this higher-stakes step.
+REFINE_MODEL = "claude-opus-4-8"
 
 
 class RepoResolutionError(Exception):
