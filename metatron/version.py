@@ -92,8 +92,6 @@ def _is_newer(latest: str, current: str) -> bool:
 def _classify_install_path(path: str) -> tuple[str, str]:
     """(method, upgrade_command) inferred from where the package is installed."""
     p = path.lower()
-    if "/cellar/" in p or "/opt/homebrew/" in p:
-        return ("homebrew", "brew upgrade metatron")
     if "/pipx/" in p:
         return ("pipx", "pipx upgrade getmetatron")
     if "/uv/tools/" in p:
