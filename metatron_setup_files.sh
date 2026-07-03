@@ -22,6 +22,8 @@
 # rule and skills are managed copies, refreshed each run.
 #
 # Usage:  bash metatron_setup_files.sh [target-app-dir]   (defaults to the current dir)
+#
+# An installed metatron can do the same without a checkout:  metatron context setup [dir]
 
 set -euo pipefail
 
