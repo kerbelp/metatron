@@ -9,7 +9,6 @@ surfacing as ``database is locked`` / ``attempt to write a readonly database``.
 WAL mode plus a busy timeout lets readers and writers proceed concurrently.
 """
 
-import sqlite3
 
 from metatron.events import Event, EventKind
 from metatron.storage.sqlite import SQLiteEventStore, connect

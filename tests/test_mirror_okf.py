@@ -1,4 +1,3 @@
-from pathlib import Path
 from metatron.models import Decision, Origin, Status
 from metatron.storage.sqlite import SQLiteDecisionStore
 from metatron.mirror.okf import export_okf_bundle, validate_okf_bundle

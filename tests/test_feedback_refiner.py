@@ -141,7 +141,8 @@ def test_refine_feedback_event_refines_only_the_named_event():
     s, ev = SQLiteDecisionStore(":memory:"), SQLiteEventStore(":memory:")
     e1 = Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap one", area="src/a")
     e2 = Event(repo=REPO, kind=EventKind.FEEDBACK, missing="gap two", area="src/b")
-    ev.record(e1); ev.record(e2)
+    ev.record(e1)
+    ev.record(e2)
 
     res = refine_feedback_event(s, ev, FakeRefiner(2), e1.id)
     assert (res.events_processed, res.decisions_created) == (1, 2)

@@ -15,5 +15,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
+      - name: Lint
+        run: uv run ruff check .
       - name: Run tests
         run: uv run pytest -q
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run front-end tests
+        run: npm test

@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from metatron.models import Origin, Decision, Status
+from metatron.models import Origin, Decision
 from metatron.storage.sqlite import SQLiteDecisionStore
 
 

@@ -6,7 +6,7 @@ storage substrate, all additive and migration-safe.
 """
 
 from metatron.events import Event, EventKind
-from metatron.models import Origin, Decision, Status
+from metatron.models import Origin, Decision
 from metatron.storage.sqlite import SQLiteEventStore, SQLiteDecisionStore
 
 

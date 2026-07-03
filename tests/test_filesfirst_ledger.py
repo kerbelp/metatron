@@ -1,5 +1,4 @@
 from datetime import datetime
-from pathlib import Path
 
 from metatron.filesfirst.ledger import LedgerEntry, append_entries, read_entries, entries_from_commit
 
