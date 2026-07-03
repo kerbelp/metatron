@@ -431,11 +431,11 @@ from metatron import version as V
 def test_version_endpoint_includes_update_fields(monkeypatch):
     from metatron.webui import api as webapi
     monkeypatch.setattr(webapi, "check_for_update",
-                        lambda **kw: V.UpdateInfo("0.2.1", "0.3.0", True, "brew upgrade metatron"))
+                        lambda **kw: V.UpdateInfo("0.2.1", "0.3.0", True, "uv tool upgrade getmetatron"))
     out = webapi.version()
     assert out["update_available"] is True
     assert out["latest"] == "0.3.0"
-    assert out["upgrade_command"] == "brew upgrade metatron"
+    assert out["upgrade_command"] == "uv tool upgrade getmetatron"
 
 
 def test_version_endpoint_handles_no_check(monkeypatch):
