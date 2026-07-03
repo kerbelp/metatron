@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from metatron.config import DEFAULT_CONTEXT_DIR
 from metatron.models import Decision, Status
 
 _STATUS_DIR: dict[Status, str] = {
@@ -41,12 +42,16 @@ def slug_for(d: Decision) -> str:
     return f"decision-{prefix}-{digest}.md"
 
 
-def path_for(d: Decision, root: Path = Path("metatron")) -> Path:
+def path_for(d: Decision, root: Path | None = None) -> Path:
     """Return the canonical filesystem path for *d* under *root*.
 
-    The parent directory encodes the status (``candidate/`` or ``decisions/``).
-    Raises ``KeyError`` for statuses that are not mirrored (e.g. REJECTED).
+    *root* is the knowledge-base directory itself (resolve it with
+    :func:`metatron.config.resolve_context_dir`); the default is the bare
+    ``context/`` name. The parent directory encodes the status (``candidate/``
+    or ``decisions/``). Raises ``KeyError`` for statuses that are not mirrored
+    (e.g. REJECTED).
     """
+    root = Path(DEFAULT_CONTEXT_DIR) if root is None else root
     return root / _STATUS_DIR[d.status] / slug_for(d)
 
 

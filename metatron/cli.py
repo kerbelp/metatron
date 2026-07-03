@@ -18,7 +18,7 @@ from typing import TextIO
 from dotenv import find_dotenv, load_dotenv
 
 from metatron import identity
-from metatron.config import load_settings
+from metatron.config import load_settings, resolve_context_dir
 from metatron.version import package_version, version_string, check_for_update, format_update_notice
 from metatron.extraction.provider import AnthropicProvider, LLMProvider
 from metatron.repo_identity import repo_id
@@ -653,6 +653,7 @@ def _set_status(store, decision_id, status, verb, out) -> int:
 def _cmd_mirror(args, store, event_store, settings, out) -> int:
     repo = _resolve_and_announce(args.repo, store, settings, out)
     root = Path(args.root)
+    context_dir = getattr(args, "context_dir", None) or settings.context_dir
     if args.mirror_command == "sync":
         events = event_store.list_events(repo=repo)
         # Imported lazily on purpose: keeps the mirror modules (and their yaml
@@ -661,9 +662,11 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
         from metatron.mirror.okf import export_okf_bundle
 
         if getattr(args, "okf", False):
-            export_okf_bundle(store, repo=repo, root=root, events=events)
+            export_okf_bundle(store, repo=repo, root=root, events=events,
+                              context_dir=context_dir)
         else:
-            export_bundle(store, repo=repo, root=root, events=events)
+            export_bundle(store, repo=repo, root=root, events=events,
+                          context_dir=context_dir)
         print("Mirror synced.", file=out)
         return 0
     if args.mirror_command == "import":
@@ -671,7 +674,7 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
         # unrelated commands.
         from metatron.mirror.sync_import import import_bundle
 
-        res = import_bundle(store, repo=repo, root=root)
+        res = import_bundle(store, repo=repo, root=root, context_dir=context_dir)
         for w in res.warnings:
             print(f"warning: {w}", file=out)
         for c in res.conflicts:
@@ -686,7 +689,10 @@ def _cmd_mirror(args, store, event_store, settings, out) -> int:
 
 
 def _cmd_files(args, out) -> int:
-    base = Path(args.path)
+    if args.path:
+        base = Path(args.path)
+    else:
+        base = resolve_context_dir(".", load_settings().context_dir) / "decisions"
     if not base.exists():
         print(f"no such directory: {base}", file=out)
         return 1
@@ -898,31 +904,35 @@ def _build_parser() -> argparse.ArgumentParser:
     mirror_sub = mirror_p.add_subparsers(dest="mirror_command")
     m_sync = mirror_sub.add_parser("sync", help="write decisions to the bundle (DB -> files)")
     m_sync.add_argument("--repo", default=None)
-    m_sync.add_argument("--root", default=".", help="repo root that holds metatron/")
+    m_sync.add_argument("--root", default=".", help="repo root that holds the knowledge base")
+    m_sync.add_argument("--context-dir", default=None,
+                        help="knowledge-base dir name (default: context/, or legacy metatron/)")
     m_sync.add_argument("--okf", action="store_true", help="also emit an OKF bundle index")
     m_import = mirror_sub.add_parser("import", help="apply edited bundle files (files -> DB)")
     m_import.add_argument("--repo", default=None)
     m_import.add_argument("--root", default=".")
+    m_import.add_argument("--context-dir", default=None,
+                          help="knowledge-base dir name (default: context/, or legacy metatron/)")
 
     files_p = sub.add_parser("files", help="author, lint, and index git-authoritative decision files")
     files_sub = files_p.add_subparsers(dest="files_command")
     f_lint = files_sub.add_parser("lint", help="validate decision files")
-    f_lint.add_argument("--path", default="metatron/decisions")
+    f_lint.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_index = files_sub.add_parser("index", help="regenerate index.md")
-    f_index.add_argument("--path", default="metatron/decisions")
+    f_index.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_new = files_sub.add_parser("new", help="scaffold a candidate decision")
     f_new.add_argument("slug")
     f_new.add_argument("--title", required=True)
-    f_new.add_argument("--path", default="metatron/decisions")
+    f_new.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_record = files_sub.add_parser(
         "record", help="post-merge: append usage trailers to the ledger and roll up counts")
-    f_record.add_argument("--path", default="metatron/decisions")
+    f_record.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_record.add_argument("--repo", default=".", help="git repo root to read commits from")
     f_record.add_argument("--since", default=None, help="git --since window (e.g. '7 days ago')")
     f_record.add_argument("--max-commits", type=int, default=200)
     f_report = files_sub.add_parser(
         "report", help="render a usage digest (adoption, reuse, drift, curation) over the ledger")
-    f_report.add_argument("--path", default="metatron/decisions")
+    f_report.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_report.add_argument("--repo", default=".", help="git repo root to count commits from")
     f_report.add_argument("--days", type=int, default=7, help="trailing window length")
     f_report.add_argument("--since", default=None, help="window start (ISO date; overrides --days)")
@@ -935,7 +945,7 @@ def _build_parser() -> argparse.ArgumentParser:
     f_check = files_sub.add_parser(
         "check-fields", help="reject cross-ownership frontmatter edits (human vs CI)")
     f_check.add_argument("--base", required=True, help="git ref to diff against")
-    f_check.add_argument("--path", default="metatron/decisions")
+    f_check.add_argument("--path", default=None, help="decisions dir (default: <context-dir>/decisions)")
     f_check.add_argument("--repo", default=".")
     f_check.add_argument("--actor", choices=("human", "ci"), default="human")
 

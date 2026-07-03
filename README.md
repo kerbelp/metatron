@@ -80,7 +80,7 @@ conventions extraction can't see (cross-file/workflow rules).
 ## Decisions in git — Open Knowledge Format (OKF) export
 
 Prefer working in plain files and your agent over a UI? Metatron can mirror a repo's
-decisions to markdown under `metatron/` — and that bundle is a valid
+decisions to markdown under `context/` — and that bundle is a valid
 [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
 bundle, so your conventions are portable to any tool that reads the standard.
 
@@ -99,11 +99,11 @@ bundle, so your conventions are portable to any tool that reads the standard.
   shareable across tools and teams.
 
 ```bash
-metatron mirror sync --okf   # DB -> files: write an OKF bundle under metatron/
+metatron mirror sync --okf   # DB -> files: write an OKF bundle under context/
 metatron mirror import       # files -> DB: apply edits, promotions, and new files
 ```
 
-To run an agent in this mode with **no MCP at all** — reading `metatron/` directly and
+To run an agent in this mode with **no MCP at all** — reading `context/` directly and
 authoring candidates as files — onboard with
 [`metatron_setup_files.sh`](#files-first-mode-no-mcp).
 
@@ -394,14 +394,14 @@ Flags: `--repo <id>` (limit to one repo), `--limit N` (max candidates to judge).
 
 ### `mirror` — sync decisions to/from a git-tracked markdown bundle
 
-Mirrors a repo's decisions to plain markdown under `metatron/` (one file per
+Mirrors a repo's decisions to plain markdown under `context/` (one file per
 decision, the directory encoding status: `candidate/` vs `decisions/`), so they can
 be reviewed and curated through normal git. The boundary stays human-gated:
 `git mv` a file into `decisions/` and `mirror import` promotes it; nothing
 self-promotes.
 
 ```bash
-metatron mirror sync             # DB -> files: write the bundle under metatron/
+metatron mirror sync             # DB -> files: write the bundle under context/
 metatron mirror sync --okf       # also emit an OKF v0.1 concept index
 metatron mirror import           # files -> DB: apply edits, promotions, and new files
 ```
@@ -409,7 +409,10 @@ metatron mirror import           # files -> DB: apply edits, promotions, and new
 `sync` is deterministic — re-running with no DB change is a no-op — and writes a
 `.sync-state.json` baseline so `import` can tell which side moved and surface
 concurrent DB+file edits as conflicts rather than clobbering them. Both take
-`--repo <id>` and `--root <path>` (the repo root that holds `metatron/`, default `.`).
+`--repo <id>` and `--root <path>` (the repo root that holds the bundle, default `.`).
+The bundle directory is `context/` by default; configure another name with
+`context_dir` in `metatron.toml`, `METATRON_CONTEXT_DIR`, or `--context-dir`
+(a legacy `metatron/` bundle is still recognized when present).
 
 Human-owned fields (`pattern`, `scope`, `rationale`, `source_refs`, `confidence`)
 are editable in the files and flow back on `import`; machine-derived fields (the

@@ -96,3 +96,47 @@ def test_update_settings_none_removes_key(tmp_path):
     update_settings({"default_repo": "github.com/acme/app"}, cfg)
     update_settings({"default_repo": None}, cfg)
     assert load_settings(cfg).default_repo is None
+
+
+def test_context_dir_env_beats_toml(tmp_path, monkeypatch):
+    cfg = tmp_path / "metatron.toml"
+    cfg.write_text('[metatron]\ncontext_dir = "kb"\n')
+    monkeypatch.setenv("METATRON_CONTEXT_DIR", "conventions")
+    assert load_settings(cfg).context_dir == "conventions"
+    monkeypatch.delenv("METATRON_CONTEXT_DIR")
+    assert load_settings(cfg).context_dir == "kb"
+
+
+def test_context_dir_unset_is_none(tmp_path, monkeypatch):
+    monkeypatch.delenv("METATRON_CONTEXT_DIR", raising=False)
+    assert load_settings(tmp_path / "metatron.toml").context_dir is None
+
+
+def test_resolve_context_dir_prefers_default(tmp_path):
+    from metatron.config import resolve_context_dir
+    assert resolve_context_dir(tmp_path) == tmp_path / "context"
+
+
+def test_resolve_context_dir_explicit_config_wins(tmp_path):
+    from metatron.config import resolve_context_dir
+    # Explicit config is used as-is even when a legacy bundle exists.
+    (tmp_path / "metatron" / "decisions").mkdir(parents=True)
+    assert resolve_context_dir(tmp_path, "kb") == tmp_path / "kb"
+
+
+def test_resolve_context_dir_falls_back_to_legacy_bundle(tmp_path):
+    from metatron.config import resolve_context_dir
+    (tmp_path / "metatron" / "decisions").mkdir(parents=True)
+    assert resolve_context_dir(tmp_path) == tmp_path / "metatron"
+    # ...but only while context/ is absent: once it exists, it wins.
+    (tmp_path / "context").mkdir()
+    assert resolve_context_dir(tmp_path) == tmp_path / "context"
+
+
+def test_resolve_context_dir_ignores_non_bundle_metatron_dir(tmp_path):
+    from metatron.config import resolve_context_dir
+    # A metatron/ dir without status subdirectories (e.g. a Python package)
+    # is not a legacy bundle and must not hijack resolution.
+    (tmp_path / "metatron").mkdir()
+    (tmp_path / "metatron" / "__init__.py").touch()
+    assert resolve_context_dir(tmp_path) == tmp_path / "context"

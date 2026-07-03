@@ -19,11 +19,11 @@ def test_okf_writes_index(tmp_path):
                        origin=Origin.HUMAN, status=Status.CANONICAL))
     root = tmp_path / "okf"
     export_okf_bundle(store, repo="r", root=root, events=[])
-    assert (root / "metatron" / "index.md").exists()
+    assert (root / "context" / "index.md").exists()
 
 def test_validate_flags_concept_missing_type(tmp_path):
     root = tmp_path / "okf"
-    cdir = root / "metatron" / "decisions"
+    cdir = root / "context" / "decisions"
     cdir.mkdir(parents=True)
     (cdir / "bad.md").write_text("---\nid: x\n---\n\n## Pattern\nno type here\n")
     errors = validate_okf_bundle(root)
