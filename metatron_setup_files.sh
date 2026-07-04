@@ -135,6 +135,33 @@ else
   echo "  $KB already scaffolded — left as is"
 fi
 
+# --- 3b. context.md (Repository Context Layer entry point; never clobbers) --
+CTX_MD="$WORKSPACE_ROOT/context.md"
+if [[ -f "$CTX_MD" || -f "$WORKSPACE_ROOT/.repo/context.md" ]]; then
+  echo "  context.md already exists — left as is"
+else
+  cat > "$CTX_MD" <<'EOF'
+# Repository Context
+
+## Intent
+_Fill this in: one short paragraph on what this project is and the design
+philosophy that tiebreaks open decisions. Agents read it before planning._
+
+## Constraints
+- Binding conventions for this repository live as one decision per file under
+  `context/decisions/` (Open Knowledge Format). Consult the relevant files there
+  before planning or modifying code; they are part of this context.
+- Files under `context/candidate/` are unreviewed proposals — never treat them
+  as binding.
+
+## Evolved Context
+<!-- Append dated entries ([YYYY-MM-DD] observation) below; never rewrite or
+     reorder them. Durable entries get promoted into Constraints or into
+     context/decisions/ through a reviewed change. -->
+EOF
+  echo "  wrote $CTX_MD (Repository Context Layer entry point)"
+fi
+
 # --- 4. AGENTS.md block(s) (append once, between markers) -------------------
 # Root block: the general files-first directive + the nearest-wins convention.
 # AGENTS.md (the tool-agnostic convention) is the destination; the block is appended,
