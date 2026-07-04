@@ -92,6 +92,9 @@ one **nearest** the files you are touching (walk up to the closest `context/`).
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `context/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
+  Refining an *existing* decision? Propose an edit to that file in
+  `context/decisions/` on a reviewed branch instead of authoring an overlapping
+  candidate.
 - **Never self-promote.** Do not move files into `context/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
   `context-okf-promote-candidates`). Nothing self-promotes.
@@ -155,9 +158,12 @@ philosophy that tiebreaks open decisions. Agents read it before planning._
   as binding.
 
 ## Evolved Context
-<!-- Append dated entries ([YYYY-MM-DD] observation) below; never rewrite or
-     reorder them. Durable entries get promoted into Constraints or into
-     context/decisions/ through a reviewed change. -->
+<!-- Dated, temporal observations only ([YYYY-MM-DD] observation) — facts that
+     will age out, like a pinned version or an environment quirk. Append, never
+     rewrite or reorder. New conventions belong in context/candidate/ as decision
+     files; refinements of an existing decision are proposed as a reviewed edit
+     to that file in context/decisions/. Durable ledger entries get promoted the
+     same way. -->
 EOF
   echo "  wrote $CTX_MD (Repository Context Layer entry point)"
 fi

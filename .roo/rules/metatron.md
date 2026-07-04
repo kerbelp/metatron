@@ -13,6 +13,9 @@ one **nearest** the files you are touching (walk up to the closest `context/`).
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `context/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
+  Refining an *existing* decision? Propose an edit to that file in
+  `context/decisions/` on a reviewed branch instead of authoring an overlapping
+  candidate.
 - **Never self-promote.** Do not move files into `context/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
   `context-okf-promote-candidates`). Nothing self-promotes.

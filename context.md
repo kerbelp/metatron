@@ -19,6 +19,9 @@ human; when in doubt, prefer the smallest mechanism that keeps files as truth.
   tree-sitter, SQLite behind the storage interface, pytest, uv.
 
 ## Evolved Context
-<!-- Append dated entries ([YYYY-MM-DD] observation) below; never rewrite or
-     reorder them. Durable entries get promoted into Constraints or into
-     context/decisions/ through a reviewed change. -->
+<!-- Dated, temporal observations only ([YYYY-MM-DD] observation) — facts that
+     will age out, like a pinned version or an environment quirk. Append, never
+     rewrite or reorder. New conventions belong in context/candidate/ as decision
+     files; refinements of an existing decision are proposed as a reviewed edit
+     to that file in context/decisions/. Durable ledger entries get promoted the
+     same way. -->

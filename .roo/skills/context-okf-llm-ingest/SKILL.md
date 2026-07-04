@@ -40,8 +40,9 @@ below. Never choose `decisions/` on your own initiative.
   (no Anthropic key, a different model, an offline agent, a CI step).
 - You're hand-authoring or LLM-authoring conventions to feed Metatron as files.
 
-Not for: promoting/approving decisions (human-only), editing decisions that already
-exist in the store (that round-trips through `mirror sync`/`import` by `id`).
+Not for: promoting/approving decisions (human-only). Refining an *existing*
+decision has its own flow — see "New convention, amendment, or observation?"
+below; in database mode, content edits round-trip through `mirror sync`/`import`.
 
 ## Workflow
 
@@ -54,6 +55,29 @@ exist in the store (that round-trips through `mirror sync`/`import` by `id`).
 
 The files are also a valid, portable OKF bundle on their own — shareable even if the
 recipient never imports them.
+
+## New convention, amendment, or observation?
+
+A durable learning lands in one of three channels — pick by kind:
+
+1. **A new convention** (nothing in `decisions/` covers it) → author a new
+   candidate file in `context/candidate/`. The default; the rest of this skill.
+2. **A refinement of an existing decision** (its pattern, rationale, or scope is
+   incomplete or now wrong) → **propose an edit to that decision file** on a
+   branch: change `context/decisions/<slug>.md` itself and let the pull request
+   diff be the proposal. Constraints are *edited, not appended* — do not author
+   an overlapping candidate that a human must reconcile by hand later. Guardrails
+   match direct-to-decisions: only on a branch reviewed by a human, never pushed
+   to the default branch, never merged by you. The reviewed diff is the human
+   curation act.
+3. **A dated, temporal observation** (an environmental fact that will age out —
+   a pinned version, a flaky proxy timeout) → append a `[YYYY-MM-DD]` entry to
+   the `## Evolved Context` ledger in the root `context.md`. Not a convention;
+   promoted into a decision file later only if it proves durable.
+
+If unsure between 1 and 2: does a `decisions/` file already govern this area?
+Read it first; amend it if the learning corrects or completes it, author a
+candidate if it is genuinely new ground.
 
 ## Where to write: candidate/ vs decisions/
 
