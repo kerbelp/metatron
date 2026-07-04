@@ -5,8 +5,12 @@ STATUSES: tuple[str, ...] = ("candidate", "canonical", "superseded", "deprecated
 
 CONFIDENCE: tuple[str, ...] = ("low", "medium", "high")
 
-# OKF requires `type`; a files-first decision also requires these.
-REQUIRED_FIELDS: tuple[str, ...] = ("id", "type", "status", "title")
+# OKF requires `type` — and nothing else. A file's identity is its filename slug;
+# an explicit `id` is optional (it is minted at `mirror import` time when a repo
+# migrates to the SQLite index) and must match the slug when present. `status`
+# defaults to the containing directory (candidate/ vs decisions/); `title` is
+# optional.
+REQUIRED_FIELDS: tuple[str, ...] = ("type",)
 
 # Authored and curated by humans / the proposing model.
 HUMAN_FIELDS = frozenset(

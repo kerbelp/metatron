@@ -15,8 +15,9 @@ class DecisionFile:
     body: str
 
     @property
-    def id(self) -> str | None:
-        return self.frontmatter.get("id")
+    def id(self) -> str:
+        # Identity is the filename slug unless an explicit id overrides it.
+        return self.frontmatter.get("id") or self.path.stem
 
     @property
     def status(self) -> str | None:
@@ -30,14 +31,13 @@ def parse_decision_file(path: Path, text: str) -> DecisionFile:
 
 
 def decision_ids(decisions_dir: Path) -> set[str]:
-    """The set of decision IDs declared in a tree (reserved files skipped)."""
+    """The set of decision IDs in a tree (slug-derived when not declared)."""
     ids: set[str] = set()
     for md in Path(decisions_dir).glob("*.md"):
         if md.name in RESERVED_FILENAMES:
             continue
         doc = parse_decision_file(md, md.read_text(encoding="utf-8"))
-        if doc.id:
-            ids.add(doc.id)
+        ids.add(doc.id)
     return ids
 
 

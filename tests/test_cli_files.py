@@ -23,7 +23,10 @@ def test_files_new_then_lint_then_index(tmp_path):
     assert new.returncode == 0
     created = d / "token-refresh-strategy.md"
     assert created.exists()
-    assert "status: candidate" in created.read_text()
+    text = created.read_text()
+    assert "type: Metatron Decision" in text
+    assert "## Pattern" in text and "## Rationale" in text
+    assert "id:" not in text      # id-less: minted only at mirror import
 
     lint = _run("files", "lint", "--path", str(d), cwd=tmp_path)
     assert lint.returncode == 0, lint.stdout + lint.stderr

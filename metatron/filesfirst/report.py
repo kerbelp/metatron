@@ -22,11 +22,10 @@ def load_decisions(decisions_dir: Path) -> dict[str, DecisionMeta]:
     for md in sorted(Path(decisions_dir).glob("*.md")):
         if md.name in RESERVED_FILENAMES:
             continue
-        fm = parse_decision_file(md, md.read_text(encoding="utf-8")).frontmatter
-        decision_id = fm.get("id")
-        if decision_id:
-            metas[decision_id] = DecisionMeta(
-                id=decision_id, title=fm.get("title", ""), status=fm.get("status", ""))
+        doc = parse_decision_file(md, md.read_text(encoding="utf-8"))
+        fm = doc.frontmatter
+        metas[doc.id] = DecisionMeta(
+            id=doc.id, title=fm.get("title", ""), status=fm.get("status", ""))
     return metas
 
 

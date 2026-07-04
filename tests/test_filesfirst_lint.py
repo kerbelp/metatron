@@ -13,9 +13,17 @@ def test_clean_tree_has_no_errors(tmp_path):
 
 
 def test_flags_missing_required_field(tmp_path):
-    _write(tmp_path, "x.md", "---\nid: x\ntype: decision\ntitle: T\n---\nbody\n")  # no status
+    _write(tmp_path, "x.md", "---\nid: x\ntitle: T\n---\nbody\n")  # no type
     errs = lint_tree(tmp_path)
-    assert any("status" in e.message for e in errs)
+    assert any("type" in e.message for e in errs)
+
+
+def test_idless_status_less_file_is_valid(tmp_path):
+    # Identity is the filename slug; status comes from the directory. Only
+    # `type` is required, so a skill-authored concept lints clean.
+    _write(tmp_path, "x.md",
+           "---\ntype: Metatron Decision\nscope: web\n---\n\n## Pattern\nP\n\n## Rationale\nR\n")
+    assert lint_tree(tmp_path) == []
 
 
 def test_flags_bad_status_value(tmp_path):
