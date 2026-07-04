@@ -43,7 +43,9 @@ one **nearest** the files you are touching (walk up to the closest `{kb}/`).
 
 - **Consult first.** Before exploring or editing code in an area, read the relevant
   files in the nearest `{kb}/decisions/` and follow them. Say that you did; do
-  not rediscover conventions manually until you have.
+  not rediscover conventions manually until you have. **Only `decisions/` is
+  authoritative** — never treat `{kb}/candidate/` content as a convention to
+  follow; candidates are unreviewed proposals.
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `{kb}/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.

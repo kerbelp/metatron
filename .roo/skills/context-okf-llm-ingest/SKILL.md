@@ -21,11 +21,12 @@ API key, no `ingest` run. The git-tracked bundle is Metatron's implementation of
 [context-md manifesto](https://github.com/kerbelp/context-md/blob/main/whitepaper/context-md-manifesto.pdf)
 for the rationale behind git-native, agent-maintained project context.
 
-**The one invariant you must respect:** an LLM only ever produces **candidates**.
-Crossing the canonical boundary (promoting a candidate to canonical) is *always*
-human-gated. Write candidate files to `context/candidate/` only — **never** to
-`context/decisions/`. A human moving a file into `decisions/` is the curation act;
-nothing self-promotes.
+**The one invariant you must respect:** an LLM never *decides* what is canonical.
+Crossing the canonical boundary is *always* human-gated: a human moving a file into
+`decisions/` — or approving the pull request that puts it there — is the curation
+act. By default, write to `context/candidate/` only; the single sanctioned
+exception is the human-directed, PR-gated flow described in "Where to write"
+below. Never choose `decisions/` on your own initiative.
 
 
 > **Directory name:** `context/` is the default knowledge-base directory. A repo may
@@ -53,6 +54,31 @@ exist in the store (that round-trips through `mirror sync`/`import` by `id`).
 
 The files are also a valid, portable OKF bundle on their own — shareable even if the
 recipient never imports them.
+
+## Where to write: candidate/ vs decisions/
+
+**Default: `context/candidate/`.** Always correct, never needs permission.
+
+There is one sanctioned exception. When the human running this ingest has
+**explicitly said** that the authored files will reach the default branch only
+through a pull request they review file-by-file, they may direct you to write to
+`context/decisions/` directly — their PR approval is then the human curation act,
+and a separate promotion step would be redundant. Before writing to `decisions/`,
+verify **both**:
+
+1. The human explicitly chose direct-to-decisions **for this batch**. Never infer
+   it, never suggest it as a default, never carry it over from a previous batch.
+2. The files land on the default branch only via a human-reviewed pull request —
+   no direct pushes, no auto-merge, no bot approval.
+
+If either check fails — or you are unsure — write to `candidate/`. Choosing
+`decisions/` on your own initiative violates the human-gated canonical boundary,
+even if you believe the content is obviously correct.
+
+The trade-off to keep in mind (and mention if the human asks): files in
+`candidate/` are visibly *unreviewed proposals* that agents must not follow;
+files in `decisions/` are conventions agents will enforce. Direct-to-decisions
+means the reviewing human accepts canonical-level scrutiny in that one review.
 
 ## Monorepos
 
@@ -124,7 +150,7 @@ Extract conventions an agent couldn't infer from the framework alone:
 
 | Concern | Answer |
 |---|---|
-| Where to write | `<repo>/context/candidate/*.md` (never `decisions/`) |
+| Where to write | `<repo>/context/candidate/*.md` (default); `decisions/` only when a human explicitly directed it and a reviewed PR is the gate |
 | Required frontmatter | `type: Metatron Decision` |
 | New-decision signal | **no `id` field** |
 | Body sections read | `## Pattern`, `## Rationale` (only) |
@@ -134,8 +160,9 @@ Extract conventions an agent couldn't infer from the framework alone:
 
 ## Common mistakes
 
-- Writing to `decisions/` (or setting any "approved/canonical" flag): violates the
-  human-gated canonical boundary. Candidates go in `candidate/`, full stop.
+- Writing to `decisions/` without an explicit human directive for the batch (or
+  setting any "approved/canonical" flag yourself): violates the human-gated
+  canonical boundary. In doubt, `candidate/`.
 - Inventing an `id`: an unknown id is skipped; let Metatron mint it.
 - Using `## Decision`/`## Why` headings: the OKF importer reads `## Pattern`/`##
   Rationale`, so the body would import empty.
