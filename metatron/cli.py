@@ -695,7 +695,10 @@ def _cmd_files(args, out) -> int:
     if args.path:
         base = Path(args.path)
     else:
-        base = resolve_context_dir(".", load_settings().context_dir) / "decisions"
+        # New decisions are proposals: `files new` scaffolds into candidate/;
+        # every other subcommand operates on the canonical decisions/ tree.
+        status_dir = "candidate" if args.files_command == "new" else "decisions"
+        base = resolve_context_dir(".", load_settings().context_dir) / status_dir
     if not base.exists():
         print(f"no such directory: {base}", file=out)
         return 1
@@ -719,15 +722,17 @@ def _cmd_files(args, out) -> int:
         if target.exists():
             print(f"refusing to overwrite {target}", file=out)
             return 1
+        # The OKF concept shape `mirror import` reads: id-less (identity is the
+        # filename slug; an id is minted if the repo migrates to the DB index),
+        # `type` as the one required field, Pattern/Rationale as the body.
         target.write_text(
             "---\n"
-            f"id: {args.slug}\n"
-            "type: decision\n"
-            "status: candidate\n"
+            "type: Metatron Decision\n"
             f"title: {args.title}\n"
-            "keywords: []\n"
+            "scope: \n"
+            "confidence: medium\n"
             "---\n\n"
-            "## Decision\n\n## Why\n\n## Consequences\n",
+            "## Pattern\n\n## Rationale\n",
             encoding="utf-8")
         print(str(target), file=out)
         return 0

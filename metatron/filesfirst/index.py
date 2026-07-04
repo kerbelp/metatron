@@ -14,13 +14,14 @@ def build_index(decisions_dir: Path) -> str:
     for md in sorted(Path(decisions_dir).glob("*.md")):
         if md.name in RESERVED_FILENAMES:
             continue
-        fm = parse_decision_file(md, md.read_text(encoding="utf-8")).frontmatter
+        doc = parse_decision_file(md, md.read_text(encoding="utf-8"))
+        fm = doc.frontmatter
         kw = fm.get("keywords") or []
         if isinstance(kw, str):  # tolerate a scalar `keywords: auth` (lint flags it)
             kw = [kw]
         keywords = ", ".join(kw)
         rows.append(
-            f"| `{fm.get('id', '')}` | {fm.get('status', '')} | "
+            f"| `{doc.id}` | {fm.get('status', '')} | "
             f"{fm.get('title', '')} | {keywords} | {fm.get('references', 0)} | {fm.get('violations', 0)} |"
         )
     return _HEADER + _COLUMNS + ("\n".join(rows) + "\n" if rows else "")

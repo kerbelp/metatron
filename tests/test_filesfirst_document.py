@@ -24,7 +24,7 @@ def test_parse_exposes_frontmatter_and_body():
 
 def test_parse_missing_frontmatter_is_empty_not_crash():
     doc = parse_decision_file(Path("x.md"), "just prose, no frontmatter")
-    assert doc.id is None
+    assert doc.id == "x"          # identity falls back to the filename slug
     assert doc.status is None
 
 
