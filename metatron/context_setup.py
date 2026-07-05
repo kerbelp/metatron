@@ -49,6 +49,9 @@ one **nearest** the files you are touching (walk up to the closest `{kb}/`).
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `{kb}/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
+  Refining an *existing* decision? Propose an edit to that file in
+  `{kb}/decisions/` on a reviewed branch instead of authoring an overlapping
+  candidate.
 - **Never self-promote.** Do not move files into `{kb}/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
   `context-okf-promote-candidates`). Nothing self-promotes.
@@ -65,6 +68,29 @@ Open Knowledge Format (OKF) decisions for this app/repo.
 Promotion is human-gated: a reviewer `git mv`s a file from `candidate/` to
 `decisions/` in a pull request. Rebuild the (optional) serving index with
 `metatron mirror import --root .` run from this directory's parent.
+"""
+
+_CONTEXT_MD = """\
+# Repository Context
+
+## Intent
+_Fill this in: one short paragraph on what this project is and the design
+philosophy that tiebreaks open decisions. Agents read it before planning._
+
+## Constraints
+- Binding conventions for this repository live as one decision per file under
+  `{kb}/decisions/` (Open Knowledge Format). Consult the relevant files there
+  before planning or modifying code; they are part of this context.
+- Files under `{kb}/candidate/` are unreviewed proposals — never treat them
+  as binding.
+
+## Evolved Context
+<!-- Dated, temporal observations only ([YYYY-MM-DD] observation) — facts that
+     will age out, like a pinned version or an environment quirk. Append, never
+     rewrite or reorder. New conventions belong in {kb}/candidate/ as decision
+     files; refinements of an existing decision are proposed as a reviewed edit
+     to that file in {kb}/decisions/. Durable ledger entries get promoted the
+     same way. -->
 """
 
 _ROOT_BLOCK = """\
@@ -191,6 +217,23 @@ def _scaffold_kb(target: Path, kb_name: str, res: SetupResult) -> None:
         res.messages.append(f"scaffolded {kb} (candidate/, decisions/, README.md)")
 
 
+def _scaffold_context_md(root: Path, kb_name: str, res: SetupResult) -> None:
+    """Write a minimal Repository Context Layer entry point (``context.md``).
+
+    Gives RCL-conformant agents deterministic discovery: the file carries the
+    required Intent/Constraints/Evolved Context sections and points into the
+    sharded knowledge base. Never touches an existing context file (either
+    discovery form).
+    """
+    for existing in (root / "context.md", root / ".repo" / "context.md"):
+        if existing.exists():
+            res.messages.append(f"{existing} already exists — left as is")
+            return
+    out = root / "context.md"
+    out.write_text(_CONTEXT_MD.format(kb=kb_name), encoding="utf-8")
+    res.messages.append(f"wrote {out} (Repository Context Layer entry point)")
+
+
 def _add_agents_block(md: Path, block: str, res: SetupResult) -> None:
     if md.exists() and "METATRON:START" in md.read_text(encoding="utf-8"):
         res.messages.append(f"{md} already has the Metatron block — left as is")
@@ -213,6 +256,7 @@ def run_setup(target: Path, dir_name: str | None = None) -> SetupResult:
     _write_rule(root, kb_name, res)
     _install_skills(root, kb_name, res)
     _scaffold_kb(target, kb_name, res)
+    _scaffold_context_md(root, kb_name, res)
     _add_agents_block(root / "AGENTS.md", _ROOT_BLOCK.format(kb=kb_name), res)
     if target != root:
         _add_agents_block(target / "AGENTS.md", _APP_BLOCK.format(kb=kb_name), res)

@@ -92,6 +92,9 @@ one **nearest** the files you are touching (walk up to the closest `context/`).
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `context/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
+  Refining an *existing* decision? Propose an edit to that file in
+  `context/decisions/` on a reviewed branch instead of authoring an overlapping
+  candidate.
 - **Never self-promote.** Do not move files into `context/decisions/`. Promotion is
   human-gated: a person `git mv`s the file in a reviewed pull request (skill:
   `context-okf-promote-candidates`). Nothing self-promotes.
@@ -133,6 +136,36 @@ EOF
   echo "  scaffolded $KB (candidate/, decisions/, README.md)"
 else
   echo "  $KB already scaffolded — left as is"
+fi
+
+# --- 3b. context.md (Repository Context Layer entry point; never clobbers) --
+CTX_MD="$WORKSPACE_ROOT/context.md"
+if [[ -f "$CTX_MD" || -f "$WORKSPACE_ROOT/.repo/context.md" ]]; then
+  echo "  context.md already exists — left as is"
+else
+  cat > "$CTX_MD" <<'EOF'
+# Repository Context
+
+## Intent
+_Fill this in: one short paragraph on what this project is and the design
+philosophy that tiebreaks open decisions. Agents read it before planning._
+
+## Constraints
+- Binding conventions for this repository live as one decision per file under
+  `context/decisions/` (Open Knowledge Format). Consult the relevant files there
+  before planning or modifying code; they are part of this context.
+- Files under `context/candidate/` are unreviewed proposals — never treat them
+  as binding.
+
+## Evolved Context
+<!-- Dated, temporal observations only ([YYYY-MM-DD] observation) — facts that
+     will age out, like a pinned version or an environment quirk. Append, never
+     rewrite or reorder. New conventions belong in context/candidate/ as decision
+     files; refinements of an existing decision are proposed as a reviewed edit
+     to that file in context/decisions/. Durable ledger entries get promoted the
+     same way. -->
+EOF
+  echo "  wrote $CTX_MD (Repository Context Layer entry point)"
 fi
 
 # --- 4. AGENTS.md block(s) (append once, between markers) -------------------

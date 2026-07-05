@@ -612,7 +612,10 @@ metatron context setup --dir kb     # use a custom knowledge-base directory name
 It adds **no MCP server and no Claude hooks**. Instead it writes a `.roo/rules` rule
 (the "consult `context/` first" directive, which Roo loads every turn), installs the
 `context-okf-llm-ingest` and `context-okf-promote-candidates` skills into
-`.roo/skills/`, scaffolds the `context/` knowledge base, and appends a files-first
+`.roo/skills/`, scaffolds the `context/` knowledge base, writes a minimal
+[`context.md`](https://github.com/kerbelp/context-md) at the repo root (the
+Repository Context Layer entry point, so any RCL-aware agent discovers the layer
+deterministically — never overwriting an existing one), and appends a files-first
 block to `AGENTS.md` — appended to an existing file, never overwriting it. The git
 files are the source of truth, and promotion stays human-gated via a `git mv` reviewed
 in a PR. **Monorepos:** run it once per app — each keeps its own co-located

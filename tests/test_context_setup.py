@@ -113,3 +113,36 @@ def test_cli_context_setup_dir_flag(tmp_path):
     assert rc == 0
     assert (repo / "kb" / "decisions").is_dir()
     assert "kb/candidate/" in out.getvalue()
+
+
+def test_setup_writes_rcl_context_md(tmp_path):
+    repo = _repo(tmp_path)
+    run_setup(repo)
+    text = (repo / "context.md").read_text()
+    # L3-conformant: the required heading and three sections, pointing at the KB.
+    assert text.startswith("# Repository Context")
+    for section in ("## Intent", "## Constraints", "## Evolved Context"):
+        assert section in text
+    assert "context/decisions/" in text
+
+
+def test_setup_never_touches_existing_context_md(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "context.md").write_text("# Repository Context\n\nmine\n")
+    run_setup(repo)
+    assert (repo / "context.md").read_text() == "# Repository Context\n\nmine\n"
+
+
+def test_setup_respects_dotted_discovery_form(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / ".repo").mkdir()
+    (repo / ".repo" / "context.md").write_text("# Repository Context\n\nmine\n")
+    run_setup(repo)
+    assert not (repo / "context.md").exists()   # the dotted form already serves discovery
+
+
+def test_context_md_uses_custom_dir_name(tmp_path):
+    repo = _repo(tmp_path)
+    run_setup(repo, dir_name="kb")
+    text = (repo / "context.md").read_text()
+    assert "kb/decisions/" in text and "context/decisions/" not in text
