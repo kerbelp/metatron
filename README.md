@@ -30,6 +30,17 @@ Metatron is a reference implementation of the
 [Repository Context Layer](https://github.com/kerbelp/context-md) — a proposed
 standard for git-native, agent-maintained project context.
 
+**The architecture is measured, not just argued.** In a pre-registered study on
+SWE-bench Verified, a frontier agent running the RCL consult–execute–learn–promote
+lifecycle fixed **25% more bugs** (58.3% → 72.9% resolve, p = 0.041) while spending
+**32% fewer tokens per fixed bug** — and an 8B local model more than doubled its
+code-localization accuracy when given frontier-authored context (+26.1 pp,
+p < 0.0001). Full protocol, data, and one-command reproduction:
+[paper](https://github.com/kerbelp/context-md/blob/main/whitepaper/repository-context-layer-paper.pdf) ·
+[experiment](https://github.com/kerbelp/context-md/tree/main/experiment).
+*(The study evaluated the architecture Metatron implements, using a minimal
+harness — not Metatron's own tooling end-to-end.)*
+
 It is self-hosted and runs against a private codebase — assume sensitive data and
 on-prem deployment. (Extraction sends only *structural* signals — imports,
 decorators, base classes, commit subjects — to the model, never raw source, and
