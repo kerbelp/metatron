@@ -233,3 +233,30 @@ def test_cli_review_gate_flag(tmp_path):
     assert rc == 0
     assert "review gate: candidates" in out.getvalue()
     assert "candidate/" in out.getvalue()
+
+
+def test_gate_note_only_in_skills_with_where_to_write(tmp_path):
+    repo = _repo(tmp_path)
+    run_setup(repo)   # default pr gate
+    ingest = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
+    promote = (repo / ".roo" / "skills" / "context-okf-promote-candidates" / "SKILL.md").read_text()
+    assert "Repo review gate: `pr`" in ingest
+    assert "Repo review gate: `pr`" not in promote
+
+
+def test_skill_source_repo_keeps_pristine_copies(tmp_path):
+    # A repo that develops the packaged skills (metatron/okf_skills present)
+    # must not get gate-adapted copies written over its committed .roo/skills.
+    repo = _repo(tmp_path)
+    for name in _SKILLS:
+        pkg = repo / "metatron" / "okf_skills" / name
+        pkg.mkdir(parents=True)
+        (pkg / "SKILL.md").write_text("---\nname: x\n---\npristine\n")
+        roo = repo / ".roo" / "skills" / name
+        roo.mkdir(parents=True)
+        (roo / "SKILL.md").write_text("---\nname: x\n---\npristine\n")
+    res = run_setup(repo)
+    for name in _SKILLS:
+        text = (repo / ".roo" / "skills" / name / "SKILL.md").read_text()
+        assert text == "---\nname: x\n---\npristine\n"
+    assert any("skill source repo" in m for m in res.messages)
