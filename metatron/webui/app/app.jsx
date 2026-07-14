@@ -122,7 +122,15 @@ function FilesActivityView({ repo }) {
           <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", boxShadow: "0 0 6px var(--cyan)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>candidates proposed</span></span>
         </div>
         {flightData.agents.length ? (
-          <AgentConstellation data={flightData} focusedIdx={focusIdx} onFocus={setFocusIdx} paused={false} height={330} />
+          <div style={{ display: "grid", gridTemplateColumns: "1.35fr 1fr" }}>
+            <div style={{ position: "relative", borderRight: "1px solid var(--line)", background: "radial-gradient(440px 320px at 50% 50%, rgba(45,212,191,.06), transparent 70%)" }}>
+              <AgentConstellation data={flightData} focusedIdx={focusIdx} onFocus={setFocusIdx} paused={false} height={330} />
+            </div>
+            <div style={{ padding: "18px 22px", minWidth: 0 }}>
+              <ContributorPanel agents={flightData.agents} commits={commitsData} focusIdx={focusIdx}
+                summary={(act.data && act.data.summary) || {}} onClear={() => setFocusIdx(-1)} />
+            </div>
+          </div>
         ) : (
           <div style={{ height: 240, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
             <div style={{ animation: "float-y 6s ease-in-out infinite" }}><MetatronCube size={110} opacity={1} hero /></div>
@@ -157,6 +165,61 @@ function FilesActivityView({ repo }) {
           </div>
         ))}
         {!commits.length && <div className="dim">no knowledge-base commits yet - author a candidate and commit it to start the history</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ---------- files-mode contributor panel (right side of the constellation) ---------- */
+function ContributorPanel({ agents, commits, focusIdx, summary, onClear }) {
+  const tile = (label, value, color) => (
+    <div style={{ padding: "11px 13px", borderRadius: 11, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+      <div className="mono" style={{ fontSize: 9, letterSpacing: ".12em", color, marginBottom: 6 }}>{label}</div>
+      <div className="mono tnum" style={{ fontSize: 24, fontWeight: 600, color }}>{value}</div>
+    </div>
+  );
+  const focused = focusIdx >= 0 && focusIdx < agents.length ? agents[focusIdx] : null;
+  if (!focused) {
+    return (
+      <div className="enter" style={{ minWidth: 0 }}>
+        <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 14 }}>REPOSITORY KNOWLEDGE</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 18 }}>
+          {tile("CONTRIBUTORS", summary.contributors || agents.length, "#eafff8")}
+          {tile("PROMOTED", summary.promoted || 0, "var(--emerald)")}
+          {tile("PROPOSED", summary.proposed || 0, "var(--cyan)")}
+        </div>
+        <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+          Everything here is reconstructed from git history: a candidate/ to decisions/
+          rename is a promotion, an added candidate file is a proposal — all reviewed
+          like code before they landed.
+        </div>
+        <div className="mono dim" style={{ fontSize: 10.5, marginTop: 14, letterSpacing: ".04em" }}>Hover a contributor to see their commits.</div>
+      </div>
+    );
+  }
+  const theirs = commits.filter((c) => c.author === focused.name);
+  return (
+    <div className="enter" style={{ minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em" }}>CONTRIBUTOR</div>
+        <div style={{ flex: 1 }} />
+        <button className="chip" onClick={onClear}>ALL</button>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>{focused.name}</div>
+      <div className="mono dim" style={{ fontSize: 10.5, marginBottom: 14 }}>{focused.id}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+        {tile("PROMOTED", focused.decisions_received, "var(--emerald)")}
+        {tile("PROPOSED", focused.feedback_sent, "var(--cyan)")}
+      </div>
+      <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".2em", marginBottom: 9 }}>THEIR KNOWLEDGE COMMITS</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 170, overflowY: "auto", paddingRight: 4 }}>
+        {theirs.map((c) => (
+          <div key={c.sha} style={{ padding: "9px 11px", borderRadius: 9, border: "1px solid var(--line)", background: "rgba(8,18,16,.4)" }}>
+            <div style={{ fontSize: 11.5, lineHeight: 1.4, color: "var(--text-2)" }}>{c.subject}</div>
+            <div className="mono dim" style={{ fontSize: 9.5, marginTop: 4 }}>{(c.date || "").slice(0, 10)} - {c.sha} - {c.changes.length} file{c.changes.length === 1 ? "" : "s"}</div>
+          </div>
+        ))}
+        {!theirs.length && <div className="muted" style={{ fontSize: 12 }}>No knowledge commits in the loaded window.</div>}
       </div>
     </div>
   );
