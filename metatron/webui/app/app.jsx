@@ -22,6 +22,26 @@ const NAV = [
 ];
 const NAV_FLAT = NAV.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group })));
 
+/* ---------- files-mode badge (git-tracked OKF bundle mounted read-only) ---------- */
+function FilesModeBadge({ info }) {
+  const dirty = info.dirty_files || 0;
+  return (
+    <div style={{
+      position: "fixed", bottom: 14, left: "50%", transform: "translateX(-50%)",
+      zIndex: 90, display: "flex", alignItems: "center", gap: 10,
+      padding: "7px 16px", borderRadius: 999,
+      background: "rgba(232,156,46,.12)", border: "1px solid rgba(232,156,46,.45)",
+      backdropFilter: "blur(8px)", fontSize: 11.5, letterSpacing: ".06em",
+    }} className="mono">
+      <span style={{ color: "#e89c2e", fontWeight: 700 }}>FILES MODE</span>
+      <span className="dim">{info.kb_dir}</span>
+      <span className="dim">·</span>
+      <span className="dim">read-only view — the git files are the source of truth</span>
+      {dirty > 0 && <span style={{ color: "#e89c2e" }}>{dirty} uncommitted change{dirty === 1 ? "" : "s"}</span>}
+    </div>
+  );
+}
+
 /* ---------- ambient particle field ---------- */
 function ParticleField() {
   const ref = useRef(null);
@@ -96,6 +116,13 @@ function App() {
 
   const repos = useApi(() => MetatronAPI.getRepos(), []);
   const ver = useApi(() => MetatronAPI.getVersion(), []);
+  const mode = useApi(() => MetatronAPI.getMode(), []);
+  const filesMode = mode.data && mode.data.mode === "files" ? mode.data : null;
+  // Files mode has no agent-event stream, so the Impact landing page would be
+  // empty; land on the knowledge itself instead (only overrides the default).
+  useEffect(() => {
+    if (filesMode) setView((v) => (v === "impact" ? "decisions" : v));
+  }, [filesMode]);
   // Restore the last-chosen repo across refreshes; fall back to the first repo.
   useEffect(() => {
     if (repos.data && !repo) {
@@ -175,6 +202,7 @@ function App() {
 
   return (
     <ToastHost>
+      {filesMode && <FilesModeBadge info={filesMode} />}
       <div className="shell">
         {/* command rail */}
         <nav className="rail">
