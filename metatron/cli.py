@@ -815,12 +815,24 @@ def _cmd_context(args, out) -> int:
             return 1
         print(f"Onboarding to Metatron (files-first): {target.resolve()}", file=out)
         kb_name = getattr(args, "dir", None)
-        for line in run_setup(target, dir_name=kb_name).messages:
+        try:
+            res = run_setup(target, dir_name=kb_name,
+                            review_gate=getattr(args, "review_gate", None))
+        except ValueError as exc:
+            print(str(exc), file=out)
+            return 1
+        for line in res.messages:
             print(f"  {line}", file=out)
         from metatron.config import DEFAULT_CONTEXT_DIR
         shown = kb_name or load_settings().context_dir or DEFAULT_CONTEXT_DIR
-        print(f"\nDone. Author candidates into {shown}/candidate/ (skill: context-okf-llm-ingest);", file=out)
-        print("promotion is a human-reviewed git mv (skill: context-okf-promote-candidates).", file=out)
+        if res.review_gate == "pr":
+            print(f"\nDone (review gate: pr). Author decisions into {shown}/decisions/ on a "
+                  "working branch (skill: context-okf-llm-ingest);", file=out)
+            print("the human-reviewed pull request that lands them is the curation act.", file=out)
+        else:
+            print(f"\nDone (review gate: candidates). Author candidates into {shown}/candidate/ "
+                  "(skill: context-okf-llm-ingest);", file=out)
+            print("promotion is a human-reviewed git mv (skill: context-okf-promote-candidates).", file=out)
         return 0
     print("unknown context command", file=out)
     return 2
@@ -988,6 +1000,13 @@ def _build_parser() -> argparse.ArgumentParser:
     c_setup.add_argument(
         "--dir", default=None,
         help="knowledge-base directory name (default: context, or the configured context_dir)")
+    c_setup.add_argument(
+        "--review-gate", default=None, choices=("pr", "candidates"),
+        help="where humans review agent-authored decisions: 'pr' (default) authors "
+             "directly into decisions/ with pull-request review as the gate; "
+             "'candidates' stages proposals in candidate/ with promotion as a "
+             "separate reviewed git mv. Persisted to metatron.toml; re-running "
+             "setup with the other value rewrites the managed artifacts")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"

@@ -35,6 +35,16 @@ DEFAULT_OUTPUT_LANGUAGE = "english"
 DEFAULT_CONTEXT_DIR = "context"
 LEGACY_CONTEXT_DIR = "metatron"
 
+# Where humans review agent-authored decisions in files-first mode. ``pr`` (the
+# default) means agents author OKF files directly under ``decisions/`` on a working
+# branch, and the repo's ordinary pull-request review is the human gate; ``candidates``
+# stages proposals under ``candidate/`` first, with promotion as a separate reviewed
+# ``git mv``. Both keep the canonical boundary human-gated — the setting only picks
+# *where* that review happens. Overridable via METATRON_REVIEW_GATE / metatron.toml;
+# ``metatron context setup --review-gate`` persists the choice.
+REVIEW_GATES = ("pr", "candidates")
+DEFAULT_REVIEW_GATE = "pr"
+
 
 class Settings(BaseModel):
     db_path: str = DEFAULT_DB_PATH
@@ -51,6 +61,11 @@ class Settings(BaseModel):
     # configured", which lets ``resolve_context_dir`` fall back to a legacy
     # ``metatron/`` bundle; an explicit value is always used as-is.
     context_dir: str | None = None
+    # Where agent-authored decisions get human review (see REVIEW_GATES). ``None``
+    # means "not explicitly configured": ``metatron context setup`` then applies
+    # DEFAULT_REVIEW_GATE and persists the resolved value, so a repo's gate is
+    # always explicit in ``metatron.toml`` after onboarding.
+    review_gate: str | None = None
 
 
 def load_settings(path: str | Path = "metatron.toml") -> Settings:
@@ -74,6 +89,9 @@ def load_settings(path: str | Path = "metatron.toml") -> Settings:
         ),
         context_dir=os.environ.get(
             "METATRON_CONTEXT_DIR", file_values.get("context_dir")
+        ),
+        review_gate=os.environ.get(
+            "METATRON_REVIEW_GATE", file_values.get("review_gate")
         ),
     )
 

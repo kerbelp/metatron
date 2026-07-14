@@ -112,7 +112,7 @@ def test_cli_context_setup_dir_flag(tmp_path):
     rc = main(["context", "setup", str(repo), "--dir", "kb"], out=out)
     assert rc == 0
     assert (repo / "kb" / "decisions").is_dir()
-    assert "kb/candidate/" in out.getvalue()
+    assert "kb/decisions/" in out.getvalue()   # pr gate is the default hint
 
 
 def test_setup_writes_rcl_context_md(tmp_path):
@@ -146,3 +146,90 @@ def test_context_md_uses_custom_dir_name(tmp_path):
     run_setup(repo, dir_name="kb")
     text = (repo / "context.md").read_text()
     assert "kb/decisions/" in text and "context/decisions/" not in text
+
+
+# --- review gate -----------------------------------------------------------
+
+
+def test_default_gate_is_pr(tmp_path):
+    repo = _repo(tmp_path)
+    res = run_setup(repo)
+    assert res.review_gate == "pr"
+    rule = (repo / ".roo" / "rules" / "metatron.md").read_text()
+    assert "review gate is **`pr`**" in rule
+    agents = (repo / "AGENTS.md").read_text()
+    assert "author it as a decision" in agents and "reviewed PR" in agents
+    # The standing-policy note rides along inside the installed ingest skill.
+    skill = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
+    assert "Repo review gate: `pr`" in skill
+    assert skill.startswith("---")             # note lands after the frontmatter
+    # Persisted so later commands agree with the generated contract.
+    assert 'review_gate = "pr"' in (repo / "metatron.toml").read_text()
+
+
+def test_candidates_gate_keeps_staging_contract(tmp_path):
+    repo = _repo(tmp_path)
+    res = run_setup(repo, review_gate="candidates")
+    assert res.review_gate == "candidates"
+    rule = (repo / ".roo" / "rules" / "metatron.md").read_text()
+    assert "Record gaps as candidates" in rule
+    agents = (repo / "AGENTS.md").read_text()
+    assert "author it as a candidate" in agents
+    skill = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
+    assert "Repo review gate: `pr`" not in skill
+    assert 'review_gate = "candidates"' in (repo / "metatron.toml").read_text()
+
+
+def test_rerun_with_other_gate_rewrites_managed_artifacts(tmp_path):
+    repo = _repo(tmp_path)
+    (repo / "AGENTS.md").write_text("# Existing rules\n")
+    run_setup(repo, review_gate="candidates")
+    (repo / "context" / "candidate" / "hand-authored.md").write_text("x")
+
+    res = run_setup(repo, review_gate="pr")
+    agents = (repo / "AGENTS.md").read_text()
+    # The managed block is replaced in place; surrounding content survives.
+    assert agents.startswith("# Existing rules")
+    assert agents.count("METATRON:START") == 1
+    assert "author it as a decision" in agents and "as a candidate" not in agents
+    assert "review gate is **`pr`**" in (repo / ".roo" / "rules" / "metatron.md").read_text()
+    assert "review gate is `pr`" in (repo / "context" / "README.md").read_text()
+    assert 'review_gate = "pr"' in (repo / "metatron.toml").read_text()
+    # Hand-authored KB content is never touched.
+    assert (repo / "context" / "candidate" / "hand-authored.md").read_text() == "x"
+    assert any("updated Metatron block" in m for m in res.messages)
+
+
+def test_persisted_gate_is_reused_when_flag_omitted(tmp_path):
+    repo = _repo(tmp_path)
+    run_setup(repo, review_gate="candidates")
+    res = run_setup(repo)                       # no flag: the persisted gate wins
+    assert res.review_gate == "candidates"
+    assert "Record gaps as candidates" in (repo / ".roo" / "rules" / "metatron.md").read_text()
+
+
+def test_hand_authored_kb_readme_is_preserved(tmp_path):
+    repo = _repo(tmp_path)
+    run_setup(repo)
+    (repo / "context" / "README.md").write_text("# My own KB notes\n")
+    run_setup(repo, review_gate="candidates")
+    assert (repo / "context" / "README.md").read_text() == "# My own KB notes\n"
+
+
+def test_unknown_gate_is_rejected(tmp_path):
+    repo = _repo(tmp_path)
+    try:
+        run_setup(repo, review_gate="autonomously")
+    except ValueError as exc:
+        assert "unknown review gate" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+
+def test_cli_review_gate_flag(tmp_path):
+    repo = _repo(tmp_path)
+    out = io.StringIO()
+    rc = main(["context", "setup", str(repo), "--review-gate", "candidates"], out=out)
+    assert rc == 0
+    assert "review gate: candidates" in out.getvalue()
+    assert "candidate/" in out.getvalue()
