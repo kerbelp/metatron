@@ -318,7 +318,10 @@ def _skill_text(src: Path, kb_name: str, gate: str) -> str:
                 .replace("`context/`", f"`{kb_name}/`")
                 .replace("<repo>/context/", f"<repo>/{kb_name}/")
         )
-    if gate == "pr":
+    if gate == "pr" and "## Where to write" in text:
+        # The note explains how the gate resolves the skill's "Where to write"
+        # decision, so it belongs only in documents that have one; other skills
+        # (e.g. promotion) are gate-agnostic.
         close = text.find("\n---", 3)
         if text.startswith("---") and close != -1:
             insert_at = text.index("\n", close + 1) + 1
@@ -334,9 +337,26 @@ def _write_rule(root: Path, kb_name: str, gate: str, res: SetupResult) -> None:
     res.messages.append(f"wrote {rules / 'metatron.md'} (review gate: {gate})")
 
 
+def _is_skill_source_repo(root: Path) -> bool:
+    """True when *root* is the repo the packaged skills are developed in.
+
+    That repo keeps pristine copies under ``.roo/skills`` that must stay
+    byte-identical to the package data (enforced by its test suite), so setup
+    must never write adapted copies over them.
+    """
+    return all(
+        (root / "metatron" / "okf_skills" / name / "SKILL.md").is_file()
+        for name in _SKILLS
+    )
+
+
 def _install_skills(root: Path, kb_name: str, gate: str, res: SetupResult) -> None:
     src_root = _packaged_skills_dir()
     dest_root = root / ".roo" / "skills"
+    if _is_skill_source_repo(root):
+        res.messages.append(
+            f"{root} is the skill source repo — {dest_root} left pristine")
+        return
     dest_root.mkdir(parents=True, exist_ok=True)
     for name in _SKILLS:
         src, dest = src_root / name, dest_root / name
