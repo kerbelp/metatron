@@ -149,6 +149,8 @@ def main(
 
     if args.command == "version":
         print(f"metatron {package_version()} (rev {version_string()})", file=out)
+        if getattr(args, "upgrade", False):
+            return _cmd_version_upgrade(out)
         notice = format_update_notice(check_for_update())
         if notice:
             print(notice, file=out)
@@ -806,6 +808,43 @@ def _cmd_files(args, out) -> int:
     return 2
 
 
+def _cmd_version_upgrade(out) -> int:
+    """Self-upgrade: fresh update check, then run (or print) the install-appropriate
+    upgrade command. The command runs only when its provenance is trusted — a
+    user-provided METATRON_INSTALL_CMD / install.json entry or an unambiguous
+    uv-tool/pipx path signature; the plain-pip fallback is printed instead, since
+    running the wrong installer can split one install into two."""
+    from metatron.version import check_for_update, run_upgrade, upgrade_plan
+    info = check_for_update(force=True)
+    if info is None:
+        print("update check unavailable (dev build, or METATRON_NO_UPDATE_CHECK set)", file=out)
+        return 1
+    if not info.latest:
+        print("could not reach PyPI to determine the latest version — try again later", file=out)
+        return 1
+    if not info.available:
+        print(f"already up to date (latest on PyPI: {info.latest})", file=out)
+        return 0
+    plan = upgrade_plan()
+    if not plan.confident:
+        print(f"update available: {info.current} -> {info.latest}", file=out)
+        print("install method could not be determined reliably; run this yourself:", file=out)
+        print(f"  {plan.command}", file=out)
+        print("(or set METATRON_INSTALL_CMD / edit ~/.metatron/install.json to teach "
+              "metatron the right command)", file=out)
+        return 1
+    print(f"upgrading {info.current} -> {info.latest} via: {plan.command}", file=out)
+    rc, output = run_upgrade(plan)
+    if output:
+        print(output, file=out)
+    if rc != 0:
+        print(f"upgrade command exited with {rc}", file=out)
+        return 1
+    print(f"upgraded to {info.latest} — restart any running `metatron serve` to pick it up.",
+          file=out)
+    return 0
+
+
 def _cmd_context(args, out) -> int:
     if args.context_command == "setup":
         from metatron.context_setup import run_setup
@@ -884,7 +923,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--port", type=int, default=1337, help="starting port (bumps if taken)"
     )
 
-    sub.add_parser("version", help="show the installed version and check for updates")
+    version_p = sub.add_parser(
+        "version", help="show the installed version and check for updates")
+    version_p.add_argument(
+        "--upgrade", action="store_true",
+        help="upgrade to the latest PyPI release using the detected install method "
+             "(uv tool / pipx / METATRON_INSTALL_CMD); prints the command instead "
+             "of running it when the install method is ambiguous")
 
     whoami_p = sub.add_parser(
         "whoami", help="show or set the local identity stamped onto served events"
