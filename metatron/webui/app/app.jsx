@@ -45,6 +45,32 @@ function FilesModeBadge({ info }) {
 /* ---------- files-mode activity: the KB's git history as the event stream ---------- */
 function FilesActivityView({ repo }) {
   const act = useApi(() => MetatronAPI.getFilesActivity(), [repo]);
+  const [focusIdx, setFocusIdx] = useState(-1);
+  // Contributors from git history become the constellation nodes: the same
+  // "knowledge in flight" animation as MCP mode, with commits as the events.
+  const commitsData = (act.data && act.data.commits) || [];
+  const flightData = useMemo(() => {
+    const by = {};
+    commitsData.forEach((c) => {
+      const b = by[c.author] || (by[c.author] = { name: c.author, promoted: 0, proposed: 0, commits: 0, last: c.date || "" });
+      b.commits += 1;
+      if ((c.date || "") > b.last) b.last = c.date || "";
+      (c.changes || []).forEach((ch) => {
+        if (ch.kind === "promoted" || ch.kind === "adopted") b.promoted += 1;
+        else if (ch.kind === "proposed") b.proposed += 1;
+      });
+    });
+    return {
+      agents: Object.values(by).map((c) => ({
+        id: c.commits + " commit" + (c.commits === 1 ? "" : "s") + " - last " + c.last.slice(0, 10),
+        name: c.name,
+        status: c.promoted > 0 ? "serving" : (c.proposed > 0 ? "feedback" : "idle"),
+        decisions_received: c.promoted,
+        feedback_sent: c.proposed,
+      })),
+      traces: [],
+    };
+  }, [commitsData]);
   if (act.loading) return <div className="dim mono" style={{ padding: 30 }}>reading git history...</div>;
   if (act.error || !act.data) return <div className="dim mono" style={{ padding: 30 }}>could not read git history</div>;
   const s = act.data.summary || {};
@@ -85,6 +111,27 @@ function FilesActivityView({ repo }) {
           <div className="dim" style={sub}>working-tree edits awaiting your git review</div>
         </div>
       </div>
+      <div style={{ borderRadius: 14, border: "1px solid var(--line)", padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "18px 20px 4px", display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Knowledge in flight</div>
+            <div className="mono dim" style={{ fontSize: 10, letterSpacing: ".14em", marginTop: 4, textTransform: "uppercase" }}>repository {"\u21c4"} contributors - from git history</div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--emerald)", boxShadow: "0 0 6px var(--emerald)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>decisions adopted</span></span>
+          <span className="mono" style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--cyan)", boxShadow: "0 0 6px var(--cyan)" }} /><span style={{ fontSize: 10, color: "var(--muted)" }}>candidates proposed</span></span>
+        </div>
+        {flightData.agents.length ? (
+          <AgentConstellation data={flightData} focusedIdx={focusIdx} onFocus={setFocusIdx} paused={false} height={330} />
+        ) : (
+          <div style={{ height: 240, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 14 }}>
+            <div style={{ animation: "float-y 6s ease-in-out infinite" }}><MetatronCube size={110} opacity={1} hero /></div>
+            <div className="mono" style={{ fontSize: 11, letterSpacing: ".22em", color: "var(--teal)" }}>AWAITING KNOWLEDGE</div>
+            <div className="muted" style={{ fontSize: 12.5 }}>commit decision files to the knowledge base and contributors appear here</div>
+          </div>
+        )}
+      </div>
+
       <div style={{ borderRadius: 14, border: "1px solid var(--line)", padding: "16px 20px" }}>
         <div style={{ fontWeight: 700 }}>Knowledge history</div>
         <div className="dim" style={{ fontSize: 12, margin: "4px 0 10px" }}>
