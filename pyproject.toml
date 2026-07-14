@@ -2,7 +2,7 @@
 # Distribution name on PyPI is "getmetatron" (the name "metatron" was taken); the
 # import package and the CLI command are still "metatron" (see scripts + wheel below).
 name = "getmetatron"
-version = "0.10.0"
+version = "0.11.0"
 description = "Capture a codebase's implementation decisions as structured decisions and serve them to coding agents over MCP."
 readme = "README.md"
 license = { file = "LICENSE" }
