@@ -393,7 +393,7 @@ def _cmd_ui_files(args, settings, out) -> int:
     for w in res.warnings:
         print(f"warning: {w}", file=out)
     print(f"Files mode: {fm.kb_dir()} ({len(store.list(repo=fm.repo))} decisions; "
-          "read-only — the files stay the source of truth)", file=out)
+          "edits become git working-tree changes — review and commit via git)", file=out)
     serve(store, SQLiteEventStore(":memory:"), start_port=args.port, files_mode=fm)
     return 0
 
@@ -956,8 +956,9 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ui_p.add_argument(
         "--files", action="store_true",
-        help="files-first mode: render the repo's git-tracked OKF bundle "
-             "(read-only; the files stay the source of truth)")
+        help="files-first mode: curate the repo's git-tracked OKF bundle; "
+             "every edit is a git working-tree change reviewed via your "
+             "normal git flow (nothing is committed)")
     ui_p.add_argument(
         "--root", default=".",
         help="repo root for --files mode (default: current directory)")

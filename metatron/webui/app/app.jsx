@@ -36,7 +36,7 @@ function FilesModeBadge({ info }) {
       <span style={{ color: "#e89c2e", fontWeight: 700 }}>FILES MODE</span>
       <span className="dim">{info.kb_dir}</span>
       <span className="dim">·</span>
-      <span className="dim">read-only view — the git files are the source of truth</span>
+      <span className="dim">edits write to the git working tree — review &amp; commit via git</span>
       {dirty > 0 && <span style={{ color: "#e89c2e" }}>{dirty} uncommitted change{dirty === 1 ? "" : "s"}</span>}
     </div>
   );
@@ -116,7 +116,7 @@ function App() {
 
   const repos = useApi(() => MetatronAPI.getRepos(), []);
   const ver = useApi(() => MetatronAPI.getVersion(), []);
-  const mode = useApi(() => MetatronAPI.getMode(), []);
+  const mode = useApi(() => MetatronAPI.getMode(), [dataV, statsV]);
   const filesMode = mode.data && mode.data.mode === "files" ? mode.data : null;
   // Files mode has no agent-event stream, so the Impact landing page would be
   // empty; land on the knowledge itself instead (only overrides the default).

@@ -110,19 +110,13 @@ def test_mode_endpoint_reports_db_without_files_mode():
         httpd.server_close()
 
 
-def test_posts_are_rejected_in_files_mode(served_files):
+def test_unmapped_decision_actions_return_404(served_files):
     fm, url = served_files
-    decisions = fm.store.list(repo=fm.repo)
     req = urllib.request.Request(
-        f"{url}/api/decisions/{decisions[0].id}/approve", method="POST")
+        f"{url}/api/decisions/no-such-id/approve", method="POST")
     with pytest.raises(urllib.error.HTTPError) as err:
         urllib.request.urlopen(req)
-    assert err.value.code == 409
-    body = json.loads(err.value.read())
-    assert "read-only" in body["error"]
-    # And the store was not mutated behind the files' back.
-    assert {d.status for d in fm.store.list(repo=fm.repo)} == \
-        {Status.CANONICAL, Status.CANDIDATE}
+    assert err.value.code == 404
 
 
 def test_decisions_listing_serves_imported_files(served_files):
@@ -131,3 +125,83 @@ def test_decisions_listing_serves_imported_files(served_files):
         body = json.loads(r.read())
     patterns = {d["pattern"] for d in body["items"]}
     assert patterns == {"Always use X.", "Consider Z."}
+
+
+# --- phase 2: curation actions as working-tree edits ------------------------
+
+
+def _post_json(url, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method="POST",
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as r:
+        return r.status, json.loads(r.read())
+
+
+def test_approve_moves_file_between_status_dirs(served_files):
+    fm, url = served_files
+    cand = [d for d in fm.store.list(repo=fm.repo) if d.status is Status.CANDIDATE][0]
+    old_path = fm.paths[cand.id]
+    status, body = _post_json(f"{url}/api/decisions/{cand.id}/approve")
+    assert status == 200 and body["ok"]
+    new_path = fm.paths[cand.id]
+    assert not old_path.exists()
+    assert new_path.parent.name == "decisions" and new_path.exists()
+    assert new_path.name == old_path.name              # pure move, no rename
+    assert "Consider Z." in new_path.read_text()       # content untouched
+    assert fm.store.get(cand.id).status is Status.CANONICAL
+
+
+def test_update_rewrites_the_concept_file(served_files):
+    fm, url = served_files
+    d = [x for x in fm.store.list(repo=fm.repo) if x.status is Status.CANONICAL][0]
+    status, body = _post_json(f"{url}/api/decisions/{d.id}/update",
+                              {"pattern": "Always use X. Always."})
+    assert status == 200 and body["ok"]
+    text = fm.paths[d.id].read_text()
+    assert "Always use X. Always." in text
+    assert f"id: {d.id}" in text                       # normalization pins the id
+
+
+def test_reject_removes_the_file(served_files):
+    fm, url = served_files
+    cand = [d for d in fm.store.list(repo=fm.repo) if d.status is Status.CANDIDATE][0]
+    path = fm.paths[cand.id]
+    status, body = _post_json(f"{url}/api/decisions/{cand.id}/reject")
+    assert status == 200 and body["ok"]
+    assert not path.exists()
+    assert cand.id not in fm.paths
+
+
+def test_create_writes_a_new_candidate_file(served_files):
+    fm, url = served_files
+    status, body = _post_json(f"{url}/api/decisions", {
+        "pattern": "New rule.", "scope": "app", "rationale": "Because.",
+    })
+    assert status == 200 and body["ok"]
+    path = fm.paths[body["id"]]
+    assert path.parent.name == "candidate" and path.exists()
+    assert "New rule." in path.read_text()
+
+
+def test_llm_jobs_stay_unavailable_in_files_mode(served_files):
+    fm, url = served_files
+    req = urllib.request.Request(f"{url}/api/valuate/start", data=b"{}",
+                                 method="POST",
+                                 headers={"Content-Type": "application/json"})
+    with pytest.raises(urllib.error.HTTPError) as err:
+        urllib.request.urlopen(req)
+    assert err.value.code == 409
+
+
+def test_nothing_is_ever_committed(served_files):
+    fm, url = served_files
+    repo = fm.root
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "baseline")
+    cand = [d for d in fm.store.list(repo=fm.repo) if d.status is Status.CANDIDATE][0]
+    _post_json(f"{url}/api/decisions/{cand.id}/approve")
+    log = subprocess.run(["git", "-C", str(repo), "log", "--oneline"],
+                         capture_output=True, text=True).stdout
+    assert len(log.strip().splitlines()) == 1          # still only the baseline
+    assert len(fm.dirty_files()) > 0                   # the move awaits review

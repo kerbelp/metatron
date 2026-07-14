@@ -198,17 +198,13 @@ def _build_handler(
 
         def do_POST(self) -> None:
             segments = urlsplit(self.path).path.strip("/").split("/")
-            # Files mode is read-only for now: the OKF files are the source of
-            # truth and every change belongs in the git working tree, reviewed
-            # like code. Point the caller at the file workflow instead of
-            # silently mutating a throwaway index.
+            # Files mode: curation actions become git working-tree edits — a
+            # new/rewritten concept file, a `git mv` across the status
+            # directories, a `git rm` — never a commit. The human reviews and
+            # lands them through the repo's ordinary git flow. Everything else
+            # (LLM jobs, bulk actions) stays unavailable.
             if files_mode is not None:
-                kb = files_mode.status().get("kb_dir", "context")
-                return self._send_json({
-                    "error": "read-only in files mode",
-                    "hint": f"edit the OKF files under {kb} and re-open the UI; "
-                            "promotion is a git mv reviewed in a pull request",
-                }, status=409)
+                return self._post_files_mode(segments)
             # /api/ingest/start — kick off a background ingest of a local repo
             if segments == ["api", "ingest", "start"]:
                 body = self._read_json()
@@ -263,6 +259,44 @@ def _build_handler(
                     api.refine_one(store, event_store, refiner_factory, segments[2])
                 )
             self._send_json({"error": "not found"}, status=404)
+
+        def _post_files_mode(self, segments: list[str]) -> None:
+            if segments == ["api", "decisions"]:
+                body = self._read_json()
+                body.setdefault("repo", files_mode.repo)
+                resp = api.create_decision(store, body)
+                if resp.get("ok"):
+                    files_mode.write_new(resp["id"])
+                return self._send_json(resp)
+            if len(segments) == 4 and segments[:2] == ["api", "decisions"]:
+                decision_id, action = segments[2], segments[3]
+                if action in ("approve", "reject", "update") and \
+                        not files_mode.has_file(decision_id):
+                    return self._send_json(
+                        {"ok": False,
+                         "error": "no concept file mapped for this decision"},
+                        status=404)
+                if action == "approve":
+                    resp = api.approve(store, decision_id)
+                    if resp.get("ok"):
+                        files_mode.move_to_status_dir(decision_id)
+                    return self._send_json(resp)
+                if action == "reject":
+                    resp = api.reject(store, decision_id)
+                    if resp.get("ok"):
+                        files_mode.remove_file(decision_id)
+                    return self._send_json(resp)
+                if action == "update":
+                    body = self._read_json()
+                    resp = api.update_decision(store, decision_id, body)
+                    if resp.get("ok"):
+                        files_mode.write_back(decision_id)
+                    return self._send_json(resp)
+            return self._send_json({
+                "error": "not available in files mode",
+                "hint": "LLM jobs and bulk actions need the database mode; "
+                        "curation here edits the git working tree only",
+            }, status=409)
 
         def _read_json(self) -> dict:
             length = int(self.headers.get("Content-Length") or 0)
