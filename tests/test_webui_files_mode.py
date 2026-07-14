@@ -205,3 +205,39 @@ def test_nothing_is_ever_committed(served_files):
                          capture_output=True, text=True).stdout
     assert len(log.strip().splitlines()) == 1          # still only the baseline
     assert len(fm.dirty_files()) > 0                   # the move awaits review
+
+
+# --- git-history activity view ----------------------------------------------
+
+
+def test_activity_classifies_history_and_counts(served_files):
+    fm, url = served_files
+    repo = fm.root
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "seed knowledge base")
+    _git(repo, "mv", "context/candidate/try-z.md", "context/decisions/try-z.md")
+    _git(repo, "commit", "-m", "Promote try-z after review")
+    with urllib.request.urlopen(url + "/api/files-activity") as r:
+        body = json.loads(r.read())
+    kinds = [ch["kind"] for c in body["commits"] for ch in c["changes"]]
+    assert "promoted" in kinds and "proposed" in kinds
+    assert body["commits"][0]["subject"] == "Promote try-z after review"
+    s = body["summary"]
+    assert s["promoted"] == 1
+    assert s["contributors"] == 1
+    assert s["canonical"] + s["candidate"] == 2
+
+
+def test_activity_endpoint_404_in_db_mode():
+    store = SQLiteDecisionStore(":memory:")
+    port = find_free_port(start=8870, host="127.0.0.1")
+    httpd = make_server(store, "127.0.0.1", port, SQLiteEventStore(":memory:"))
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with pytest.raises(urllib.error.HTTPError) as err:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/api/files-activity")
+        assert err.value.code == 404
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

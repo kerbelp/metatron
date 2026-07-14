@@ -135,6 +135,75 @@ class FilesMode:
             return False
         return out.returncode == 0
 
+    def activity(self, limit: int = 60) -> dict:
+        """Knowledge activity reconstructed from the KB's git history.
+
+        The files-mode counterpart of the MCP event stream: each commit that
+        touched the status directories is an activity event, and a rename from
+        ``candidate/`` to ``decisions/`` *is* a promotion — that is exactly what
+        the promotion workflow produces (``-M`` asks git to detect renames).
+        """
+        import re
+        kb = self.kb_dir()
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(self.root), "log", f"-n{limit}", "-M",
+                 "--pretty=format:%H|%an|%aI|%s", "--name-status", "--",
+                 str(kb / "candidate"), str(kb / "decisions")],
+                capture_output=True, text=True, timeout=10,
+            )
+        except (OSError, subprocess.SubprocessError):
+            out = None
+        commits: list[dict] = []
+        totals = {"proposed": 0, "promoted": 0, "edited": 0, "removed": 0}
+        authors: set[str] = set()
+        if out is not None and out.returncode == 0:
+            header = re.compile(r"^[0-9a-f]{40}\|")
+            cur = None
+            for line in out.stdout.splitlines():
+                if not line.strip():
+                    continue
+                if header.match(line):
+                    sha, author, date, subject = line.split("|", 3)
+                    cur = {"sha": sha[:9], "author": author, "date": date,
+                           "subject": subject, "changes": []}
+                    commits.append(cur)
+                    authors.add(author)
+                    continue
+                if cur is None or "\t" not in line:
+                    continue
+                parts = line.split("\t")
+                op, name = parts[0], Path(parts[-1]).name
+                if name in RESERVED_FILENAMES or not name.endswith(".md"):
+                    continue
+                if op.startswith("R") and len(parts) == 3:
+                    src, dst = Path(parts[1]).parent.name, Path(parts[2]).parent.name
+                    kind = "promoted" if (src, dst) == ("candidate", "decisions") else "moved"
+                elif op == "A":
+                    kind = "adopted" if Path(parts[1]).parent.name == "decisions" else "proposed"
+                elif op == "M":
+                    kind = "edited"
+                elif op == "D":
+                    kind = "removed"
+                else:
+                    continue
+                cur["changes"].append({"kind": kind, "file": name})
+                if kind in ("proposed", "adopted"):
+                    totals["proposed"] += 1
+                elif kind in totals:
+                    totals[kind] += 1
+        decisions = self.store.list(repo=self.repo)
+        return {
+            "commits": commits,
+            "summary": {
+                **totals,
+                "contributors": len(authors),
+                "canonical": sum(1 for d in decisions if d.status is Status.CANONICAL),
+                "candidate": sum(1 for d in decisions if d.status is Status.CANDIDATE),
+                "dirty_files": len(self.dirty_files()),
+            },
+        }
+
     def dirty_files(self) -> list[str]:
         """Knowledge-base paths modified in the git working tree (porcelain lines).
 

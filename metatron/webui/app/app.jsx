@@ -42,6 +42,79 @@ function FilesModeBadge({ info }) {
   );
 }
 
+/* ---------- files-mode activity: the KB's git history as the event stream ---------- */
+function FilesActivityView({ repo }) {
+  const act = useApi(() => MetatronAPI.getFilesActivity(), [repo]);
+  if (act.loading) return <div className="dim mono" style={{ padding: 30 }}>reading git history...</div>;
+  if (act.error || !act.data) return <div className="dim mono" style={{ padding: 30 }}>could not read git history</div>;
+  const s = act.data.summary || {};
+  const commits = act.data.commits || [];
+  const KIND = {
+    promoted: { label: "PROMOTED", color: "#3ecf8e" },
+    adopted:  { label: "ADOPTED",  color: "#3ecf8e" },
+    proposed: { label: "PROPOSED", color: "#e8c15a" },
+    edited:   { label: "EDITED",   color: "#7ab8e8" },
+    removed:  { label: "REMOVED",  color: "#e87a7a" },
+    moved:    { label: "MOVED",    color: "#9aa5a0" },
+  };
+  const card = { flex: 1, padding: "18px 20px", borderRadius: 14, border: "1px solid var(--line)", background: "rgba(120,200,180,.04)" };
+  const label = { fontSize: 11, letterSpacing: ".12em" };
+  const num = { fontSize: 34, fontWeight: 700, marginTop: 6 };
+  const sub = { fontSize: 12 };
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
+      <div style={{ display: "flex", gap: 14 }}>
+        <div style={card}>
+          <div className="mono dim" style={label}>CANONICAL DECISIONS</div>
+          <div style={num}>{s.canonical ?? 0}</div>
+          <div className="dim" style={sub}>in decisions/ — what agents follow</div>
+        </div>
+        <div style={card}>
+          <div className="mono dim" style={label}>AWAITING REVIEW</div>
+          <div style={num}>{s.candidate ?? 0}</div>
+          <div className="dim" style={sub}>in candidate/ — proposals, never binding</div>
+        </div>
+        <div style={card}>
+          <div className="mono dim" style={label}>PROMOTIONS LANDED</div>
+          <div style={num}>{s.promoted ?? 0}</div>
+          <div className="dim" style={sub}>candidate/ to decisions/ moves in git history</div>
+        </div>
+        <div style={{ ...card, borderColor: (s.dirty_files || 0) > 0 ? "rgba(232,156,46,.5)" : "var(--line)" }}>
+          <div className="mono dim" style={label}>UNCOMMITTED CHANGES</div>
+          <div style={{ ...num, color: (s.dirty_files || 0) > 0 ? "#e89c2e" : undefined }}>{s.dirty_files ?? 0}</div>
+          <div className="dim" style={sub}>working-tree edits awaiting your git review</div>
+        </div>
+      </div>
+      <div style={{ borderRadius: 14, border: "1px solid var(--line)", padding: "16px 20px" }}>
+        <div style={{ fontWeight: 700 }}>Knowledge history</div>
+        <div className="dim" style={{ fontSize: 12, margin: "4px 0 10px" }}>
+          every commit that touched the knowledge base — a candidate/ to decisions/ rename is a promotion, reviewed like code
+        </div>
+        {commits.map((c) => (
+          <div key={c.sha} style={{ display: "flex", gap: 14, padding: "10px 0", borderTop: "1px solid var(--line)", alignItems: "baseline" }}>
+            <span className="mono dim" style={{ fontSize: 11, minWidth: 80 }}>{(c.date || "").slice(0, 10)}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13.5 }}>{c.subject}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5 }}>
+                {c.changes.map((ch, i) => {
+                  const k = KIND[ch.kind] || KIND.moved;
+                  return (
+                    <span key={i} className="mono" style={{ fontSize: 10.5, padding: "2px 8px", borderRadius: 999, border: "1px solid " + k.color + "55", color: k.color }}>
+                      {k.label} {ch.file.replace(/\.md$/, "")}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+            <span className="mono dim" style={{ fontSize: 11 }}>{c.author} - {c.sha}</span>
+          </div>
+        ))}
+        {!commits.length && <div className="dim">no knowledge-base commits yet - author a candidate and commit it to start the history</div>}
+      </div>
+    </div>
+  );
+}
+
 /* ---------- ambient particle field ---------- */
 function ParticleField() {
   const ref = useRef(null);
@@ -118,10 +191,14 @@ function App() {
   const ver = useApi(() => MetatronAPI.getVersion(), []);
   const mode = useApi(() => MetatronAPI.getMode(), [dataV, statsV]);
   const filesMode = mode.data && mode.data.mode === "files" ? mode.data : null;
-  // Files mode has no agent-event stream, so the Impact landing page would be
-  // empty; land on the knowledge itself instead (only overrides the default).
-  useEffect(() => {
-    if (filesMode) setView((v) => (v === "impact" ? "decisions" : v));
+  // Files mode: Helpfulness/Feedback Loop need the MCP event stream and stay
+  // hidden; Impact becomes the git-history activity view.
+  const nav = useMemo(() => {
+    if (!filesMode) return NAV;
+    return NAV.map((g) => ({ ...g, items: g.items
+      .filter((i) => i.id !== "helpfulness" && i.id !== "loop")
+      .map((i) => (i.id === "impact" ? { ...i, title: "Knowledge Activity" } : i)) }))
+      .filter((g) => g.items.length);
   }, [filesMode]);
   // Restore the last-chosen repo across refreshes; fall back to the first repo.
   useEffect(() => {
@@ -198,7 +275,8 @@ function App() {
     </div>
   );
 
-  const cur = NAV_FLAT.find((n) => n.id === view);
+  const cur = nav.flatMap((g) => g.items.map((i) => ({ ...i, group: g.group })))
+    .find((n) => n.id === view) || NAV_FLAT.find((n) => n.id === view);
 
   return (
     <ToastHost>
@@ -211,7 +289,7 @@ function App() {
             <MetatronEmblem size={38} />
             <div className="wordmark">METATRON<small>KNOWLEDGE BASE</small></div>
           </div>
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div className="rail-group" key={g.group}>
               <div className="label">{g.group}</div>
               {g.items.map((it) => (
@@ -248,7 +326,7 @@ function App() {
             <RepoSelect repo={repo} repos={repos.data.repos} onPick={pickRepo} />
           </header>
           <div className="stage-scroll" ref={scrollRef} key={view + repo + dataV}>
-            <Router view={view} repo={repo} openDecision={setDrawer} openPanel={setPanel} goto={setView} refreshStats={refreshStats} dataV={dataV} />
+            <Router view={view} repo={repo} openDecision={setDrawer} openPanel={setPanel} goto={setView} refreshStats={refreshStats} dataV={dataV} filesMode={filesMode} />
           </div>
         </div>
       </div>
@@ -264,9 +342,11 @@ function App() {
   );
 }
 
-function Router({ view, repo, openDecision, openPanel, goto, refreshStats }) {
+function Router({ view, repo, openDecision, openPanel, goto, refreshStats, filesMode }) {
   switch (view) {
-    case "impact": return <AgentImpactView repo={repo} openPanel={openPanel} />;
+    case "impact": return filesMode
+      ? <FilesActivityView repo={repo} />
+      : <AgentImpactView repo={repo} openPanel={openPanel} />;
     case "helpfulness": return <HelpfulnessView repo={repo} openDecision={openDecision} />;
     case "loop": return <FeedbackLoopView repo={repo} refresh={refreshStats} openDecision={openDecision} />;
     case "overview": return <OverviewView repo={repo} openDecision={openDecision} goto={goto} />;

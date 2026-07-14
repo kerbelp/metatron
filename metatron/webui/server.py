@@ -128,6 +128,11 @@ def _build_handler(
                 self._send_json(decision or {"error": "not found"}, status=200 if decision else 404)
             elif path == "/api/mode":
                 self._send_json(files_mode.status() if files_mode else {"mode": "db"})
+            elif path == "/api/files-activity":
+                if files_mode is None:
+                    self._send_json({"error": "not in files mode"}, status=404)
+                else:
+                    self._send_json(files_mode.activity())
             elif path == "/api/version":
                 self._send_json(api.version())
             elif path == "/api/origins":
