@@ -55,10 +55,12 @@ def make_server(
     run_store=None,
     refiner_factory=None,
     ingest_provider_factory=None,
+    files_mode=None,
 ) -> HTTPServer:
     return HTTPServer(
         (host, port),
-        _build_handler(store, event_store, run_store, refiner_factory, ingest_provider_factory),
+        _build_handler(store, event_store, run_store, refiner_factory,
+                       ingest_provider_factory, files_mode),
     )
 
 
@@ -71,10 +73,12 @@ def serve(
     refiner_factory=None,
     ingest_provider_factory=None,
     open_browser: bool = True,
+    files_mode=None,
 ) -> None:
     port = find_free_port(start=start_port, host=host)
     httpd = make_server(
-        store, host, port, event_store, run_store, refiner_factory, ingest_provider_factory
+        store, host, port, event_store, run_store, refiner_factory,
+        ingest_provider_factory, files_mode
     )
     url = f"http://{host}:{port}"
     print(f"Metatron curation UI on {url}  (Ctrl-C to stop)")
@@ -98,6 +102,7 @@ def _build_handler(
     run_store=None,
     refiner_factory=None,
     ingest_provider_factory=None,
+    files_mode=None,
 ) -> type[BaseHTTPRequestHandler]:
     ingest_job = IngestJob(store, ingest_provider_factory, run_store)
     triage_job = TriageJob(store, ingest_provider_factory)
@@ -121,6 +126,8 @@ def _build_handler(
             elif path.startswith("/api/decisions/"):
                 decision = api.get_decision(store, path.split("/")[-1])
                 self._send_json(decision or {"error": "not found"}, status=200 if decision else 404)
+            elif path == "/api/mode":
+                self._send_json(files_mode.status() if files_mode else {"mode": "db"})
             elif path == "/api/version":
                 self._send_json(api.version())
             elif path == "/api/origins":
@@ -191,6 +198,17 @@ def _build_handler(
 
         def do_POST(self) -> None:
             segments = urlsplit(self.path).path.strip("/").split("/")
+            # Files mode is read-only for now: the OKF files are the source of
+            # truth and every change belongs in the git working tree, reviewed
+            # like code. Point the caller at the file workflow instead of
+            # silently mutating a throwaway index.
+            if files_mode is not None:
+                kb = files_mode.status().get("kb_dir", "context")
+                return self._send_json({
+                    "error": "read-only in files mode",
+                    "hint": f"edit the OKF files under {kb} and re-open the UI; "
+                            "promotion is a git mv reviewed in a pull request",
+                }, status=409)
             # /api/ingest/start — kick off a background ingest of a local repo
             if segments == ["api", "ingest", "start"]:
                 body = self._read_json()

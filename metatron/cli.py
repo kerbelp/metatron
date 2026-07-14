@@ -202,6 +202,8 @@ def main(
         if args.command == "repo":
             return _cmd_repo(args, store, settings, out)
         if args.command == "ui":
+            if getattr(args, "files", False):
+                return _cmd_ui_files(args, settings, out)
             return _cmd_ui(store, event_store, run_store, args.port, settings)
         if args.command == "triage":
             if provider is None:
@@ -363,6 +365,36 @@ def _cmd_serve(store, repo, event_store) -> int:
     # Stamp served events with the local employee identity (seeded from git on first
     # use), so feedback/queries are attributable once DBs are merged.
     build_server(store, repo, event_store, identity=identity.ensure_identity()).run()
+    return 0
+
+
+def _cmd_ui_files(args, settings, out) -> int:
+    """Files-first UI: mount a repo's OKF bundle behind a throwaway index.
+
+    The store is in-memory and rebuilt from the files at startup — the git
+    working tree remains the only durable state, matching the files-first
+    contract everywhere else in the CLI.
+    """
+    from metatron.storage.sqlite import SQLiteDecisionStore, SQLiteEventStore
+    from metatron.webui.files_mode import FilesMode
+    from metatron.webui.server import serve
+
+    root = Path(args.root).resolve()
+    if not root.is_dir():
+        print(f"no such directory: {root}", file=out)
+        return 1
+    store = SQLiteDecisionStore(":memory:")
+    fm = FilesMode(store, root, context_dir=settings.context_dir)
+    if not fm.kb_dir().is_dir():
+        print(f"no knowledge base at {fm.kb_dir()} — run `metatron context setup` first",
+              file=out)
+        return 1
+    res = fm.refresh()
+    for w in res.warnings:
+        print(f"warning: {w}", file=out)
+    print(f"Files mode: {fm.kb_dir()} ({len(store.list(repo=fm.repo))} decisions; "
+          "read-only — the files stay the source of truth)", file=out)
+    serve(store, SQLiteEventStore(":memory:"), start_port=args.port, files_mode=fm)
     return 0
 
 
@@ -922,6 +954,13 @@ def _build_parser() -> argparse.ArgumentParser:
     ui_p.add_argument(
         "--port", type=int, default=1337, help="starting port (bumps if taken)"
     )
+    ui_p.add_argument(
+        "--files", action="store_true",
+        help="files-first mode: render the repo's git-tracked OKF bundle "
+             "(read-only; the files stay the source of truth)")
+    ui_p.add_argument(
+        "--root", default=".",
+        help="repo root for --files mode (default: current directory)")
 
     version_p = sub.add_parser(
         "version", help="show the installed version and check for updates")

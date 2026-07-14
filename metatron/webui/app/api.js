@@ -33,6 +33,10 @@
       return J("/api/version");
     },
 
+    getMode() {
+      return J("/api/mode");
+    },
+
     getStats(repo) {
       return J("/api/stats?" + qs({ repo }));
     },
