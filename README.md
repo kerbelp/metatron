@@ -614,8 +614,9 @@ Prefer to skip MCP entirely and let the agent read conventions straight from the
 files in git? Onboard the repo with the built-in command:
 
 ```bash
-metatron context setup              # onboard the current repo (or pass a dir)
-metatron context setup --dir kb     # use a custom knowledge-base directory name
+metatron context setup                          # onboard the current repo (or pass a dir)
+metatron context setup --dir kb                 # use a custom knowledge-base directory name
+metatron context setup --review-gate=candidates # stage proposals in candidate/ first
 ```
 
 (Equivalent without an installed metatron: `bash /path/to/metatron/metatron_setup_files.sh`.)
@@ -627,11 +628,30 @@ It adds **no MCP server and no Claude hooks**. Instead it writes a `.roo/rules` 
 [`context.md`](https://github.com/kerbelp/context-md) at the repo root (the
 Repository Context Layer entry point, so any RCL-aware agent discovers the layer
 deterministically — never overwriting an existing one), and appends a files-first
-block to `AGENTS.md` — appended to an existing file, never overwriting it. The git
-files are the source of truth, and promotion stays human-gated via a `git mv` reviewed
-in a PR. **Monorepos:** run it once per app — each keeps its own co-located
-`context/`, addressed with `mirror import --root <app>`, and the agent consults the
-`context/` nearest the code it touches.
+block to `AGENTS.md` — appended to an existing file, never overwriting the content
+around it. The git files are the source of truth. **Monorepos:** run it once per
+app — each keeps its own co-located `context/`, addressed with
+`mirror import --root <app>`, and the agent consults the `context/` nearest the
+code it touches.
+
+**Choosing where decisions get reviewed (`--review-gate`).** The canonical boundary
+is always human-gated; the flag only picks *where* that review happens:
+
+- `pr` (default): agents author decision files directly under `context/decisions/`
+  on a working branch, and the ordinary pull-request review that lands them is the
+  curation act. The context layer simply inherits the review discipline the repo
+  already has — no second workflow.
+- `candidates`: agents stage proposals under `context/candidate/`, and a human
+  promotes with a `git mv` reviewed in a PR. Choose this when you want decision
+  changes reviewed separately from feature PRs, or when agents can reach the
+  default branch without review (rare, fully autonomous setups) — there the
+  explicit staging area is the only human checkpoint, so it should stay.
+
+The choice is persisted to `metatron.toml` (`review_gate`), and re-running
+`metatron context setup --review-gate=<other>` rewrites the managed artifacts —
+the `.roo/rules` rule, the installed skills, the KB README, and the `AGENTS.md`
+block — so the whole contract switches consistently. Hand-edited files outside
+the managed markers are never touched.
 
 ### MCP tools exposed
 
