@@ -167,3 +167,113 @@ def test_format_update_notice():
     assert V.format_update_notice(V.UpdateInfo("0.2.1", "0.2.1", False, "x")) is None
     msg = V.format_update_notice(V.UpdateInfo("0.2.1", "0.3.0", True, "uv tool upgrade getmetatron"))
     assert "0.3.0" in msg and "uv tool upgrade getmetatron" in msg
+
+
+# --- upgrade plan + version --upgrade ---------------------------------------
+
+
+def _fetch(latest):
+    return lambda timeout: {"info": {"version": latest}}
+
+
+def test_upgrade_plan_env_is_confident(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("METATRON_INSTALL_CMD", "brew upgrade metatron")
+    plan = V.upgrade_plan()
+    assert plan.command == "brew upgrade metatron"
+    assert plan.source == "env" and plan.confident
+
+
+def test_upgrade_plan_detected_uv_is_confident(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    monkeypatch.setattr(V, "detect_install_method",
+                        lambda: ("uv", "uv tool upgrade getmetatron"))
+    plan = V.upgrade_plan()
+    assert plan.method == "uv" and plan.confident
+
+
+def test_upgrade_plan_pip_fallback_is_not_confident(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    monkeypatch.setattr(V, "detect_install_method",
+                        lambda: ("pip", "pip install -U getmetatron"))
+    plan = V.upgrade_plan()
+    assert plan.method == "pip" and not plan.confident
+    # The persisted pip guess stays a guess on the next (config-sourced) read.
+    plan2 = V.upgrade_plan()
+    assert plan2.source == "config" and not plan2.confident
+
+
+def test_upgrade_plan_user_edited_config_is_trusted(monkeypatch, tmp_path):
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    import json
+    (tmp_path / "install.json").write_text(json.dumps(
+        {"method": "pip", "upgrade_command": "pip install -U getmetatron",
+         "source": "user"}))
+    plan = V.upgrade_plan()
+    assert plan.source == "config" and plan.confident
+
+
+def test_run_upgrade_reports_exit_and_output(monkeypatch):
+    class P:
+        returncode = 0
+        stdout = "ok\n"
+        stderr = ""
+    plan = V.UpgradePlan(command="echo hi", source="env", method="custom", confident=True)
+    rc, output = V.run_upgrade(plan, runner=lambda *a, **k: P())
+    assert rc == 0 and output == "ok"
+
+
+def test_cli_version_upgrade_runs_confident_plan(monkeypatch, tmp_path, capsys):
+    import io
+    from metatron.cli import main
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("METATRON_INSTALL_CMD", "true")   # a no-op upgrade command
+    monkeypatch.setattr(V, "package_version", lambda: "0.1.0")
+    monkeypatch.setattr(V, "latest_version", lambda timeout=1.5, fetch=None: "9.9.9")
+    out = io.StringIO()
+    rc = main(["version", "--upgrade"], out=out)
+    text = out.getvalue()
+    assert rc == 0
+    assert "upgrading 0.1.0 -> 9.9.9" in text and "restart any running" in text
+
+
+def test_cli_version_upgrade_already_up_to_date(monkeypatch, tmp_path):
+    import io
+    from metatron.cli import main
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(V, "package_version", lambda: "9.9.9")
+    monkeypatch.setattr(V, "latest_version", lambda timeout=1.5, fetch=None: "9.9.9")
+    out = io.StringIO()
+    rc = main(["version", "--upgrade"], out=out)
+    assert rc == 0
+    assert "already up to date" in out.getvalue()
+
+
+def test_cli_version_upgrade_prints_command_when_not_confident(monkeypatch, tmp_path):
+    import io
+    from metatron.cli import main
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("METATRON_INSTALL_CMD", raising=False)
+    monkeypatch.setattr(V, "detect_install_method",
+                        lambda: ("pip", "pip install -U getmetatron"))
+    monkeypatch.setattr(V, "package_version", lambda: "0.1.0")
+    monkeypatch.setattr(V, "latest_version", lambda timeout=1.5, fetch=None: "9.9.9")
+    out = io.StringIO()
+    rc = main(["version", "--upgrade"], out=out)
+    text = out.getvalue()
+    assert rc == 1
+    assert "run this yourself" in text and "pip install -U getmetatron" in text
+
+
+def test_cli_version_upgrade_dev_build(monkeypatch, tmp_path):
+    import io
+    from metatron.cli import main
+    monkeypatch.setenv("METATRON_CONFIG_DIR", str(tmp_path))
+    monkeypatch.setattr(V, "package_version", lambda: "dev")
+    out = io.StringIO()
+    rc = main(["version", "--upgrade"], out=out)
+    assert rc == 1
+    assert "update check unavailable" in out.getvalue()

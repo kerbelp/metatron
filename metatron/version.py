@@ -117,18 +117,39 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def upgrade_command() -> str:
-    """Command to upgrade metatron, by precedence:
+@dataclass(frozen=True)
+class UpgradePlan:
+    """How this install would be upgraded, and how sure we are about it.
+
+    ``confident`` gates whether ``metatron version --upgrade`` runs the command
+    or only prints it: user-provided commands (env/install.json) and unambiguous
+    path signatures (uv tool, pipx) are safe to run; the plain-``pip`` fallback
+    is a guess — running the wrong installer can leave two parallel installs, so
+    the guess is shown, never executed.
+    """
+    command: str
+    source: str    # "env" | "config" | "detected"
+    method: str    # "uv" | "pipx" | "pip" | "custom"
+    confident: bool
+
+
+def upgrade_plan() -> UpgradePlan:
+    """The upgrade command with its provenance, by precedence:
     METATRON_INSTALL_CMD env -> ~/.metatron/install.json -> first-run detection (persisted)."""
     env = os.environ.get("METATRON_INSTALL_CMD")
     if env:
-        return env
+        return UpgradePlan(command=env, source="env", method="custom", confident=True)
     path = _state_dir() / "install.json"
     try:
         data = json.loads(path.read_text())
         cmd = data.get("upgrade_command")
         if cmd:
-            return cmd
+            # A persisted "detected" pip guess stays a guess; anything a user
+            # wrote or edited (source != detected) is trusted as-is.
+            method = data.get("method", "custom")
+            detected = data.get("source") == "detected"
+            return UpgradePlan(command=cmd, source="config", method=method,
+                               confident=not (detected and method == "pip"))
     except (OSError, ValueError):
         pass
     method, cmd = detect_install_method()
@@ -139,7 +160,30 @@ def upgrade_command() -> str:
              "recorded_at": _now_iso()}, indent=2))
     except OSError:
         pass
-    return cmd
+    return UpgradePlan(command=cmd, source="detected", method=method,
+                       confident=method in ("uv", "pipx"))
+
+
+def upgrade_command() -> str:
+    """Command to upgrade metatron (see ``upgrade_plan`` for provenance)."""
+    return upgrade_plan().command
+
+
+def run_upgrade(plan: UpgradePlan, *, runner=None) -> tuple[int, str]:
+    """Execute *plan*'s command; (exit code, combined output). Never raises.
+
+    No shell: the command is split with ``shlex`` so a hand-edited
+    ``install.json`` cannot smuggle shell syntax into a subprocess.
+    """
+    import shlex
+    runner = runner or subprocess.run
+    try:
+        proc = runner(shlex.split(plan.command), capture_output=True, text=True,
+                      timeout=600)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        return 1, str(exc)
+    output = (proc.stdout or "") + (proc.stderr or "")
+    return proc.returncode, output.strip()
 
 
 # ---------------------------------------------------------------------------

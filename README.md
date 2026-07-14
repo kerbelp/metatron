@@ -166,7 +166,7 @@ To install from your local clone as a global tool:
 uv tool install .
 ```
 
-### Update notices
+### Update notices and self-upgrade
 
 `metatron version` and the curation UI check PyPI at most once a day for a newer
 `getmetatron` release and print a passive notice with the upgrade command. The check
@@ -174,6 +174,19 @@ is a read-only request to pypi.org that sends no repository or private data, fai
 silently when offline, and never updates anything automatically. Disable it with
 `METATRON_NO_UPDATE_CHECK=1`. Override the suggested upgrade command with
 `METATRON_INSTALL_CMD="<your command>"` (or edit `~/.metatron/install.json`).
+
+To upgrade in place:
+
+```bash
+metatron version --upgrade
+```
+
+It re-checks PyPI (bypassing the daily throttle) and, when a newer release exists,
+runs the upgrade command for the detected install method (uv tool, pipx, or a
+configured `METATRON_INSTALL_CMD`). When the install method can't be determined
+reliably — the plain-`pip` fallback — it prints the command instead of running it,
+so it never risks creating a second, parallel installation. Restart any running
+`metatron serve` afterwards to pick up the new code.
 
 ## Run with Docker
 
