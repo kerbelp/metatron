@@ -37,6 +37,10 @@
       return J("/api/mode");
     },
 
+    getFilesActivity() {
+      return J("/api/files-activity");
+    },
+
     getStats(repo) {
       return J("/api/stats?" + qs({ repo }));
     },
