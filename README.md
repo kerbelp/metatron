@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner.png" alt="Metatron — your codebase's conventions, served to coding agents over MCP" width="100%" />
+  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner.png" alt="Metatron — your codebase's conventions, versioned in git and consulted by coding agents" width="100%" />
 </p>
 
 <p align="center">
@@ -19,12 +19,24 @@
   <a href="https://youtu.be/VoWp6jH4VLM"><b>▶ Watch the 2-minute demo</b></a>
 </p>
 
-Metatron is a self-hosted system that captures a codebase's real implementation
-decisions — preferred patterns, rejected approaches, edge cases, internal
-conventions — as structured **decisions**, and serves them to coding agents over
-MCP (Model Context Protocol). The goal: an agent writes code like a senior
+Metatron captures a codebase's real implementation decisions — preferred
+patterns, rejected approaches, edge cases, internal conventions — as structured
+**decisions**: one markdown file per convention, versioned in git next to the
+code, consulted by any coding agent that can read a file, and curated through
+your ordinary pull-request review. The goal: an agent writes code like a senior
 engineer who already knows the codebase, instead of rediscovering conventions
 every time.
+
+```bash
+pip install getmetatron
+metatron context setup     # one command: your repo carries its own agent context
+```
+
+For teams that want a serving layer on top, Metatron also runs as a self-hosted
+**MCP server** (SQLite-backed, relevance-ranked serving, agent feedback loop) —
+the same decisions, delivered over the wire. Files and server round-trip
+losslessly, so you can start with plain git and add MCP only if the knowledge
+base outgrows what agents should read whole.
 
 Metatron is a reference implementation of the
 [Repository Context Layer](https://github.com/kerbelp/context-md) — a proposed
@@ -83,17 +95,23 @@ rules.
 
 ![Metatron Loop](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-loop.png)
 
-Bootstrap once with `ingest`, curate candidates into the canonical set, then `serve`
-them to your agent over MCP. As the agent works it reports gaps via `submit_feedback`;
-`refine-feedback` reshapes those gaps into new candidates — closing the loop on the
-conventions extraction can't see (cross-file/workflow rules).
+**Files-first (default):** onboard with `context setup`, and the repo itself runs
+the loop — agents consult `context/decisions/` before coding, author what they
+learn as decision files on their working branch, and your PR review promotes or
+rejects. Optionally bootstrap the knowledge base once with `ingest`.
 
-## Decisions in git — Open Knowledge Format (OKF) export
+**MCP mode:** bootstrap with `ingest`, curate candidates into the canonical set,
+then `serve` them to your agent over MCP. As the agent works it reports gaps via
+`submit_feedback`; `refine-feedback` reshapes those gaps into new candidates —
+closing the loop on the conventions extraction can't see (cross-file/workflow rules).
 
-Prefer working in plain files and your agent over a UI? Metatron can mirror a repo's
-decisions to markdown under `context/` — and that bundle is a valid
+## Decisions in git — the Open Knowledge Format (OKF) bundle
+
+Decisions live as markdown under `context/` — a valid
 [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
-bundle, so your conventions are portable to any tool that reads the standard.
+bundle, so your conventions are portable to any tool that reads the standard. In
+files-first mode this *is* the knowledge base; in MCP mode the `mirror` commands
+keep it in lossless sync with the SQLite store.
 
 - **Git is the audit trail.** Status lives in the directory — `candidate/` vs
   `decisions/`. Promote a decision with a `git mv`, review it in a PR, blame any line.
@@ -116,7 +134,7 @@ metatron mirror import       # files -> DB: apply edits, promotions, and new fil
 
 To run an agent in this mode with **no MCP at all** — reading `context/` directly and
 authoring candidates as files — onboard with
-[`metatron context setup`](#files-first-mode-no-mcp).
+[`metatron context setup`](#files-first-mode-default).
 
 See the [`mirror` command](#command-reference) for the full workflow, or read the
 announcement: [Metatron speaks the Open Knowledge Format](https://getmetatron.com/blog/open-knowledge-format/).
@@ -294,6 +312,21 @@ split into the per-repo catalog on first run and the original is archived.
 
 ## Quick start
 
+**Files-first (default — no server, no API key):**
+
+```bash
+metatron context setup                  # onboard: rule, skills, knowledge base
+# agents now consult context/decisions/ before coding and author new
+# decisions on working branches; your PR review is the curation gate
+metatron ui --files                     # browse & curate the git bundle locally
+```
+
+Optionally bootstrap the knowledge base from your git history first
+(`metatron ingest`, needs an Anthropic API key), then curate what becomes
+canonical.
+
+**MCP serving (optional layer on top):**
+
 ```bash
 metatron ingest /path/to/your/repo      # 1. bootstrap candidates (needs API key)
 metatron candidates list                # 2. review …
@@ -301,8 +334,8 @@ metatron candidates approve <id>        #    … and curate
 metatron serve --repo <id>              # 3. serve canonical decisions over MCP
 ```
 
-`ingest` prints the `<id>` to use for `serve`. To wire it into a coding agent
-automatically, see [Connecting a coding agent](#connecting-a-coding-agent-mcp).
+`ingest` prints the `<id>` to use for `serve`. To wire either mode into a coding
+agent automatically, see [Connecting a coding agent](#connecting-a-coding-agent).
 
 ## Command reference
 
@@ -461,7 +494,7 @@ and consumed as standard, tool-agnostic knowledge — no Metatron needed to read
 ### `context` — onboard a repo to files-first mode
 
 Writes everything a coding agent needs to consult and extend the knowledge base as
-plain files (see [Files-first mode](#files-first-mode-no-mcp)): the `.roo/rules`
+plain files (see [Files-first mode](#files-first-mode-default)): the `.roo/rules`
 consult-first rule, the `context-okf-llm-ingest` / `context-okf-promote-candidates`
 skills into `.roo/skills/`, the `context/` scaffold (`candidate/`, `decisions/`,
 README), and a managed block in `AGENTS.md` — appended to an existing file, never
@@ -546,9 +579,15 @@ merging several employees' DBs you can see who contributed what across the team.
 ![Metatron curation UI — the Agent Impact view, showing live agent activity and decision coverage](https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-ui.png)
 
 ```text
-$ metatron ui
+$ metatron ui --files   # files-first: mount the repo's git-tracked OKF bundle
+$ metatron ui           # MCP/database mode: the SQLite catalog
 Metatron curation UI on http://127.0.0.1:1337  (Ctrl-C to stop)
 ```
+
+In `--files` mode the UI is a view over the git bundle: curation actions become
+working-tree edits (promotion is a `git mv`, rejection a `git rm`) that you review
+and commit through the ordinary git flow — nothing is committed automatically. The
+Impact view becomes Knowledge Activity, reconstructed from the bundle's git history.
 
 Binds to `localhost` (bumping to the next free port if taken) and reads/writes the
 same store as the CLI. The sidebar groups the views into **Impact**, **Knowledge**,
@@ -595,36 +634,18 @@ Review them in the UI Candidates tab (origin: feedback).
 Flags: `--repo <id>`, `--limit N` (max reports to refine), `--model <name>`
 (override the refiner model).
 
-## Connecting a coding agent (MCP)
+## Connecting a coding agent
 
-There are two onboarding modes: **MCP** (the default, below) serves decisions over the
-MCP server; **files-first** (no MCP) has the agent read the OKF files directly — jump
-to [Files-first mode](#files-first-mode-no-mcp).
+Two onboarding modes. **Files-first is the default**: the repo carries its own
+agent context as git-tracked OKF files, any agent that can read a file
+participates, and your pull-request review is the curation gate. **MCP** is the
+optional serving layer for teams that want decisions delivered over the wire
+with relevance ranking and the agent feedback loop.
 
-So a coding agent reliably *consults* the decisions (rather than rediscovering
-conventions), run the onboarding script from inside the target repo:
+### Files-first mode (default)
 
-```bash
-bash /path/to/metatron/metatron_setup.sh        # or pass the repo dir as an arg
-```
-
-It is **additive and idempotent**, and adds (never deletes) four things to the target
-repo:
-
-1. A "query Metatron first" block in `CLAUDE.md` (between markers).
-2. A `UserPromptSubmit` hook in `.claude/settings.json` that re-injects the directive
-   every turn.
-3. A **`Stop` hook** that, when the agent finishes a task where it consulted Metatron
-   but never sent feedback, reminds it (once per session) to call `submit_feedback`.
-4. The `metatron` MCP server in `.mcp.json`.
-
-The repo id is derived from the `origin` remote (override with `METATRON_REPO`).
-Then reconnect the agent so it loads the hooks and server.
-
-### Files-first mode (no MCP)
-
-Prefer to skip MCP entirely and let the agent read conventions straight from the OKF
-files in git? Onboard the repo with the built-in command:
+The repo carries its own agent context — no server, no API key, no MCP. Onboard
+with the built-in command:
 
 ```bash
 metatron context setup                          # onboard the current repo (or pass a dir)
@@ -665,6 +686,28 @@ The choice is persisted to `metatron.toml` (`review_gate`), and re-running
 the `.roo/rules` rule, the installed skills, the KB README, and the `AGENTS.md`
 block — so the whole contract switches consistently. Hand-edited files outside
 the managed markers are never touched.
+
+### MCP mode (optional serving layer)
+
+So a coding agent reliably *consults* the decisions (rather than rediscovering
+conventions), run the onboarding script from inside the target repo:
+
+```bash
+bash /path/to/metatron/metatron_setup.sh        # or pass the repo dir as an arg
+```
+
+It is **additive and idempotent**, and adds (never deletes) four things to the target
+repo:
+
+1. A "query Metatron first" block in `CLAUDE.md` (between markers).
+2. A `UserPromptSubmit` hook in `.claude/settings.json` that re-injects the directive
+   every turn.
+3. A **`Stop` hook** that, when the agent finishes a task where it consulted Metatron
+   but never sent feedback, reminds it (once per session) to call `submit_feedback`.
+4. The `metatron` MCP server in `.mcp.json`.
+
+The repo id is derived from the `origin` remote (override with `METATRON_REPO`).
+Then reconnect the agent so it loads the hooks and server.
 
 ### MCP tools exposed
 

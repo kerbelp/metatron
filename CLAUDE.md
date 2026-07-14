@@ -6,10 +6,12 @@ Ground rules for working in this repo. Read this first.
 
 Metatron is a self-hosted system that captures a company's real implementation
 decisions — preferred patterns, rejected approaches, edge cases, internal
-conventions — as structured **decisions**, and serves them to coding agents over MCP
-(Model Context Protocol). The goal is for an agent to write code like a senior
-engineer who already knows this codebase. It runs against a private codebase, so
-assume sensitive data and on-prem deployment.
+conventions — as structured **decisions**. In the primary, files-first mode they
+live as git-tracked OKF markdown consulted directly by coding agents; an optional
+MCP (Model Context Protocol) server layer serves the same decisions over the
+wire. The goal is for an agent to write code like a senior engineer who already
+knows this codebase. It runs against a private codebase, so assume sensitive
+data and on-prem deployment.
 
 ## Tech stack (decided — not open for debate)
 
@@ -35,13 +37,15 @@ These are locked. Do not re-litigate or substitute them:
 
 Metatron supports two ways of operating, and the source of truth differs:
 
-- **MCP / database mode (default).** SQLite is the source of truth; the git-tracked
-  OKF markdown bundle is a synced mirror (`metatron mirror sync`). Curation happens in
-  the store (CLI/UI), and decisions are served to agents over MCP.
-- **Files-first mode (no MCP).** For teams that want to avoid MCP, the git-tracked OKF
-  files are the source of truth: the directory (`candidate/` vs `decisions/`) is the
-  status, decisions are curated as plain files reviewed via pull request, and the
-  database is a derived, rebuildable serving index (`metatron mirror import`).
+- **Files-first mode (primary/default).** The git-tracked OKF files are the source
+  of truth: the directory (`candidate/` vs `decisions/`) is the status, decisions
+  are curated as plain files reviewed via pull request (default review gate: `pr`),
+  and the database is a derived, rebuildable serving index (`metatron mirror
+  import`). The curation UI mounts the bundle directly (`metatron ui --files`).
+- **MCP / database mode (optional serving layer).** SQLite is the source of truth;
+  the git-tracked OKF markdown bundle is a synced mirror (`metatron mirror sync`).
+  Curation happens in the store (CLI/UI), and decisions are served to agents over
+  MCP with relevance ranking and the feedback loop.
 
 The **canonical boundary stays human-gated in both modes** (see Core principle):
 nothing self-promotes; a human placing or moving a file into `decisions/` — or
