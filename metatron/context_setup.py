@@ -63,12 +63,14 @@ under `{kb}/`: `{kb}/decisions/` is **canonical**, `{kb}/candidate/` is
 **proposed** (unreviewed). In a monorepo each app has its own `{kb}/` — use the
 one **nearest** the files you are touching (walk up to the closest `{kb}/`).
 
-- **Consult first.** Before exploring or editing code in an area, read the contents
-  of the relevant files in the nearest `{kb}/decisions/` and follow them — open the
-  files themselves; a directory listing is not consultation. Say that you did; do
-  not rediscover conventions manually until you have. **Only `decisions/` is
-  authoritative** — never treat `{kb}/candidate/` content as a convention to
-  follow; candidates are unreviewed proposals.
+- **Consult first — required.** Before exploring or editing code in an area:
+  1. run `cat context.md` (workspace root) for the decision index;
+  2. open the relevant files with `cat {kb}/decisions/<topic>.md`;
+  3. only then plan — and state which decision files you read.
+  A change that contradicts a decision will be rejected in review; listing the
+  directory is not reading. **Only `decisions/` is authoritative** — never treat
+  `{kb}/candidate/` content as a convention to follow; candidates are unreviewed
+  proposals.
 - **Record gaps as candidates.** Found a durable convention that isn't captured?
   Author it as a new OKF file in the nearest `{kb}/candidate/` (skill:
   `context-okf-llm-ingest`). Candidates are proposals for human review — never canonical.
@@ -90,10 +92,12 @@ This repo's review gate is **`pr`** (`review_gate` in `metatron.toml`): decision
 are authored directly under `decisions/` on a working branch, and the repository's
 ordinary pull-request review is the human curation act.
 
-- **Consult first.** Before exploring or editing code in an area, read the contents
-  of the relevant files in the nearest `{kb}/decisions/` and follow them — open the
-  files themselves; a directory listing is not consultation. Say that you did; do
-  not rediscover conventions manually until you have.
+- **Consult first — required.** Before exploring or editing code in an area:
+  1. run `cat context.md` (workspace root) for the decision index;
+  2. open the relevant files with `cat {kb}/decisions/<topic>.md`;
+  3. only then plan — and state which decision files you read.
+  A change that contradicts a decision will be rejected in review; listing the
+  directory is not reading.
 - **Record gaps as decisions — on a branch.** Found a durable convention that isn't
   captured? Author it as a new OKF file in the nearest `{kb}/decisions/` on your
   working branch (skill: `context-okf-llm-ingest`). It reaches the default branch
@@ -186,49 +190,55 @@ philosophy that tiebreaks open decisions. Agents read it before planning._
 _ROOT_BLOCK = {
     "candidates": """\
 <!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
-## Codebase conventions via Metatron (files) — consult FIRST
+## Repository context — required first step
 
-This repo's conventions ("decisions") live as Open Knowledge Format markdown under
-`{kb}/` — `{kb}/decisions/` is canonical, `{kb}/candidate/` is proposed
-(unreviewed). In a monorepo each app has its own `{kb}/`; use the one **nearest**
-the files you are touching.
+This repository carries its own operating knowledge: binding conventions
+("decisions") as Open Knowledge Format markdown under `{kb}/` —
+`{kb}/decisions/` is canonical, `{kb}/candidate/` is proposed (unreviewed).
+Before you explore or edit any code:
 
-**Before you Read, Grep, Glob, or Edit code in an area — and before proposing an
-implementation — first read the contents of the relevant files in the nearest
-`{kb}/decisions/` and follow them.** Open the files themselves — listing the
-directory is not consulting. State that you consulted them; do not rediscover conventions
-manually until you have.
+1. Run `cat context.md` — it lists the binding conventions and where each one
+   lives. In a monorepo, use the `{kb}/` nearest the files you are touching.
+2. Open the decision files relevant to your task with
+   `cat {kb}/decisions/<topic>.md`. They say where fixes belong and which
+   pitfalls to avoid.
+3. Only then plan your change — and state which decision files you read.
 
-When you find a durable convention not already captured, **author it as a candidate**:
-a new OKF file in the nearest `{kb}/candidate/` (see the `context-okf-llm-ingest` skill in
-`.roo/skills/`). Candidates are uncurated proposals for human review.
+Reading these files is required, not optional: a change that contradicts a
+decision will be rejected in review. Listing the directory is not reading.
 
-**Promotion to canonical is human-gated.** Never move a file into `{kb}/decisions/`
-yourself; a human does that via `git mv` reviewed in a pull request (see the
-`context-okf-promote-candidates` skill). Nothing self-promotes.
+To record a durable convention you discovered, author it as a **candidate**: a
+new OKF file in the nearest `{kb}/candidate/` (skill: `context-okf-llm-ingest`
+in `.roo/skills/`). Candidates are unreviewed proposals — never treat them as
+binding, and never move files into `{kb}/decisions/` yourself: promotion is
+human-gated via `git mv` in a reviewed pull request (skill:
+`context-okf-promote-candidates`).
 <!-- METATRON:END -->
 """,
     "pr": """\
 <!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
-## Codebase conventions via Metatron (files) — consult FIRST
+## Repository context — required first step
 
-This repo's conventions ("decisions") live as Open Knowledge Format markdown under
-`{kb}/decisions/`. In a monorepo each app has its own `{kb}/`; use the one
-**nearest** the files you are touching.
+This repository carries its own operating knowledge: binding conventions
+("decisions") as Open Knowledge Format markdown under `{kb}/decisions/`.
+Before you explore or edit any code:
 
-**Before you Read, Grep, Glob, or Edit code in an area — and before proposing an
-implementation — first read the contents of the relevant files in the nearest
-`{kb}/decisions/` and follow them.** Open the files themselves — listing the
-directory is not consulting. State that you consulted them; do not rediscover conventions
-manually until you have.
+1. Run `cat context.md` — it lists the binding conventions and where each one
+   lives. In a monorepo, use the `{kb}/` nearest the files you are touching.
+2. Open the decision files relevant to your task with
+   `cat {kb}/decisions/<topic>.md`. They say where fixes belong and which
+   pitfalls to avoid.
+3. Only then plan your change — and state which decision files you read.
 
-When you find a durable convention not already captured, **author it as a decision
-on your working branch**: a new OKF file in the nearest `{kb}/decisions/` (see the
-`context-okf-llm-ingest` skill in `.roo/skills/`). The review gate is `pr`: the
-human review of your pull request is the curation act, so decision changes reach
-the default branch only through a reviewed PR — never push them there directly.
-`{kb}/candidate/` remains available as optional staging for proposals not yet
-ready for review; content there is never authoritative.
+Reading these files is required, not optional: a change that contradicts a
+decision will be rejected in review. Listing the directory is not reading.
+
+To record a durable convention you discovered, add an OKF file under
+`{kb}/decisions/` on your working branch (skill: `context-okf-llm-ingest` in
+`.roo/skills/`). The review gate is `pr`: it reaches the default branch only
+through a human-reviewed pull request — never push decision changes there
+directly. `{kb}/candidate/` remains optional staging; content there is never
+authoritative.
 <!-- METATRON:END -->
 """,
 }
@@ -236,30 +246,43 @@ ready for review; content there is never authoritative.
 _APP_BLOCK = {
     "candidates": """\
 <!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
-## Metatron conventions for this app — consult FIRST
+## This app's context — required first step
 
-This app's conventions live in `{kb}/` here: `{kb}/decisions/` (canonical),
-`{kb}/candidate/` (proposed). Read the contents of the relevant
-`{kb}/decisions/` files before editing this app's code and follow them; record any missing durable convention as a
-candidate OKF file in `{kb}/candidate/`. Never self-promote into
-`{kb}/decisions/` — promotion is human-gated via `git mv` in a reviewed pull
-request. See the workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
-`context-okf-promote-candidates`) for the file format and workflow.
+Binding conventions for this app live in `{kb}/decisions/` here
+(`{kb}/candidate/` holds unreviewed proposals — never binding). Before you
+explore or edit this app's code:
+
+1. Open the decision files relevant to your task with
+   `cat {kb}/decisions/<topic>.md` (list the directory to find them, then read
+   the files — a listing alone is not reading).
+2. Only then plan your change — and state which decision files you read.
+
+A change that contradicts a decision will be rejected in review. Record any
+missing durable convention as a candidate OKF file in `{kb}/candidate/`; never
+move files into `{kb}/decisions/` yourself — promotion is human-gated via
+`git mv` in a reviewed pull request. Skills: workspace-root `.roo/skills/`
+(`context-okf-llm-ingest`, `context-okf-promote-candidates`).
 <!-- METATRON:END -->
 """,
     "pr": """\
 <!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
-## Metatron conventions for this app — consult FIRST
+## This app's context — required first step
 
-This app's conventions live in `{kb}/decisions/` here. Read the contents of
-the relevant `{kb}/decisions/` files before editing this app's code and follow
-them. Record any
+Binding conventions for this app live in `{kb}/decisions/` here. Before you
+explore or edit this app's code:
+
+1. Open the decision files relevant to your task with
+   `cat {kb}/decisions/<topic>.md` (list the directory to find them, then read
+   the files — a listing alone is not reading).
+2. Only then plan your change — and state which decision files you read.
+
+A change that contradicts a decision will be rejected in review. Record any
 missing durable convention as a new OKF decision file in `{kb}/decisions/` on
-your working branch — the review gate is `pr`, so the human-reviewed pull request
+your working branch — the review gate is `pr`: the human-reviewed pull request
 that lands it is the curation act; never push decision changes to the default
-branch directly. `{kb}/candidate/` is optional staging (never authoritative). See
-the workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
-`context-okf-promote-candidates`) for the file format and workflow.
+branch directly. `{kb}/candidate/` is optional staging (never authoritative).
+Skills: workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
+`context-okf-promote-candidates`).
 <!-- METATRON:END -->
 """,
 }
@@ -477,4 +500,34 @@ def run_setup(target: Path, dir_name: str | None = None,
     _upsert_agents_block(root / "AGENTS.md", _ROOT_BLOCK[gate].format(kb=kb_name), res)
     if target != root:
         _upsert_agents_block(target / "AGENTS.md", _APP_BLOCK[gate].format(kb=kb_name), res)
+    _ensure_claude_bridge(root, res)
     return res
+
+
+_CLAUDE_BRIDGE = """\
+<!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
+@AGENTS.md
+<!-- METATRON:END -->
+"""
+
+
+def _ensure_claude_bridge(root: Path, res: SetupResult) -> None:
+    """Make sure Claude Code sessions load the AGENTS.md contract.
+
+    Headless Claude Code reads ``CLAUDE.md`` and does not load ``AGENTS.md`` on
+    its own, so a repo onboarded only via AGENTS.md is invisible to it. A
+    ``CLAUDE.md`` containing an ``@AGENTS.md`` import closes the gap. Create the
+    file when missing; append the managed block when present without any
+    AGENTS.md reference; leave files that already reference AGENTS.md untouched.
+    """
+    md = root / "CLAUDE.md"
+    if not md.exists():
+        md.write_text(_CLAUDE_BRIDGE, encoding="utf-8")
+        res.messages.append(f"wrote {md} (@AGENTS.md bridge for Claude Code)")
+        return
+    text = md.read_text(encoding="utf-8")
+    if "AGENTS.md" in text:
+        return
+    with md.open("a", encoding="utf-8") as f:
+        f.write("\n" + _CLAUDE_BRIDGE)
+    res.messages.append(f"appended @AGENTS.md bridge to {md}")
