@@ -158,7 +158,7 @@ def test_default_gate_is_pr(tmp_path):
     rule = (repo / ".roo" / "rules" / "metatron.md").read_text()
     assert "review gate is **`pr`**" in rule
     agents = (repo / "AGENTS.md").read_text()
-    assert "author it as a decision" in agents and "reviewed PR" in agents
+    assert "add an OKF file under" in agents and "human-reviewed pull request" in agents
     # The standing-policy note rides along inside the installed ingest skill.
     skill = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
     assert "Repo review gate: `pr`" in skill
@@ -174,7 +174,7 @@ def test_candidates_gate_keeps_staging_contract(tmp_path):
     rule = (repo / ".roo" / "rules" / "metatron.md").read_text()
     assert "Record gaps as candidates" in rule
     agents = (repo / "AGENTS.md").read_text()
-    assert "author it as a candidate" in agents
+    assert "author it as a **candidate**" in agents
     skill = (repo / ".roo" / "skills" / "context-okf-llm-ingest" / "SKILL.md").read_text()
     assert "Repo review gate: `pr`" not in skill
     assert 'review_gate = "candidates"' in (repo / "metatron.toml").read_text()
@@ -191,7 +191,7 @@ def test_rerun_with_other_gate_rewrites_managed_artifacts(tmp_path):
     # The managed block is replaced in place; surrounding content survives.
     assert agents.startswith("# Existing rules")
     assert agents.count("METATRON:START") == 1
-    assert "author it as a decision" in agents and "as a candidate" not in agents
+    assert "add an OKF file under" in agents and "as a **candidate**" not in agents
     assert "review gate is **`pr`**" in (repo / ".roo" / "rules" / "metatron.md").read_text()
     assert "review gate is `pr`" in (repo / "context" / "README.md").read_text()
     assert 'review_gate = "pr"' in (repo / "metatron.toml").read_text()
@@ -260,3 +260,28 @@ def test_skill_source_repo_keeps_pristine_copies(tmp_path):
         text = (repo / ".roo" / "skills" / name / "SKILL.md").read_text()
         assert text == "---\nname: x\n---\npristine\n"
     assert any("skill source repo" in m for m in res.messages)
+
+
+def test_claude_bridge_written(tmp_path):
+    from metatron.context_setup import run_setup
+    run_setup(tmp_path)
+    claude = tmp_path / "CLAUDE.md"
+    assert claude.exists()
+    assert "@AGENTS.md" in claude.read_text()
+
+
+def test_claude_bridge_respects_existing_reference(tmp_path):
+    from metatron.context_setup import run_setup
+    (tmp_path / "CLAUDE.md").write_text("# Mine\nSee AGENTS.md for rules.\n")
+    run_setup(tmp_path)
+    text = (tmp_path / "CLAUDE.md").read_text()
+    assert text.count("AGENTS.md") == 1  # untouched
+
+
+def test_claude_bridge_appends_when_missing_reference(tmp_path):
+    from metatron.context_setup import run_setup
+    (tmp_path / "CLAUDE.md").write_text("# Project notes\n")
+    run_setup(tmp_path)
+    text = (tmp_path / "CLAUDE.md").read_text()
+    assert text.startswith("# Project notes")
+    assert "@AGENTS.md" in text
