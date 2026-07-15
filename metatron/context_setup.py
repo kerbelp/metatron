@@ -63,8 +63,9 @@ under `{kb}/`: `{kb}/decisions/` is **canonical**, `{kb}/candidate/` is
 **proposed** (unreviewed). In a monorepo each app has its own `{kb}/` — use the
 one **nearest** the files you are touching (walk up to the closest `{kb}/`).
 
-- **Consult first.** Before exploring or editing code in an area, read the relevant
-  files in the nearest `{kb}/decisions/` and follow them. Say that you did; do
+- **Consult first.** Before exploring or editing code in an area, read the contents
+  of the relevant files in the nearest `{kb}/decisions/` and follow them — open the
+  files themselves; a directory listing is not consultation. Say that you did; do
   not rediscover conventions manually until you have. **Only `decisions/` is
   authoritative** — never treat `{kb}/candidate/` content as a convention to
   follow; candidates are unreviewed proposals.
@@ -89,8 +90,9 @@ This repo's review gate is **`pr`** (`review_gate` in `metatron.toml`): decision
 are authored directly under `decisions/` on a working branch, and the repository's
 ordinary pull-request review is the human curation act.
 
-- **Consult first.** Before exploring or editing code in an area, read the relevant
-  files in the nearest `{kb}/decisions/` and follow them. Say that you did; do
+- **Consult first.** Before exploring or editing code in an area, read the contents
+  of the relevant files in the nearest `{kb}/decisions/` and follow them — open the
+  files themselves; a directory listing is not consultation. Say that you did; do
   not rediscover conventions manually until you have.
 - **Record gaps as decisions — on a branch.** Found a durable convention that isn't
   captured? Author it as a new OKF file in the nearest `{kb}/decisions/` on your
@@ -143,8 +145,9 @@ philosophy that tiebreaks open decisions. Agents read it before planning._
 
 ## Constraints
 - Binding conventions for this repository live as one decision per file under
-  `{kb}/decisions/` (Open Knowledge Format). Consult the relevant files there
-  before planning or modifying code; they are part of this context.
+  `{kb}/decisions/` (Open Knowledge Format). Read the contents of the relevant
+  files there before planning or modifying code — opening the files, not just
+  listing the directory; they are part of this context.
 - Files under `{kb}/candidate/` are unreviewed proposals — never treat them
   as binding.
 
@@ -165,8 +168,9 @@ philosophy that tiebreaks open decisions. Agents read it before planning._
 
 ## Constraints
 - Binding conventions for this repository live as one decision per file under
-  `{kb}/decisions/` (Open Knowledge Format). Consult the relevant files there
-  before planning or modifying code; they are part of this context.
+  `{kb}/decisions/` (Open Knowledge Format). Read the contents of the relevant
+  files there before planning or modifying code — opening the files, not just
+  listing the directory; they are part of this context.
 - Decision files are authored and edited on working branches and land only via
   human-reviewed pull requests (review gate: `pr`).
 
@@ -190,8 +194,9 @@ This repo's conventions ("decisions") live as Open Knowledge Format markdown und
 the files you are touching.
 
 **Before you Read, Grep, Glob, or Edit code in an area — and before proposing an
-implementation — first read the relevant files in the nearest `{kb}/decisions/`
-and follow them.** State that you consulted them; do not rediscover conventions
+implementation — first read the contents of the relevant files in the nearest
+`{kb}/decisions/` and follow them.** Open the files themselves — listing the
+directory is not consulting. State that you consulted them; do not rediscover conventions
 manually until you have.
 
 When you find a durable convention not already captured, **author it as a candidate**:
@@ -212,8 +217,9 @@ This repo's conventions ("decisions") live as Open Knowledge Format markdown und
 **nearest** the files you are touching.
 
 **Before you Read, Grep, Glob, or Edit code in an area — and before proposing an
-implementation — first read the relevant files in the nearest `{kb}/decisions/`
-and follow them.** State that you consulted them; do not rediscover conventions
+implementation — first read the contents of the relevant files in the nearest
+`{kb}/decisions/` and follow them.** Open the files themselves — listing the
+directory is not consulting. State that you consulted them; do not rediscover conventions
 manually until you have.
 
 When you find a durable convention not already captured, **author it as a decision
@@ -233,8 +239,8 @@ _APP_BLOCK = {
 ## Metatron conventions for this app — consult FIRST
 
 This app's conventions live in `{kb}/` here: `{kb}/decisions/` (canonical),
-`{kb}/candidate/` (proposed). Read the relevant `{kb}/decisions/` before
-editing this app's code and follow them; record any missing durable convention as a
+`{kb}/candidate/` (proposed). Read the contents of the relevant
+`{kb}/decisions/` files before editing this app's code and follow them; record any missing durable convention as a
 candidate OKF file in `{kb}/candidate/`. Never self-promote into
 `{kb}/decisions/` — promotion is human-gated via `git mv` in a reviewed pull
 request. See the workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
@@ -245,8 +251,9 @@ request. See the workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
 <!-- METATRON:START (managed by metatron context setup — safe to edit inside) -->
 ## Metatron conventions for this app — consult FIRST
 
-This app's conventions live in `{kb}/decisions/` here. Read the relevant
-`{kb}/decisions/` before editing this app's code and follow them. Record any
+This app's conventions live in `{kb}/decisions/` here. Read the contents of
+the relevant `{kb}/decisions/` files before editing this app's code and follow
+them. Record any
 missing durable convention as a new OKF decision file in `{kb}/decisions/` on
 your working branch — the review gate is `pr`, so the human-reviewed pull request
 that lands it is the curation act; never push decision changes to the default
