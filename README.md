@@ -12,13 +12,13 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/VoWp6jH4VLM">
-    <img src="https://github.com/kerbelp/metatron/releases/download/hero-demo/thumbnail.png" alt="Watch the Metatron demo (2 min)" width="720" />
+  <a href="https://youtu.be/RdPn6OMtfOs">
+    <img src="https://img.youtube.com/vi/RdPn6OMtfOs/maxresdefault.jpg" alt="Watch the Metatron demo (2 min)" width="720" />
   </a>
   <br />
-  <a href="https://youtu.be/VoWp6jH4VLM"><b>▶ Watch the 2-minute demo</b></a> — <i>MCP serving-layer mode</i>
+  <a href="https://youtu.be/RdPn6OMtfOs"><b>▶ Watch the 2-minute demo</b></a> — <i>files-first mode (default)</i>
   <br />
-  <sub>🎬 <b>Files-first mode</b> (the default workflow) has its own demo video — <b>coming soon</b>. Until then, the <a href="#files-first-mode-default">files-first section</a> below is the reference.</sub>
+  <sub>🎬 Also available: the <a href="https://youtu.be/VoWp6jH4VLM">MCP serving-layer mode demo</a>.</sub>
 </p>
 
 Metatron captures a codebase's real implementation decisions — preferred
