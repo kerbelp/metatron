@@ -174,6 +174,36 @@ def submit_candidate_decision(
     return store.add(decision)
 
 
+def get_verification(
+    scope: str,
+    tags: list[str] | None = None,
+    *,
+    root: str = ".",
+    context_dir: str | None = None,
+) -> str:
+    """Serve verification contracts relevant to a scope, as JSON (read-only).
+
+    Selection-ranked like decision serving (scope + tags), never a monolith. This
+    is a *read* — the server never executes a contract (see the design's §6).
+    """
+    import json
+
+    from metatron.verification.discover import iter_contracts, select, verification_dir
+
+    base = verification_dir(root, context_dir)
+    contracts = select(iter_contracts(base), scope=scope, tags=tags)
+    if not contracts:
+        return "No matching verification contracts."
+    return json.dumps([c.to_dict() for c in contracts], indent=2)
+
+
+def get_verification_template() -> str:
+    """The canonical contract skeleton, so an agent drafts in-format."""
+    from metatron.verification.scaffold import template
+
+    return template()
+
+
 def format_decisions(
     decisions: list[Decision],
     *,

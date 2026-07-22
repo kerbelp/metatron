@@ -162,6 +162,9 @@ def main(
     if args.command == "context":
         return _cmd_context(args, out)
 
+    if args.command == "verification":
+        return _cmd_verification(args, out)
+
     settings = load_settings()
     if args.db:
         settings = settings.model_copy(update={"db_path": args.db})
@@ -909,6 +912,95 @@ def _cmd_context(args, out) -> int:
     return 2
 
 
+def _default_verification_dir() -> Path:
+    from metatron.verification.discover import verification_dir
+    return verification_dir(".", load_settings().context_dir)
+
+
+def _cmd_verification(args, out) -> int:
+    cmd = getattr(args, "verification_command", None)
+    if cmd == "setup":
+        from metatron.verification.setup import run_verification_setup
+        target = Path(args.path)
+        if not target.is_dir():
+            print(f"no such directory: {target}", file=out)
+            return 1
+        print(f"Wiring verification contracts into {target.resolve()}", file=out)
+        res = run_verification_setup(
+            target, dir_name=args.dir, review_gate=args.review_gate)
+        for line in res.messages:
+            print(f"  {line}", file=out)
+        return 0
+    if cmd == "template":
+        from metatron.verification.scaffold import template
+        print(template(), file=out)
+        return 0
+    if cmd == "new":
+        from metatron.verification.scaffold import scaffold_new
+        settings = load_settings()
+        gate = settings.review_gate or "pr"
+        if args.path:
+            target_dir = Path(args.path)
+        else:
+            kb = resolve_context_dir(".", settings.context_dir)
+            target_dir = kb / ("verification" if gate == "pr" else "candidate")
+        try:
+            path = scaffold_new(target_dir, args.slug, args.scope, args.from_ref)
+        except FileExistsError as exc:
+            print(f"refusing to overwrite {exc}", file=out)
+            return 1
+        print(str(path), file=out)
+        return 0
+    if cmd == "audit":
+        from metatron.verification.audit import audit_dir
+        base = Path(args.path) if args.path else _default_verification_dir()
+        errors = audit_dir(base)
+        for e in errors:
+            print(f"{e.path}: {e.message}", file=out)
+        if errors:
+            print(f"{len(errors)} problem(s) found", file=out)
+            return 1
+        print("ok", file=out)
+        return 0
+    if cmd == "run":
+        return _cmd_verification_run(args, out)
+    print("unknown verification command", file=out)
+    return 2
+
+
+def _cmd_verification_run(args, out) -> int:
+    from metatron.verification import runner as vrun
+    from metatron.verification.discover import iter_contracts, select
+    from metatron.verification.report import render
+
+    base = Path(args.path) if args.path else _default_verification_dir()
+    if not base.exists():
+        print(f"no such directory: {base}", file=out)
+        return 1
+    tags = [t for t in (args.tags or "").split(",") if t.strip()] or None
+    contracts = select(iter_contracts(base), scope=args.scope, tags=tags)
+    if not contracts:
+        print("no matching contracts", file=out)
+        return 0
+    if args.dry_run:
+        print(vrun.plan(contracts, tags=tags), file=out, end="")
+        return 0
+    if args.judge:
+        # Phase-2 hook: no judge provider is wired yet, so judged invariants are
+        # skipped rather than silently passed. Executable checks always run.
+        print("note: --judge is phase 2 and no judge provider is configured; "
+              "judged invariants are skipped, executable checks still run.", file=out)
+    timeout = args.timeout or vrun.DEFAULT_TIMEOUT
+    report = vrun.run_contracts(contracts, cwd=".", tags=tags, timeout=timeout)
+    rendered = render(report, args.report)
+    if args.out:
+        Path(args.out).write_text(rendered + "\n", encoding="utf-8")
+        print(str(args.out), file=out)
+    else:
+        print(rendered, file=out)
+    return 0 if report.passed else 1
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="metatron")
     parser.add_argument(
@@ -1092,6 +1184,39 @@ def _build_parser() -> argparse.ArgumentParser:
              "'candidates' stages proposals in candidate/ with promotion as a "
              "separate reviewed git mv. Persisted to metatron.toml; re-running "
              "setup with the other value rewrites the managed artifacts")
+
+    verify_p = sub.add_parser(
+        "verification", help="author, lint, and run git-tracked verification contracts")
+    verify_sub = verify_p.add_subparsers(dest="verification_command")
+    v_setup = verify_sub.add_parser(
+        "setup", help="wire the authoring workflow into AGENTS.md + drop a worked example")
+    v_setup.add_argument("path", nargs="?", default=".",
+                         help="repo directory to onboard (default: current dir)")
+    v_setup.add_argument("--dir", default=None,
+                         help="knowledge-base directory name (default: configured context_dir)")
+    v_setup.add_argument("--review-gate", default=None, choices=("pr", "candidates"),
+                         help="where the drafted example lands (default: configured gate)")
+    verify_sub.add_parser("template", help="print the canonical contract skeleton")
+    v_new = verify_sub.add_parser("new", help="scaffold a draft verification contract")
+    v_new.add_argument("slug", help="filename slug for the contract")
+    v_new.add_argument("--scope", required=True, help="subsystem the contract binds to")
+    v_new.add_argument("--from", dest="from_ref", default=None,
+                       help="a candidate/decision path to record as source_ref")
+    v_new.add_argument("--path", default=None, help="override the target directory")
+    v_audit = verify_sub.add_parser("audit", help="read-only lint of verification contracts")
+    v_audit.add_argument("--path", default=None, help="override the contracts directory")
+    v_run = verify_sub.add_parser(
+        "run", help="execute contracts and report (operator/CI only; never over MCP)")
+    v_run.add_argument("--scope", default=None, help="only contracts relevant to this scope")
+    v_run.add_argument("--tags", default=None, help="comma-separated check tags to run")
+    v_run.add_argument("--report", default="text", choices=("text", "json", "junit"))
+    v_run.add_argument("--out", default=None, help="write the report to a file")
+    v_run.add_argument("--timeout", type=int, default=None, help="per-step timeout seconds")
+    v_run.add_argument("--dry-run", action="store_true",
+                       help="print the plan and resolved assertions; execute nothing")
+    v_run.add_argument("--judge", action="store_true",
+                       help="also evaluate judged invariants (phase 2; requires a provider)")
+    v_run.add_argument("--path", default=None, help="override the contracts directory")
 
     export_p = sub.add_parser(
         "export", help="copy a repo's self-contained DB out for hand-off"

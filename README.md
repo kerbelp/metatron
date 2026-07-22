@@ -343,7 +343,7 @@ agent automatically, see [Connecting a coding agent](#connecting-a-coding-agent)
 
 ```text
 $ metatron --help
-usage: metatron [-h] [--db DB] {ingest,serve,repo,ui,version,whoami,triage,enrich-keywords,refine-feedback,candidates,mirror,files,context,export,import} ...
+usage: metatron [-h] [--db DB] {ingest,serve,repo,ui,version,whoami,triage,enrich-keywords,refine-feedback,candidates,mirror,files,context,verification,export,import} ...
 
 positional arguments:
     ingest              bootstrap candidate decisions from a repo
@@ -359,6 +359,7 @@ positional arguments:
     mirror              sync decisions to/from a git-tracked markdown bundle
     files               author, lint, and index git-authoritative decision files
     context             onboard a repo to files-first mode (rule, skills, knowledge base)
+    verification        author, lint, and run git-tracked verification contracts
     export              copy a repo's self-contained DB out for hand-off
     import              merge another employee's exported DB into this catalog
 ```
@@ -517,6 +518,36 @@ Companion commands for the files-first workflow: `files lint` validates decision
 files, `files index` regenerates the decision index, `files new` scaffolds a
 candidate, and `files record` / `files report` maintain and render the usage ledger.
 All default to `<context-dir>/decisions`; pass `--path` to point elsewhere.
+
+### `verification` — author, lint, and run verification contracts
+
+A **verification contract** is a git-tracked OKF file that records *how to prove a
+change works, and what a failure implies*. It lives beside decisions in
+`<context-dir>/verification/`, is authored by the agent that just built the
+feature (drafted via the review gate — never self-canonical), and is run by an
+operator or CI. Its `## Failure Means` section — a curated map from a red check to
+the subsystem at fault — is what no plain test runner records. Full guide:
+[`docs/verification.md`](docs/verification.md).
+
+```bash
+metatron verification setup             # wire the workflow into AGENTS.md + drop a worked example
+metatron verification template          # print the canonical contract skeleton
+metatron verification new auth --scope services/auth   # scaffold a draft
+metatron verification audit             # read-only lint of contracts
+metatron verification run               # execute all contracts, report like a test run
+metatron verification run --scope services/auth --tags smoke   # selective
+metatron verification run --dry-run     # print the plan; execute nothing
+metatron verification run --report junit --out report.xml      # CI-friendly output
+```
+
+Assertions evaluate against each check's exit code / stdout / stderr: `exit`,
+`contains`, `matches` (regex), `jsonpath`, and a `shell` escape hatch. `run` exits
+non-zero on any failure, so it drops into CI unchanged.
+
+**Security boundary.** Execution is a developer/CI verb only. The MCP server
+exposes read-only `get_verification` and `get_verification_template` tools and
+**never** runs a contract — nothing an agent reaches over the wire executes; only
+an operator (or a CI job they configured) invokes `run`.
 
 ### `serve` — expose canonical decisions to agents over MCP
 

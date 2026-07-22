@@ -246,4 +246,42 @@ def build_server(
         _record(Event(repo=repo, kind=EventKind.SUBMIT, area=scope, decision_ids=[decision.id]))
         return decision.id
 
+    @server.tool()
+    def get_verification(
+        scope: Annotated[
+            str,
+            Field(description=(
+                "The subsystem/scope you are about to verify or work in "
+                '(e.g. "services/auth"). Contracts relevant to it are returned.'
+            )),
+        ],
+        tags: Annotated[
+            list[str] | None,
+            Field(description=(
+                'Optional check tags to narrow by (e.g. ["smoke", "critical-path"]).'
+            )),
+        ] = None,
+    ) -> str:
+        """Fetch the team's verification contracts for a scope: how a change here is
+        proven, and — in each contract's "failure_means" — what a red check implies
+        about which subsystem is at fault.
+
+        This is READ-ONLY. It never executes anything; contracts are run only by an
+        operator or CI via `metatron verification run`, never over this server. Use
+        the returned setup/checks/assertions to run the proof yourself in your own
+        sandbox, and use "failure_means" to route any failure.
+
+        Returns a JSON array of contracts, or the string "No matching verification
+        contracts." when none are registered for the scope.
+        """
+        return service.get_verification(scope, tags)
+
+    @server.tool()
+    def get_verification_template() -> str:
+        """Return the canonical verification-contract skeleton, so you can draft a new
+        contract in the exact format the layer expects. Drafts are review-gated and
+        never self-canonical — a human approving the file is the curation act.
+        """
+        return service.get_verification_template()
+
     return server
