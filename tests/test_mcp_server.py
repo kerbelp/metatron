@@ -22,6 +22,8 @@ def test_server_exposes_the_expected_tools():
         "get_decisions_for_context",
         "submit_candidate_decision",
         "submit_feedback",
+        "get_verification",
+        "get_verification_template",
     }
 
 
@@ -29,10 +31,10 @@ def test_every_tool_parameter_carries_a_schema_description():
     # MCP clients (and quality scorers like Glama) read parameter docs from the
     # JSON inputSchema, not from the Python docstring's Args section. Each param
     # must therefore declare a Field(description=...) so it reaches the schema.
+    # Zero-parameter tools (e.g. get_verification_template) satisfy this vacuously.
     server = build_server(SQLiteDecisionStore(":memory:"), REPO)
     for tool in asyncio.run(server.list_tools()):
         props = tool.inputSchema["properties"]
-        assert props, f"{tool.name} exposes no parameters"
         for name, schema in props.items():
             assert schema.get("description", "").strip(), (
                 f"{tool.name}.{name} is missing a schema description"
