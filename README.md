@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner.png" alt="Metatron — your codebase's conventions, versioned in git and consulted by coding agents" width="100%" />
+  <picture>
+    <source media="(dynamic-range: high)" srcset="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner-hdr.png" />
+    <img src="https://raw.githubusercontent.com/kerbelp/metatron/main/assets/metatron-banner.png" alt="Metatron — your codebase's conventions, versioned in git and consulted by coding agents" width="100%" />
+  </picture>
 </p>
 
 <p align="center">
