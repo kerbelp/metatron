@@ -9,6 +9,7 @@ from metatron.filesfirst.schema import (
     REQUIRED_FIELDS,
     RESERVED_FILENAMES,
     STATUSES,
+    is_uuid_slug,
 )
 
 
@@ -36,9 +37,12 @@ def lint_decision(doc: DecisionFile) -> list[LintError]:
         errs.append(LintError(
             doc.path, f"keywords must be a list, got {type(keywords).__name__}"))
     slug = doc.path.stem
-    if fm.get("id") and fm["id"] != slug:
+    if is_uuid_slug(slug):
         errs.append(LintError(
-            doc.path, f"id {fm['id']!r} must match filename slug {slug!r}"))
+            doc.path,
+            "UUID filename hides the decision topic; rename the file to a "
+            "readable slug and keep the UUID in frontmatter 'id'",
+        ))
     return errs
 
 
