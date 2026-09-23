@@ -32,15 +32,24 @@ def test_flags_bad_status_value(tmp_path):
     assert any("invalid status" in e.message for e in errs)
 
 
-def test_flags_id_filename_mismatch(tmp_path):
-    _write(tmp_path, "wrong-name.md", "---\nid: x\ntype: decision\nstatus: candidate\ntitle: T\n---\nb\n")
+def test_explicit_id_can_differ_from_readable_filename(tmp_path):
+    _write(tmp_path, "token-refresh-strategy.md",
+           "---\nid: 3e703f65-f80c-4c8f-b70c-f68436676421\n"
+           "type: decision\nstatus: candidate\ntitle: T\n---\nb\n")
+    assert lint_tree(tmp_path) == []
+
+
+def test_flags_uuid_filename_as_uninformative(tmp_path):
+    decision_id = "3e703f65-f80c-4c8f-b70c-f68436676421"
+    _write(tmp_path, f"{decision_id}.md",
+           f"---\nid: {decision_id}\ntype: decision\nstatus: candidate\ntitle: T\n---\nb\n")
     errs = lint_tree(tmp_path)
-    assert any("must match filename" in e.message for e in errs)
+    assert any("UUID filename" in e.message and "readable slug" in e.message for e in errs)
 
 
 def test_flags_duplicate_ids(tmp_path):
-    # Two files both claiming id `dup`. (dup2.md also trips the id/slug-mismatch
-    # rule; that's fine — we only assert the duplicate-id branch fires.)
+    # Two differently named files may carry the same durable id, but that is
+    # still an identity collision.
     _write(tmp_path, "dup.md", "---\nid: dup\ntype: decision\nstatus: candidate\ntitle: T\n---\nb\n")
     _write(tmp_path, "dup2.md", "---\nid: dup\ntype: decision\nstatus: candidate\ntitle: T\n---\nb\n")
     errs = lint_tree(tmp_path)

@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 # Decision lifecycle. Status lives in frontmatter, never in directory names.
 STATUSES: tuple[str, ...] = ("candidate", "canonical", "superseded", "deprecated")
 
 CONFIDENCE: tuple[str, ...] = ("low", "medium", "high")
 
-# OKF requires `type` — and nothing else. A file's identity is its filename slug;
-# an explicit `id` is optional (it is minted at `mirror import` time when a repo
-# migrates to the SQLite index) and must match the slug when present. `status`
-# defaults to the containing directory (candidate/ vs decisions/); `title` is
-# optional.
+# OKF requires `type` — and nothing else. An explicit `id` is an optional durable
+# identity independent of the readable filename; without one, the filename slug
+# is the identity. `status` defaults to the containing directory (candidate/ vs
+# decisions/); `title` is optional.
 REQUIRED_FIELDS: tuple[str, ...] = ("type",)
 
 # Authored and curated by humans / the proposing model.
@@ -23,3 +24,11 @@ MACHINE_FIELDS = frozenset(
 
 # Reserved OKF filenames that are not decisions.
 RESERVED_FILENAMES = frozenset({"index.md", "log.md"})
+
+
+def is_uuid_slug(value: str) -> bool:
+    """Whether *value* is a bare canonical UUID rather than a readable slug."""
+    try:
+        return str(UUID(value)) == value.lower()
+    except (ValueError, AttributeError):
+        return False
