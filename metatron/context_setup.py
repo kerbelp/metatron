@@ -288,16 +288,15 @@ Skills: workspace-root `.roo/skills/` (`context-okf-llm-ingest`,
 }
 
 # Injected into the installed skill copies (never the packaged sources) right
-# after the frontmatter when the repo's gate is ``pr``, so the skills' default
-# candidates-first instructions carry the repo's standing policy with them.
+# after the frontmatter when the repo's gate is ``pr``, so the installed skill
+# carries the repo's standing policy with it.
 _SKILL_GATE_NOTE = """\
 
 > **Repo review gate: `pr` (configured).** This repository sets
 > `review_gate = "pr"` in `metatron.toml` (via `metatron context setup
 > --review-gate=pr`): authored decisions go **directly to `decisions/`** on a
-> working branch as the standing policy, so treat the explicit human direction
-> required by "Where to write" as given repo-wide. The other safeguard still
-> applies to every batch: the files may reach the default branch **only through a
+> working branch as the standing policy. No separate per-batch permission or
+> candidate promotion is needed. The files may reach the default branch **only through a
 > human-reviewed pull request** — no direct pushes, no auto-merge, no bot
 > approval. `candidate/` remains available as optional staging.
 """
@@ -335,7 +334,7 @@ def _skill_text(src: Path, kb_name: str, gate: str) -> str:
     """The packaged skill text, adapted to the repo's KB dir and review gate.
 
     The packaged documents describe the default ``context/`` layout and the
-    candidates-first flow. Path references are substituted for a custom KB dir
+    configured review gates. Path references are substituted for a custom KB dir
     (command and product names never contain a trailing slash, so they are
     untouched), and a ``pr``-gate repo gets the standing-policy note injected
     right after the frontmatter.
