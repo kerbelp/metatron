@@ -1,8 +1,12 @@
 """Tests for `metatron context setup` (files-first onboarding)."""
 
 import io
+import re
+import shlex
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from metatron.cli import main
 from metatron.context_setup import _SKILLS, run_setup
@@ -285,3 +289,40 @@ def test_claude_bridge_appends_when_missing_reference(tmp_path):
     text = (tmp_path / "CLAUDE.md").read_text()
     assert text.startswith("# Project notes")
     assert "@AGENTS.md" in text
+
+
+@pytest.mark.parametrize("gate,destination", [("pr", "decisions"), ("candidates", "candidate")])
+@pytest.mark.parametrize("kb", ["context", "conventions"])
+def test_installed_ingest_example_validates_without_database(tmp_path, monkeypatch, gate, destination, kb):
+    """Execute the installed skill's example and lint command in both workflows.
+
+    This also exercises custom-directory substitution in the documented commands;
+    lint must neither require nor create a serving database or decision IDs.
+    """
+    from metatron.filesfirst.document import parse_decision_file
+
+    repo = _repo(tmp_path)
+    run_setup(repo, dir_name=kb, review_gate=gate)
+    skill = (repo / ".roo/skills/context-okf-llm-ingest/SKILL.md").read_text()
+    example = skill.split("```markdown\n", 1)[1].split("```", 1)[0]
+    decision = repo / kb / destination / "repo-pattern-for-stores.md"
+    decision.write_text(example)
+    parsed = parse_decision_file(decision, example)
+    assert "## Pattern\n" in parsed.body and "## Rationale\n" in parsed.body
+    assert "id" not in parsed.frontmatter
+    assert parsed.id == decision.stem
+
+    commands = re.findall(r"`(metatron files lint --path [^`]+)`", skill)
+    args = next(shlex.split(command)[1:] for command in commands
+                if shlex.split(command)[-1] == f"{kb}/{destination}")
+    before = {p.relative_to(repo) for p in repo.rglob("*") if p.is_file()}
+    monkeypatch.chdir(repo)
+    out = io.StringIO()
+    assert main(args, out=out) == 0
+    assert out.getvalue().strip() == "ok"
+    assert decision.read_text() == example
+    assert {p.relative_to(repo) for p in repo.rglob("*") if p.is_file()} == before
+
+    # The advertised validator must also reject malformed author output.
+    decision.write_text(example.replace("confidence: high", "confidence: certain"))
+    assert main(args, out=io.StringIO()) == 1

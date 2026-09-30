@@ -1,128 +1,85 @@
 ---
 name: context-okf-llm-ingest
-description: Use when extracting a codebase's implementation decisions into Metatron with an LLM/agent instead of `metatron ingest` — authoring candidate decisions as Open Knowledge Format (OKF) markdown files locally for review.
+description: Use when extracting a codebase's implementation decisions with an LLM/agent into Open Knowledge Format (OKF) files, following the repository's configured PR or candidate review gate.
 ---
 
-# Ingesting a repo into Metatron with an LLM (OKF candidates)
+# Authoring repository decisions with an LLM
 
 ## Overview
 
-Metatron captures a codebase's real implementation decisions — preferred patterns,
-rejected approaches, edge cases, internal conventions — as **structured records**.
-Agents consume them either over MCP, or — in **files-first mode** — by reading these
-OKF files in git directly, in which case the files *are* the source of truth and the
-database is just a rebuildable serving index. The built-in `metatron ingest <path>`
-uses an Anthropic model to extract those records. This skill lets **any** LLM/agent
-do the extraction instead, by writing the same records as plain
+Capture a codebase's real implementation decisions — preferred patterns, rejected
+approaches, edge cases, internal conventions — as structured OKF markdown files.
+Any coding agent can author them; `metatron ingest` is not required.
+
+In **files-first mode**, agents read the Git-tracked files directly. No database,
+MCP server, or import is needed. The files are a portable
 [Open Knowledge Format (OKF) v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
-markdown files. `metatron mirror import` then reads those files into the store — no
-API key, no `ingest` run. The git-tracked bundle is Metatron's implementation of the
-[Repository Context Layer](https://github.com/kerbelp/context-md) — see the
-[context-md manifesto](https://github.com/kerbelp/context-md/blob/main/whitepaper/context-md-manifesto.pdf)
-for the rationale behind git-native, agent-maintained project context.
+bundle and implement the
+[Repository Context Layer](https://github.com/kerbelp/context-md).
 
-**The one invariant you must respect:** an LLM never *decides* what is canonical.
-Crossing the canonical boundary is *always* human-gated: a human moving a file into
-`decisions/` — or approving the pull request that puts it there — is the curation
-act. By default, write to `context/candidate/` only; the single sanctioned
-exception is the human-directed, PR-gated flow described in "Where to write"
-below. Never choose `decisions/` on your own initiative.
+**Human review is the canonical boundary.** Follow the repository's configured
+review gate: either a human-reviewed PR containing decision files, or separate
+review of staged candidates. Authoring on a branch is not permission to merge.
 
+> **Directory name:** `context/` is the default knowledge-base directory. Honor
+> the configured `context_dir` in `metatron.toml` or `METATRON_CONTEXT_DIR`;
+> pre-rename repos may still use `metatron/`. Substitute the resolved directory
+> in all paths and commands below. In monorepos use the knowledge base nearest
+> the code, such as `apps/web/context/`, and the workspace's installed skills.
 
-> **Directory name:** `context/` is the default knowledge-base directory. A repo may
-> configure another name (`context_dir` in `metatron.toml`, `METATRON_CONTEXT_DIR`,
-> or `--context-dir` on the mirror commands); pre-rename repos may still use
-> `metatron/`. The layout inside is identical — substitute the configured name.
+## Workflow (files-first)
 
-## When to use
+1. Read the repository instructions, `context.md`, and relevant existing decisions
+   before exploring implementation details. Check the review gate below.
+2. Inspect source and tests. Extract **prescriptive, non-obvious conventions**
+   supported by that evidence, rather than generic framework advice.
+3. Write one OKF file per new convention in the gate's destination directory.
+   Amend an existing decision when it already covers the same convention.
+4. Validate the destination with `metatron files lint --path context/decisions`
+   for the PR gate, or `metatron files lint --path context/candidate` for staging.
+5. Inspect `git status --short` and the complete diff. New untracked files need
+   their own view, e.g. `git diff --no-index -- /dev/null context/decisions/repo-pattern-for-stores.md`
+   (exit 1 means differences). Include the decision changes in the human-reviewed
+   PR, or present the staged candidates for human selection. Stop before merging
+   or promoting anything without the required human review.
 
-- You want to bootstrap a repo's decisions but can't/won't run `metatron ingest`
-  (no Anthropic key, a different model, an offline agent, a CI step).
-- You're hand-authoring or LLM-authoring conventions to feed Metatron as files.
+The files are ready for Git review at this point. Do not run `mirror import`,
+`candidates list`, or start a database/UI as part of this files-first workflow.
 
-Not for: promoting/approving decisions (human-only). Refining an *existing*
-decision has its own flow — see "New convention, amendment, or observation?"
-below; in database mode, content edits round-trip through `mirror sync`/`import`.
+## Where to write: follow the review gate
 
-## Workflow
+Read `review_gate` in the repository configuration and its generated instructions.
+`metatron context setup` defaults to **`pr`** and persists the selected gate.
 
-1. Read the target repo. Identify **prescriptive, non-obvious decisions** a senior
-   engineer on this codebase already knows (see "What makes a good decision").
-2. Write each one as an OKF concept file under `<repo>/context/candidate/`.
-3. Run `metatron mirror import` (from the repo). New files (no `id`) are minted as
-   **candidate** decisions, origin `human`, at the directory-derived status.
-4. A human reviews with `metatron candidates list` / the UI, then promotes.
-
-The files are also a valid, portable OKF bundle on their own — shareable even if the
-recipient never imports them.
+- **`pr`:** write directly to `context/decisions/` **on a working branch**.
+  This is standing repository policy; no separate per-batch permission or
+  candidate promotion is needed. A human reviews the decision diff in the PR
+  before it reaches the default branch. Never push decisions directly there,
+  auto-merge, or substitute bot approval for human review. `context/candidate/`
+  remains optional staging for proposals not yet ready for PR review.
+- **`candidates`:** write new proposals to `context/candidate/`. They are
+  unreviewed and must not be treated as authoritative. A human selects the files
+  to move to `context/decisions/`; use `context-okf-promote-candidates` for those
+  explicitly selected moves in a reviewed PR.
+- **No established gate, conflicting instructions, or no reviewed branch:** use
+  `context/candidate/` and surface the missing review policy. Do not infer that
+  writing directly to the default branch is allowed.
 
 ## New convention, amendment, or observation?
 
-A durable learning lands in one of three channels — pick by kind:
+- **New convention:** author a new file in the destination selected above.
+- **Refinement of an existing decision:** propose an edit to that decision on a
+  working branch for human PR review. Constraints are edited, not appended;
+  do not create an overlapping candidate that a human must reconcile later.
+  If a reviewed branch is unavailable, present the proposed diff for review.
+- **Dated, temporal observation:** append a `[YYYY-MM-DD]` entry to
+  `## Evolved Context` in the root `context.md`. A pinned version or temporary
+  proxy failure is not a durable convention. Follow normal repository review.
 
-1. **A new convention** (nothing in `decisions/` covers it) → author a new
-   candidate file in `context/candidate/`. The default; the rest of this skill.
-2. **A refinement of an existing decision** (its pattern, rationale, or scope is
-   incomplete or now wrong) → **propose an edit to that decision file** on a
-   branch: change `context/decisions/<slug>.md` itself and let the pull request
-   diff be the proposal. Constraints are *edited, not appended* — do not author
-   an overlapping candidate that a human must reconcile by hand later. Guardrails
-   match direct-to-decisions: only on a branch reviewed by a human, never pushed
-   to the default branch, never merged by you. The reviewed diff is the human
-   curation act.
-3. **A dated, temporal observation** (an environmental fact that will age out —
-   a pinned version, a flaky proxy timeout) → append a `[YYYY-MM-DD]` entry to
-   the `## Evolved Context` ledger in the root `context.md`. Not a convention;
-   promoted into a decision file later only if it proves durable.
+## File format
 
-If unsure between 1 and 2: does a `decisions/` file already govern this area?
-Read it first; amend it if the learning corrects or completes it, author a
-candidate if it is genuinely new ground.
-
-## Where to write: candidate/ vs decisions/
-
-**Default: `context/candidate/`.** Always correct, never needs permission.
-
-There is one sanctioned exception. When the human running this ingest has
-**explicitly said** that the authored files will reach the default branch only
-through a pull request they review file-by-file, they may direct you to write to
-`context/decisions/` directly — their PR approval is then the human curation act,
-and a separate promotion step would be redundant. Before writing to `decisions/`,
-verify **both**:
-
-1. The human explicitly chose direct-to-decisions **for this batch**. Never infer
-   it, never suggest it as a default, never carry it over from a previous batch.
-2. The files land on the default branch only via a human-reviewed pull request —
-   no direct pushes, no auto-merge, no bot approval.
-
-If either check fails — or you are unsure — write to `candidate/`. Choosing
-`decisions/` on your own initiative violates the human-gated canonical boundary,
-even if you believe the content is obviously correct.
-
-The trade-off to keep in mind (and mention if the human asks): files in
-`candidate/` are visibly *unreviewed proposals* that agents must not follow;
-files in `decisions/` are conventions agents will enforce. Direct-to-decisions
-means the reviewing human accepts canonical-level scrutiny in that one review.
-
-## Monorepos
-
-Each app/package keeps its **own** `context/` knowledge base, co-located with it
-(e.g. `apps/web/context/`, `services/api/context/`). Write candidates into the
-`context/candidate/` of the app you're documenting, and import that one with
-`--root`:
-
-```bash
-metatron mirror import --root apps/web    # reads apps/web/context/
-```
-
-Consult and extend the `context/` **nearest** the code you're touching (walk up from
-the file to the closest `context/`). A single-app repo is just the degenerate case:
-`context/` at the repo root, `--root .`.
-
-## File format (exact)
-
-One file per decision. Filename is free-form (`metatron mirror import` globs
-`candidate/*.md`); use a readable slug, e.g. `candidate/repo-pattern-for-stores.md`.
+Use one readable slug per decision, e.g. `repo-pattern-for-stores.md`, in the
+selected directory. This example is valid for either review gate:
 
 ```markdown
 ---
@@ -143,51 +100,36 @@ The schema must stay portable to Postgres later, so storage details cannot leak
 into the rest of the codebase. Tests swap an in-memory store via the same interface.
 ```
 
-Rules that make the file import correctly:
+- Keep `type: Metatron Decision` and the exact headings `## Pattern` and
+  `## Rationale`; other heading names do not populate those parsed fields.
+- New hand-authored files do not need an `id`. Preserve an existing ID when editing.
+- `confidence` is `low`, `medium`, or `high`; `scope` names the applicable path/area.
+- Include supporting file paths in `source_refs` when available.
+- Omit machine-owned fields such as `helpfulness_score`, `created_at`, and
+  `updated_at`. Directory placement expresses status; do not declare a proposal
+  approved through frontmatter.
 
-- **`type` is required** for OKF validity — keep it literally `Metatron Decision`.
-- **Do NOT include an `id`.** Omitting `id` is what tells the importer this is a new
-  hand-authored decision to create. An unknown `id` is skipped with a warning.
-- Body headings must be exactly `## Pattern` and `## Rationale` — these are the only
-  sections the parser reads. (Do not use `## Decision`/`## Why`/`## Consequences`;
-  that is a different, unrelated file shape.)
-- `confidence` is one of `low` | `medium` | `high` (defaults to `medium` if omitted).
-- `scope` is the path/area the pattern applies to (e.g. `src/api`, or a broad area
-  name). `source_refs` is an optional list of files/paths backing the decision; it is
-  honored at authoring time only.
-- Omit machine-owned fields (`keywords`, `helpfulness_score`, `created_at`,
-  `updated_at`) — Metatron derives them; if present on a new file they're ignored.
+## Quality bar
 
-## What makes a good decision (quality bar)
+- Capture conventions an agent could not infer from the framework alone:
+  preferred patterns, documented rejected approaches, edge cases, naming rules,
+  and invariants supported by the repository.
+- The pattern is **prescriptive** (what to do); the rationale explains **why here**.
+  Distinguish observed behavior from inferred rationale. Do not invent historical
+  incidents or undocumented design intent.
+- Skip generic best practices, vague advice, and unsupported claims.
+- Keep each decision tightly scoped; consult existing decisions before adding one.
 
-Extract conventions an agent couldn't infer from the framework alone:
+## Optional: database-backed MCP workflow
 
-- **Capture:** preferred patterns, deliberately rejected approaches ("we don't use
-  X because…"), edge-case handling, internal naming/structure conventions, invariants.
-- **Skip:** generic best practices, restating the framework's defaults, vague advice
-  ("write clean code"), anything with no support in the actual code.
-- `pattern` is **prescriptive** (what to do / not do), not descriptive narration.
-- `rationale` says **why** it holds here — the constraint or trade-off behind it.
-- One decision per file; keep each tightly scoped.
+Use this section only when the user is actually maintaining a Metatron store for
+MCP or database-backed curation. It is unnecessary for Git/files-first use.
 
-## Quick reference
-
-| Concern | Answer |
-|---|---|
-| Where to write | `<repo>/context/candidate/*.md` (default); `decisions/` only when a human explicitly directed it and a reviewed PR is the gate |
-| Required frontmatter | `type: Metatron Decision` |
-| New-decision signal | **no `id` field** |
-| Body sections read | `## Pattern`, `## Rationale` (only) |
-| Human-owned fields | `scope`, `confidence`, `source_refs` |
-| Land them | `metatron mirror import` (monorepo: `--root <app>`) |
-| Validate bundle | every concept file declares a non-empty `type` |
-
-## Common mistakes
-
-- Writing to `decisions/` without an explicit human directive for the batch (or
-  setting any "approved/canonical" flag yourself): violates the human-gated
-  canonical boundary. In doubt, `candidate/`.
-- Inventing an `id`: an unknown id is skipped; let Metatron mint it.
-- Using `## Decision`/`## Why` headings: the OKF importer reads `## Pattern`/`##
-  Rationale`, so the body would import empty.
-- Pasting framework boilerplate as "decisions": dilutes retrieval; fails the bar above.
+In that workflow, `metatron mirror import` reads the configured bundle into the
+store; for an app-local bundle use `metatron mirror import --root apps/web`.
+New files without IDs are created at their directory-derived status. Do not
+invent IDs: unknown IDs are skipped by the importer. Existing content edits
+round-trip through `mirror sync`/`import`; `source_refs` is honored when creating
+a record. Database candidates are reviewed through `metatron candidates list`
+or the curation UI and approved by a human. Import is not a substitute for that
+review: never place an unreviewed proposal in `decisions/` to bypass it.
