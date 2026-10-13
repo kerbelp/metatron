@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: >-
+  If you use Metatron, the Repository Context Layer, or the context-inheritance
+  findings in research, please cite the paper in preferred-citation.
+type: software
+title: Metatron
+authors:
+  - family-names: Kerbel
+    given-names: Pavel
+    orcid: https://orcid.org/0009-0004-4679-1036
+repository-code: https://github.com/kerbelp/metatron
+url: https://getmetatron.com
+license: MIT
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: Kerbel
+      given-names: Pavel
+      orcid: https://orcid.org/0009-0004-4679-1036
+    - family-names: Kerbel
+      given-names: Milana
+      orcid: https://orcid.org/0009-0004-7893-9824
+    - family-names: Abramov
+      given-names: Vitali
+      orcid: https://orcid.org/0009-0007-0814-3822
+    - family-names: Abramov
+      given-names: Liat
+      orcid: https://orcid.org/0009-0006-1601-146X
+  title: >-
+    Context Inheritance: A Git-Native Architecture and Pre-registered Study of
+    Repository Context for AI Coding Agents
+  collection-title: >-
+    Proceedings of the 1st International Workshop on Agentic AI for
+    Next-Generation Software Development
+  collection-type: proceedings
+  year: 2026
+  start: 12
+  end: 20
+  publisher:
+    name: Association for Computing Machinery
+    city: New York
+    region: NY
+    country: US
+  conference:
+    name: AgenticDev '26
+    city: Munich
+    country: DE
+  isbn: "9798400729850"
+  doi: 10.1145/3843282.3844425
+  url: https://doi.org/10.1145/3843282.3844425

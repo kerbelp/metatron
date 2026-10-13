@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/python-3.12%2B-blue.svg" alt="Python 3.12+" />
   <a href="https://github.com/kerbelp/metatron/actions/workflows/ci.yml"><img src="https://github.com/kerbelp/metatron/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://doi.org/10.1145/3843282.3844425"><img src="https://img.shields.io/badge/DOI-10.1145%2F3843282.3844425-2b7de9.svg" alt="ACM paper DOI: 10.1145/3843282.3844425" /></a>
   <a href="https://glama.ai/mcp/servers/kerbelp/metatron"><img src="https://glama.ai/mcp/servers/kerbelp/metatron/badges/score.svg?v=2" alt="Metatron MCP server" /></a>
 </p>
 
@@ -47,14 +48,19 @@ Metatron is a reference implementation of the
 [Repository Context Layer](https://github.com/kerbelp/context-md) — a proposed
 standard for git-native, agent-maintained project context.
 
-**The architecture is measured, not just argued.** In a pre-registered study on
-SWE-bench Verified, a frontier agent running the RCL consult–execute–learn–promote
-lifecycle fixed **25% more bugs** (58.3% → 72.9% resolve, p = 0.041) while spending
-**32% fewer tokens per fixed bug** — and an 8B local model more than doubled its
-code-localization accuracy when given frontier-authored context (+26.1 pp,
-p < 0.0001). Full protocol, data, and one-command reproduction:
-[paper](https://github.com/kerbelp/context-md/blob/main/whitepaper/repository-context-layer-paper.pdf) ·
-[experiment](https://github.com/kerbelp/context-md/tree/main/experiment).
+**The architecture has been evaluated in a pre-registered study on SWE-bench
+Verified.** On tasks sharing relevant project constraints, an 8B local model's
+code-localization accuracy rose from **21.1% to 47.2%** with frontier-authored
+context (+26.1 percentage points, p < 0.0001); its own lessons brought no
+improvement. This result concerns finding the right code, not a confirmed gain in
+successful bug fixes. A frontier agent's failure-derived lessons showed a
+directional resolve increase (58.3% → 72.9%; raw p = 0.041, Holm-adjusted
+p = 0.081), with an observed 32% fewer tokens per resolved task in that sample.
+On a broad random sample, no context delivery improved the frontier agent's
+resolve rate. Read the published ACM paper and inspect the replication materials:
+[paper](https://doi.org/10.1145/3843282.3844425) ·
+[experiment](https://github.com/getmetatron/context-md/tree/main/experiment) ·
+[cite this work](#citation).
 *(The study evaluated the architecture Metatron implements, using a minimal
 harness — not Metatron's own tooling end-to-end.)*
 
@@ -812,6 +818,41 @@ guidelines.
 Python 3.12+, the official MCP Python SDK, tree-sitter for parsing, SQLite (behind a
 storage interface, portable to Postgres later), pytest, and uv. These are decided —
 see [CLAUDE.md](CLAUDE.md).
+
+## Citation
+
+If you use Metatron, the Repository Context Layer, or the context-inheritance
+findings in research, please cite the paper that describes the architecture and
+study:
+
+Pavel Kerbel, Milana Kerbel, Vitali Abramov, and Liat Abramov. 2026.
+**Context Inheritance: A Git-Native Architecture and Pre-registered Study of
+Repository Context for AI Coding Agents.** In *Proceedings of the 1st
+International Workshop on Agentic AI for Next-Generation Software Development*
+(AgenticDev '26), 12–20. Association for Computing Machinery.
+[doi:10.1145/3843282.3844425](https://doi.org/10.1145/3843282.3844425).
+
+```bibtex
+@inproceedings{kerbel2026contextinheritance,
+  author    = {Kerbel, Pavel and Kerbel, Milana and Abramov, Vitali and Abramov, Liat},
+  title     = {Context Inheritance: A Git-Native Architecture and Pre-registered Study of Repository Context for {AI} Coding Agents},
+  booktitle = {Proceedings of the 1st International Workshop on Agentic AI for Next-Generation Software Development},
+  series    = {AgenticDev '26},
+  year      = {2026},
+  pages     = {12--20},
+  publisher = {Association for Computing Machinery},
+  address   = {New York, NY, USA},
+  location  = {Munich, Germany},
+  isbn      = {9798400729850},
+  doi       = {10.1145/3843282.3844425},
+  url       = {https://doi.org/10.1145/3843282.3844425}
+}
+```
+
+GitHub's **Cite this repository** button also provides this paper as the preferred
+citation, configured in [CITATION.cff](CITATION.cff). The
+[research repository](https://github.com/getmetatron/context-md) contains the
+specification, protocol, data, and reproduction scripts.
 
 ## License
 
