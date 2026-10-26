@@ -1,6 +1,7 @@
 from metatron.models import Decision, Origin, Confidence, SourceRef, SourceRefKind, Status
 from metatron.mirror.render import (
     render_document, parse_document, fingerprint_decision, fingerprint_fields,
+    split_frontmatter,
 )
 
 
@@ -61,3 +62,27 @@ def test_fingerprint_matches_between_decision_and_its_parsed_file():
     assert d.status == Status.CANDIDATE  # Decision default
     parsed = parse_document(render_document(d, helpfulness=None))
     assert fingerprint_decision(d) == fingerprint_fields(parsed, Status.CANDIDATE)
+
+
+def test_split_frontmatter_ignores_a_rule_inside_the_body():
+    # A `---` horizontal rule in the body is not a frontmatter fence. The
+    # document has no frontmatter block, so the body must not be parsed as YAML.
+    text = "# Note\n\n---\n\ntype: Metatron Decision\n"
+    fm, body = split_frontmatter(text)
+    assert fm == {}
+    assert "type: Metatron Decision" in body
+
+
+def test_split_frontmatter_requires_a_closed_block():
+    # An unterminated fence is not a frontmatter block either.
+    text = "---\ntype: Metatron Decision\nbody with no closing fence\n"
+    fm, body = split_frontmatter(text)
+    assert fm == {}
+    assert body == text
+
+
+def test_split_frontmatter_ignores_a_non_mapping_block():
+    # The block must be a mapping; a list is not usable frontmatter.
+    text = "---\n- one\n- two\n---\n\nbody\n"
+    fm, _ = split_frontmatter(text)
+    assert fm == {}

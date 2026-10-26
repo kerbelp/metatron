@@ -14,6 +14,11 @@ import yaml
 from metatron.models import Decision
 from metatron.feedback_score import HelpfulnessScore
 
+# The fences that delimit a frontmatter block. The opening fence must be the
+# very start of the document: a `---` horizontal rule in the body is body text.
+_FRONT_MATTER_OPEN = "---\n"
+_FRONT_MATTER_CLOSE = "\n---\n"
+
 
 def render_document(d: Decision, helpfulness: HelpfulnessScore | None) -> str:
     fm = {
@@ -40,6 +45,24 @@ def render_document(d: Decision, helpfulness: HelpfulnessScore | None) -> str:
     return f"---\n{front}\n---\n\n" + "\n".join(body) + "\n"
 
 
+def split_frontmatter_raw(text: str) -> tuple[str, str] | None:
+    """Locate a document's frontmatter block as raw text.
+
+    Returns ``(frontmatter_text, body)``, or ``None`` when the document has no
+    frontmatter block: it does not *open* with a ``---`` fence, or that fence is
+    never closed. A ``---`` horizontal rule inside the body is body content, not
+    a fence — the block has to start the document.
+    """
+    if not text.startswith(_FRONT_MATTER_OPEN):
+        return None
+    front_raw, closing, body = text[len(_FRONT_MATTER_OPEN):].partition(
+        _FRONT_MATTER_CLOSE
+    )
+    if not closing:
+        return None
+    return front_raw, body
+
+
 def split_frontmatter(text: str) -> tuple[dict, str]:
     """Split a mirror document into (frontmatter_dict, body).
 
@@ -47,10 +70,12 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
     the parser, the importer's raw-field guard, and the OKF validator. Returns an
     empty dict if there is no frontmatter block.
     """
-    _, _, rest = text.partition("---\n")
-    front_raw, _, body = rest.partition("\n---\n")
-    fm = yaml.safe_load(front_raw) or {}
-    return fm, body
+    block = split_frontmatter_raw(text)
+    if block is None:
+        return {}, text
+    front_raw, body = block
+    fm = yaml.safe_load(front_raw)
+    return (fm if isinstance(fm, dict) else {}), body
 
 
 def parse_document(text: str) -> dict:

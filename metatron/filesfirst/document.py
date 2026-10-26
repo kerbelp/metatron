@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from metatron.mirror.render import split_frontmatter
+from metatron.mirror.render import split_frontmatter, split_frontmatter_raw
 from metatron.filesfirst.schema import RESERVED_FILENAMES
 
 
@@ -61,10 +61,10 @@ def write_machine_fields(path: Path, fields: dict) -> None:
     preserved verbatim, so a CI count update never reflows lines it does not own.
     """
     text = Path(path).read_text(encoding="utf-8")
-    _, sep, rest = text.partition("---\n")
-    if not sep:
+    block = split_frontmatter_raw(text)
+    if block is None:
         return  # no frontmatter block to update
-    front_raw, _, body = rest.partition("\n---\n")
+    front_raw, body = block
     kept = [
         line for line in front_raw.splitlines()
         if not _is_top_level_key(line, fields)

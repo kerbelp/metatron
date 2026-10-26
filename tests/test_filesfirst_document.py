@@ -28,6 +28,16 @@ def test_parse_missing_frontmatter_is_empty_not_crash():
     assert doc.status is None
 
 
+def test_parse_does_not_read_the_body_as_frontmatter():
+    # A `---` rule in the body is not a frontmatter fence. Without a block the
+    # file has no frontmatter, so `type` must not be picked up from the body.
+    doc = parse_decision_file(
+        Path("x.md"), "# Note\n\n---\n\ntype: Metatron Decision\n")
+    assert doc.frontmatter == {}
+    assert doc.status is None
+    assert doc.id == "x"
+
+
 def test_decision_ids_collects_ids_and_skips_reserved(tmp_path):
     (tmp_path / "a.md").write_text(
         "---\nid: a\ntype: decision\nstatus: candidate\ntitle: A\n---\nb\n", encoding="utf-8")
@@ -71,3 +81,13 @@ def test_write_machine_fields_is_idempotent(tmp_path):
     write_machine_fields(p, {"references": 1})
     assert p.read_text(encoding="utf-8") == first
     assert first.count("references:") == 1
+
+
+def test_write_machine_fields_leaves_a_file_without_frontmatter_untouched(tmp_path):
+    # The file has no frontmatter block. A `---` rule in its body must not be
+    # mistaken for one, or the file is rewritten and its prose is dropped.
+    p = tmp_path / "d.md"
+    original = "# Note\n\nProse that must survive.\n\n---\n\ntype: Metatron Decision\n"
+    p.write_text(original, encoding="utf-8")
+    write_machine_fields(p, {"references": 3})
+    assert p.read_text(encoding="utf-8") == original

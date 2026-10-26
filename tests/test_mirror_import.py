@@ -233,6 +233,21 @@ def test_idless_file_without_type_is_skipped_with_warning(tmp_path):
     assert any("notes.md" in w and "type" in w for w in res.warnings)
 
 
+def test_file_whose_body_mentions_type_is_not_imported(tmp_path):
+    # The file has no frontmatter block at all. A `---` rule in its body is not
+    # a fence, so the `type` line stays body text and the note must not become
+    # a decision — least of all a silently-created CANONICAL one.
+    store = _store(tmp_path)
+    root = tmp_path / "mirror"
+    (root / "context" / "decisions").mkdir(parents=True)
+    (root / "context" / "decisions" / "stray.md").write_text(
+        "# Scratch note\n\n---\n\ntype: Metatron Decision\n"
+    )
+    res = import_bundle(store, repo="r", root=root)
+    assert store.count() == 0
+    assert any("stray.md" in w and "type" in w for w in res.warnings)
+
+
 def test_import_reads_legacy_metatron_bundle_without_config(tmp_path):
     # Bundles created before the context/ rename live under metatron/; with no
     # explicit configuration the importer must keep reading them.

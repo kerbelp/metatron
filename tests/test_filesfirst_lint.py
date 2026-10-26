@@ -68,3 +68,18 @@ def test_reserved_filenames_skipped(tmp_path):
     _write(tmp_path, "index.md", "# generated\n")
     _write(tmp_path, "log.md", "# log\n")
     assert lint_tree(tmp_path) == []
+
+
+def test_flags_missing_frontmatter_when_the_body_has_a_rule(tmp_path):
+    # The `---` rule in the body is not a frontmatter fence, so the file has no
+    # `type` and must be reported — not silently accepted from the body.
+    _write(tmp_path, "x.md", "# Note\n\nProse.\n\n---\n\ntype: Metatron Decision\n")
+    errs = lint_tree(tmp_path)
+    assert any("type" in e.message for e in errs)
+
+
+def test_does_not_crash_on_a_body_that_is_not_yaml(tmp_path):
+    # A body that is not valid YAML must still be linted, not raise.
+    _write(tmp_path, "x.md", "# Note\n\n---\n\n- one\n- two\n")
+    errs = lint_tree(tmp_path)
+    assert any("type" in e.message for e in errs)
