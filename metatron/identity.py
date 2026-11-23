@@ -45,7 +45,7 @@ def load_identity() -> Identity:
     path = config_path()
     if not path.exists():
         return Identity()
-    table = tomllib.loads(path.read_text()).get("identity", {})
+    table = tomllib.loads(path.read_text(encoding="utf-8")).get("identity", {})
     return Identity(
         actor_id=table.get("actor_id", ""),
         email=table.get("email", ""),
@@ -105,7 +105,7 @@ def _write(ident: Identity) -> None:
         f'email = "{ident.email}"',
         f'display_name = "{_escape(ident.display_name)}"',
     ]
-    config_path().write_text("\n".join(lines) + "\n")
+    config_path().write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _escape(value: str) -> str:

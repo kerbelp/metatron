@@ -141,7 +141,7 @@ def upgrade_plan() -> UpgradePlan:
         return UpgradePlan(command=env, source="env", method="custom", confident=True)
     path = _state_dir() / "install.json"
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         cmd = data.get("upgrade_command")
         if cmd:
             # A persisted "detected" pip guess stays a guess; anything a user
@@ -157,7 +157,7 @@ def upgrade_plan() -> UpgradePlan:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(
             {"method": method, "upgrade_command": cmd, "source": "detected",
-             "recorded_at": _now_iso()}, indent=2))
+             "recorded_at": _now_iso()}, indent=2), encoding="utf-8")
     except OSError:
         pass
     return UpgradePlan(command=cmd, source="detected", method=method,
@@ -221,7 +221,7 @@ def latest_version(timeout: float = 1.5, *, fetch=None) -> str | None:
 
 def _read_cache(path: Path) -> tuple[datetime, str | None] | None:
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         return datetime.fromisoformat(data["checked_at"]), data.get("latest")
     except (OSError, ValueError, KeyError):
         return None
@@ -230,7 +230,8 @@ def _read_cache(path: Path) -> tuple[datetime, str | None] | None:
 def _write_cache(path: Path, when: datetime, latest: str | None) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"checked_at": when.isoformat(), "latest": latest}))
+        path.write_text(json.dumps({"checked_at": when.isoformat(), "latest": latest}),
+                        encoding="utf-8")
     except OSError:
         pass
 

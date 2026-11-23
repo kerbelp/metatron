@@ -72,7 +72,7 @@ def load_settings(path: str | Path = "metatron.toml") -> Settings:
     file_values: dict = {}
     path = Path(path)
     if path.exists():
-        file_values = tomllib.loads(path.read_text()).get("metatron", {})
+        file_values = tomllib.loads(path.read_text(encoding="utf-8")).get("metatron", {})
 
     return Settings(
         db_path=os.environ.get(
@@ -135,7 +135,7 @@ def update_settings(updates: dict, path: str | Path = "metatron.toml") -> None:
     the stdlib, and the file holds only ``[metatron]`` scalars.
     """
     path = Path(path)
-    doc = tomllib.loads(path.read_text()) if path.exists() else {}
+    doc = tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
     table = doc.setdefault("metatron", {})
     for key, value in updates.items():
         if value is None:
@@ -159,7 +159,7 @@ def _write_toml(doc: dict, path: Path) -> None:
         lines.append(f"[{table}]")
         for key, value in values.items():
             lines.append(f"{key} = {_toml_value(value)}")
-    path.write_text("\n".join(lines) + "\n")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def _toml_value(value) -> str:
