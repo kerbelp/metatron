@@ -205,7 +205,7 @@ def _parse_tracked_files(
         if parser is None:
             continue
         try:
-            source = (repo_path / rel).read_text()
+            source = (repo_path / rel).read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue  # binary or unreadable file — skip
         parsed.append(parser.parse(source, rel))

@@ -56,7 +56,7 @@ def export_okf_bundle(store, repo: str, root: Path, events: list,
         cid = _concept_id(bundle_root, p)
         rel = p.relative_to(bundle_root).as_posix()
         lines.append(f"- [{cid}]({rel})")
-    (bundle_root / "index.md").write_text("\n".join(lines) + "\n")
+    (bundle_root / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return state
 
 
@@ -72,7 +72,7 @@ def validate_okf_bundle(root: Path, context_dir: str | None = None) -> list[str]
     for p in sorted(bundle_root.rglob("*.md")):
         if p.name in _RESERVED:
             continue
-        fm = _frontmatter(p.read_text())
+        fm = _frontmatter(p.read_text(encoding="utf-8"))
         if not str(fm.get("type") or "").strip():
             errors.append(
                 f"{p.relative_to(bundle_root).as_posix()}: missing required "

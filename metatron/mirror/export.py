@@ -25,7 +25,7 @@ def export_bundle(store, repo: str, root: Path, events: list,
             text = render_document(d, helpfulness=scores.get(d.id))
             dest = path_for(d, mirror)
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(text)
+            dest.write_text(text, encoding="utf-8")
             written.add(dest.resolve())
             # Baseline is the human-field fingerprint (not the full text), so it is
             # directly comparable to the importer's fingerprints and immune to drift
@@ -41,5 +41,5 @@ def export_bundle(store, repo: str, root: Path, events: list,
                 stale.unlink()
     state_path = mirror / ".sync-state.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.write_text(json.dumps(state, indent=2, sort_keys=True))
+    state_path.write_text(json.dumps(state, indent=2, sort_keys=True), encoding="utf-8")
     return state

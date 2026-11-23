@@ -22,7 +22,7 @@ def load_prompt(name: str, language: str | None = None) -> str:
     ``language`` defaults to :func:`metatron.config.get_output_language`, keeping all
     call sites language-agnostic; pass it explicitly only to override resolution.
     """
-    template = (_PROMPTS_DIR / f"{name}.txt").read_text()
+    template = (_PROMPTS_DIR / f"{name}.txt").read_text(encoding="utf-8")
     if language is None:
         language = get_output_language()
     return _with_language_directive(template, language)

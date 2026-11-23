@@ -52,7 +52,7 @@ def import_bundle(store, repo: str, root: Path,
     state = {}
     state_path = mirror / ".sync-state.json"
     if state_path.exists():
-        state = json.loads(state_path.read_text())
+        state = json.loads(state_path.read_text(encoding="utf-8"))
     # Only files directly inside the two status directories are mirror
     # documents; any other .md under metatron/ (e.g. a README) is ignored.
     paths = sorted((mirror / "candidate").glob("*.md")) + \
@@ -62,7 +62,7 @@ def import_bundle(store, repo: str, root: Path,
         # but are not concept documents — never import them.
         if path.name in RESERVED_FILENAMES:
             continue
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         fields = parse_document(text)
         did = fields.get("id")
         decision = store.get(did) if did else None

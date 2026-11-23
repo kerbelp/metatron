@@ -74,7 +74,7 @@ class FilesMode:
             for path in sorted((kb / status_dir).glob("*.md")):
                 if path.name in RESERVED_FILENAMES:
                     continue
-                fields = parse_document(path.read_text())
+                fields = parse_document(path.read_text(encoding="utf-8"))
                 did = fields.get("id")
                 if did and did in decisions:
                     self.paths[did] = path
@@ -97,14 +97,14 @@ class FilesMode:
         document to the canonical mirror form, which also pins the id)."""
         d = self.store.get(decision_id)
         path = self.paths[decision_id]
-        path.write_text(render_document(d, None))
+        path.write_text(render_document(d, None), encoding="utf-8")
 
     def write_new(self, decision_id: str) -> None:
         """Materialize a UI-created candidate as a new concept file."""
         d = self.store.get(decision_id)
         path = self.kb_dir() / "candidate" / slug_for(d)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(render_document(d, None))
+        path.write_text(render_document(d, None), encoding="utf-8")
         self.paths[decision_id] = path
 
     def move_to_status_dir(self, decision_id: str) -> None:
