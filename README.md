@@ -16,11 +16,13 @@
 </p>
 
 <p align="center">
-  <a href="https://youtu.be/RdPn6OMtfOs">
-    <img src="https://img.youtube.com/vi/RdPn6OMtfOs/maxresdefault.jpg" alt="Watch the Metatron demo (2 min)" width="720" />
+  <a href="https://youtu.be/OSXIGqmdmUo">
+    <img src="https://img.youtube.com/vi/OSXIGqmdmUo/maxresdefault.jpg" alt="Watch Metatron setup and decision creation (Part 1 · 5 min)" width="720" />
   </a>
   <br />
-  <a href="https://youtu.be/RdPn6OMtfOs"><b>▶ Watch the 2-minute demo</b></a> — <i>files-first mode (default)</i>
+  <a href="https://youtu.be/OSXIGqmdmUo"><b>▶ Part 1: setup and decision creation (5 min)</b></a> — <i>files-first mode (default)</i>
+  <br />
+  <a href="https://youtu.be/Kag_O2xGbcc">Part 2: the same task with and without team decisions (4 min)</a>
   <br />
   <sub>🎬 Also available: the <a href="https://youtu.be/VoWp6jH4VLM">MCP serving-layer mode demo</a>.</sub>
 </p>
